@@ -1,0 +1,15 @@
+[run]
+parallel = 1
+concurrency =
+    multiprocessing
+source =
+    backtesting
+    doc/examples
+omit =
+
+[report]
+exclude_lines =
+    return
+    raise
+    except
+    warnings.warn
