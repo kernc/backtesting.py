@@ -3,7 +3,7 @@
 
 ## Manuals
 
-* [Quick Start User Guide](../examples/Quick Start User Guide.html)
+* [**Quick Start User Guide**](../examples/Quick Start User Guide.html)
 
 ## Tutorials
 
@@ -11,9 +11,11 @@
 * [Multiple Time Frames](../examples/Multiple Time Frames.html)
 * [Parameter Heatmap](../examples/Parameter Heatmap.html)
 
-You can also [try these out] live.
+You can also [try these tutorials out] live.
 
-[try these out]: https://mybinder.org/v2/gh/kernc/backtesting.py/master?urlpath=lab%2Ftree%2Fdoc%2Fexamples
+[try these tutorials out]: \
+    https://mybinder.org/v2/gh/kernc/backtesting.py/master?\
+urlpath=lab%2Ftree%2Fdoc%2Fexamples%2FQuick%20Start%20User%20Guide.ipynb
 
 ## Example Strategies
 
@@ -21,10 +23,10 @@ You can also [try these out] live.
 
 ## License
 
-This software is licensed under the terms of [AGPL 3.0],
+This software is licensed under the terms of [AGPL 3.0]{: rel=license},
 meaning you can use it for any reasonable purpose and remain in
 complete ownership of all the excellent trading strategies you produce,
-but you are also encouraged to make sure any upgrades to `backtesting`
+but you are also encouraged to make sure any upgrades to _Backtesting.py_
 itself find their way back to the community.
 
 [AGPL 3.0]: https://www.gnu.org/licenses/agpl-3.0.html

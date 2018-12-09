@@ -25,9 +25,9 @@ from ._util import _as_str, _Indicator, _Data, _data_period
 
 
 __pdoc__ = {
-    'Strategy.__init__': None,
-    'Orders.__init__': None,
-    'Position.__init__': None,
+    'Strategy.__init__': False,
+    'Orders.__init__': False,
+    'Position.__init__': False,
 }
 
 
@@ -723,13 +723,16 @@ class Backtest:
         inspected or projected onto 2D to plot a heatmap.
 
         Additional keyword arguments represent strategy arguments with
-        list-like collections of possible values. For example:
+        list-like collections of possible values. For example, the following
+        code finds and returns the "best" of the 7 admissible (of the
+        9 possible) parameter combinations:
 
             backtest.optimize(sma1=[5, 10, 15], sma2=[10, 20, 40],
                               constraint=lambda p: p.sma1 < p.sma2)
 
-        finds and returns the "best" of the 7 admissible (of the
-        9 possible) parameter combinations.
+        .. TODO::
+            Add parameter `max_tries: Union[int, float] = None` which switches
+            from exhaustive grid search to random search. See notes in the source.
         """
         if not kwargs:
             raise ValueError('Need some strategy parameters to optimize')
@@ -910,16 +913,17 @@ class Backtest:
         If `results` is proided, it should be a particular result
         `pd.Series` such as returned by
         `backtesting.backtesting.Backtest.run` or
-        `backtesting.backtesting.Backtest.optimize`.
+        `backtesting.backtesting.Backtest.optimize`, otherwise the last
+        run's results are used.
 
         `filename` is the path to save the interactive HTML plot to.
         By default, a strategy/parameter-dependent file is created in the
         current working directory.
 
         `plot_width` is the width of the plot in pixels. The height is
-        currently non-adjustable. FIXME: If someone can make the Bokeh
-        plot span 100% browser width by default, a contribution would
-        be appreciated.
+        currently non-adjustable.
+
+        .. TODO:: Make Bokeh plot span 100% browser width by default.
 
         If `plot_equity` is `True`, the resulting plot will contain
         an equity (cash plus assets) graph section.
@@ -951,7 +955,8 @@ class Backtest:
         [Pandas offset string], such as `'5T'` or `'5min'`.
         Note, this only works for data with a datetime index.
 
-        [Pandas offset string]: http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
+        [Pandas offset string]: \
+            http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
 
         If `show_legend` is `True`, the resulting plot graphs will contain
         labeled legends.

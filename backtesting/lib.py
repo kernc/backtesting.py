@@ -145,7 +145,8 @@ def resample_apply(rule: str,
     `rule` is a valid [Pandas offset string] indicating
     a time frame to resample `series` to.
 
-    [Pandas offset string]: http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
+    [Pandas offset string]: \
+        http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
 
     `func` is the indicator function to apply on the resampled series.
 
@@ -205,6 +206,11 @@ def resample_apply(rule: str,
 class SignalStrategy(Strategy):
     """
     A simple helper strategy that operates on position entry/exit signals.
+    This makes the backtest of the strategy simulate a [vectorized backtest].
+    See [tutorials] for usage examples.
+
+    [vectorized backtest]: https://www.google.com/search?q=vectorized+backtest
+    [tutorials]: index.html#tutorials
 
     To use this helper strategy, subclass it, override its
     `backtesting.backtesting.Strategy.init` method,
@@ -259,7 +265,9 @@ class TrailingStrategy(Strategy):
     A strategy with automatic trailing stop-loss, trailing the current
     price at distance of some multiple of average true range (ATR). Call
     `TrailingStrategy.set_trailing_sl()` to set said multiple
-    (`6` by default).
+    (`6` by default). See [tutorials] for usage examples.
+
+    [tutorials]: index.html#tutorials
 
     Remember to call `super().init()` and `super().next()` in your
     overridden methods.
