@@ -3,6 +3,11 @@ dist: xenial
 sudo: false
 cache:
   pip: true
+branches:
+  only:
+  - master
+  # Tags
+  - /^(\d+\.)+\d+(\.\S+)?$/
 
 matrix:
   fast_finish: true
