@@ -216,9 +216,11 @@ class TestBacktest(TestCase):
 
     def test_compute_stats(self):
         stats = Backtest(GOOG, SmaCross).run()
-        self.assertEqual(
-            stats.filter(regex='^[^_]').to_dict(),
-            {
+        # Pandas compares in 'almost equal' manner
+        from pandas.testing import assert_series_equal
+        assert_series_equal(
+            stats.filter(regex='^[^_]').sort_index(),
+            pd.Series({
                 # NOTE: These values are also used on the website!
                 '# Trades': 65,
                 'Avg. Drawdown Duration': pd.Timedelta('33 days 00:00:00'),
@@ -243,7 +245,8 @@ class TestBacktest(TestCase):
                 'Sortino Ratio': 0.7096713270577958,
                 'Start': pd.Timestamp('2004-08-19 00:00:00'),
                 'Win Rate [%]': 46.15384615384615,
-                'Worst Trade [%]': -18.85561318387153}
+                'Worst Trade [%]': -18.85561318387153,
+            }).sort_index()
         )
         self.assertTrue(
             stats._trade_data.columns.equals(
