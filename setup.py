@@ -42,6 +42,8 @@ if __name__ == '__main__':
                 'pdoc3',
                 'jupytext >= 0.7.0',
                 'nbconvert',
+                'ipykernel',       # for nbconvert
+                'jupyter_client',  # for nbconvert
             ],
             'test': [
                 'seaborn',
