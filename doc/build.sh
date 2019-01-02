@@ -32,9 +32,10 @@ popd >/dev/null
 echo
 echo 'Ensuring example notebooks match their py counterparts'
 echo
+strip_yaml () { awk -f "$DOCROOT/strip_yaml.awk" "$@"; }
 for ipynb in "$DOCROOT"/examples/*.ipynb; do
     echo "Checking: '$ipynb'"
-    diff -q "${ipynb%.ipynb}.py" <(jupytext --to py --output - "$ipynb") ||
+    diff <(strip_yaml "${ipynb%.ipynb}.py") <(jupytext --to py --output - "$ipynb" | strip_yaml) ||
         die "Notebook and its matching .py file differ. Maybe run: \`jupytext --to py '$ipynb'\` ?"
 done
 
