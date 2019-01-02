@@ -40,6 +40,9 @@ if __name__ == '__main__':
                 'jupytext >= 0.7.0',
                 'nbconvert',
             ],
+            'test': [
+                'seaborn',
+            ]
         },
         test_suite="setup._discover_tests",
         python_requires='>=3.4',
