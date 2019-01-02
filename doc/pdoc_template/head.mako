@@ -26,3 +26,4 @@
 <style>${homelink()}</style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
 <link rel="canonical" href="https://kernc.github.io/backtesting.py/doc/${module.url(link_prefix=link_prefix)}">
+<link rel="icon" href="https://kernc.github.io/backtesting.py/logo.png">
