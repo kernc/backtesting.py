@@ -1,21 +1,16 @@
 # -*- coding: utf-8 -*-
 # ---
 # jupyter:
-#   jupytext_format_version: '1.3'
+#   jupytext:
+#     text_representation:
+#       extension: .py
+#       format_name: light
+#       format_version: '1.3'
+#       jupytext_version: 0.8.6
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
 #     name: python3
-#   language_info:
-#     codemirror_mode:
-#       name: ipython
-#       version: 3
-#     file_extension: .py
-#     mimetype: text/x-python
-#     name: python
-#     nbconvert_exporter: python
-#     pygments_lexer: ipython3
-#     version: 3.5.3
 # ---
 
 # _Backtesting.py_ Quick Start User Guide
@@ -179,6 +174,13 @@ stats
 
 bt.plot()
 
-# Optimizing the strategy, we managed to up its initial performance _on in-sample data_ by almost 70% and beat [buy & hold](https://en.wikipedia.org/wiki/Buy_and_hold). In real life, however, do take steps to avoid [overfitting](https://en.wikipedia.org/wiki/Overfitting) before putting real money at risk.
+# Optimizing the strategy, we managed to up its initial performance _on in-sample data_ by almost 70% and beat 
+# [buy & hold](https://en.wikipedia.org/wiki/Buy_and_hold).
+# In real life, however, do take steps to avoid
+# [overfitting](https://en.wikipedia.org/wiki/Overfitting)
+# before putting real money at risk.
 #
-# Learn more by reviewing further [examples](https://kernc.github.io/backtesting.py/doc/backtesting/#tutorials), or find more program options in the [full API documentation](https://kernc.github.io/backtesting.py/doc/backtesting/#header-submodules).
+# Learn more by reviewing further
+# [examples](https://kernc.github.io/backtesting.py/doc/backtesting/index.html#tutorials),
+# or find more program options in the
+# [full API documentation](https://kernc.github.io/backtesting.py/doc/backtesting/index.html#header-submodules).
