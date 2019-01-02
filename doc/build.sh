@@ -49,6 +49,7 @@ jupytext --test --update --to ipynb "$DOCROOT/examples"/*.py
   trap 'rm -f ~/.ipython/profile_default/startup/99-backtesting-docs.py' EXIT; }
 PYTHONWARNINGS='ignore::UserWarning' \
     jupyter-nbconvert --execute --to=html \
+        --ExecutePreprocessor.timeout=300 \
         --output-dir="$BUILDROOT/examples" "$DOCROOT/examples"/*.ipynb
 
 
