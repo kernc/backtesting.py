@@ -37,4 +37,4 @@ install:
   - pip install .
 
 script:
-  - time catchsegv python setup.py test
+  - BOKEH_BROWSER=none time catchsegv python setup.py test
