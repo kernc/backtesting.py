@@ -20,6 +20,15 @@ from typing import Callable, Union, Tuple
 import numpy as np
 import pandas as pd
 
+try:
+    from tqdm.auto import tqdm as _tqdm
+    _tqdm = partial(_tqdm, leave=False)
+    warnings.warn('Using tqdm in Jupyter Notebook mode. '
+                  'Raise an issue if you experience problems.')
+except ImportError:
+    def _tqdm(seq, **_):
+        return seq
+
 from ._plotting import plot
 from ._util import _as_str, _Indicator, _Data, _data_period
 
@@ -796,8 +805,9 @@ class Backtest:
                 yield seq[i:i + n]
 
         with ProcessPoolExecutor() as executor:
-            for future in as_completed(executor.submit(self._mp_task, params)
-                                       for params in _batch(param_combos)):
+            futures = [executor.submit(self._mp_task, params)
+                       for params in _batch(param_combos)]
+            for future in _tqdm(as_completed(futures), total=len(futures)):
                 for params, stats in future.result():
                     heatmap[tuple(params.values())] = maximize(stats)
 
