@@ -65,18 +65,30 @@ echo
 echo 'Testing for broken links'
 echo
 pushd "$BUILDROOT" >/dev/null
-tmpdir="$(mktemp -d)"
-python3 -m http.server 51296 & sleep 1
-trap '{ rm -r "$tmpdir"; kill %1; wait; } >/dev/null 2>&1' EXIT
-[ ! "$(jobs -p)" ] && die 'Server not running. See above.'
-find -name '*.html' -print0 |
-    sed --null-data 's/^/http:\/\/127.0.0.1:51296\//' |
-    xargs -0 -- \
-        wget --user-agent "Mozilla/5.0 Firefox 61"  -e 'robots=off' --random-wait \
-             --no-verbose --recursive --span-hosts --level=1 --tries=2  \
-             --directory-prefix "$tmpdir" --no-clobber \
-             --reject-regex='\bfonts\b|\.css\b|\bjs\b|\.png\b' |&
-        grep -B1 'ERROR 404'
+WEBSITE='https://kernc\.github\.io/backtesting\.py'
+grep -PR '<a .*?href=' |
+    sed -E "s/:.*?<a .*?href=([\"'])(.*?)/\t\2/g" |
+    tr "\"'" '#' |
+    cut -d'#' -f1 |
+    sort -u -t$'\t' -k 2 |
+    sort -u |
+    python -c '
+import sys
+from urllib.parse import urljoin
+for line in sys.stdin.readlines():
+    base, url = line.split("\t")
+    print(base, urljoin(base, url.strip()), sep="\t")
+    ' |
+    sed "s,$WEBSITE/doc/,," |
+    grep -Pv "$WEBSITE"'/?$' |
+    grep -v $'\t''$' |
+    while read -r line; do
+        while IFS=$'\t' read -r file url; do
+            [ -f "$url" ] ||
+                curl --silent --fail --retry 2 --user-agent 'Mozilla/5.0 Firefox 61' "$url" >/dev/null 2>&1 ||
+                die "broken link in $file:  $url"
+        done
+    done
 popd >/dev/null
 
 
