@@ -12,8 +12,9 @@ done
 command -v "jupyter-nbconvert" >/dev/null ||
     die "Missing jupyter-nbconvert; \`pip install nbconvert\`"
 
-DOCROOT="$(dirname $(readlink -f "$0"))"
+DOCROOT="$(dirname "$(readlink -f "$0")")"
 BUILDROOT="$DOCROOT/build"
+
 
 echo
 echo 'Building API reference docs'
@@ -27,6 +28,7 @@ pdoc --html --html-no-source \
      backtesting
 popd >/dev/null
 
+
 echo
 echo 'Ensuring example notebooks match their py counterparts'
 echo
@@ -36,6 +38,7 @@ for ipynb in "$DOCROOT"/examples/*.ipynb; do
     diff <(strip_yaml "${ipynb%.ipynb}.py") <(jupytext --to py --output - "$ipynb" | strip_yaml) ||
         die "Notebook and its matching .py file differ. Maybe run: \`jupytext --to py '$ipynb'\` ?"
 done
+
 
 echo
 echo 'Converting example notebooks → py → HTML'
@@ -48,13 +51,15 @@ PYTHONWARNINGS='ignore::UserWarning' \
     jupyter-nbconvert --execute --to=html \
         --output-dir="$BUILDROOT/examples" "$DOCROOT/examples"/*.ipynb
 
-if [[ "$IS_RELEASE" ]]; then
+
+if [ "$IS_RELEASE" ]; then
     echo -e '\nAdding GAnalytics code\n'
 
     ANALYTICS="<script>window.dataLayer=[['js',new Date()],['config','UA-43663477-4']]</script><script async src='https://www.googletagmanager.com/gtag/js?id=UA-43663477-4'></script>"
     find "$BUILDROOT" -name '*.html' -print0 |
         xargs -0 -- sed -i "s#<head>#<head>$ANALYTICS#i"
 fi
+
 
 echo
 echo 'Testing for broken links'
@@ -74,6 +79,9 @@ find -name '*.html' -print0 |
         grep -B1 'ERROR 404'
 popd >/dev/null
 
+
 echo
 echo "All good. Docs in: $BUILDROOT"
-echo "file://$BUILDROOT/backtesting/index.html"
+echo
+echo "    file://$BUILDROOT/backtesting/index.html"
+echo
