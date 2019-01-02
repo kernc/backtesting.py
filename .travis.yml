@@ -31,7 +31,7 @@ matrix:
         - if [ "$TRAVIS_BRANCH" = "$TRAVIS_TAG" ]; then bash doc/deploy.sh; fi
 
 before_install:
-  - set -eu
+  - set -e
 
 install:
   - pip install .
