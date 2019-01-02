@@ -13,7 +13,8 @@ def _discover_tests():
 
 
 if __name__ == '__main__':
-    from setuptools import setup
+    from setuptools import setup, find_packages
+
     setup(
         name='Backtesting',
         description="Backtest trading strategies in Python",
@@ -21,6 +22,8 @@ if __name__ == '__main__':
         url="https://github.com/kernc/backtesting.py",
         long_description=open(os.path.join(os.path.dirname(__file__), 'README.md')).read(),
         long_description_content_type='text/markdown',
+        packages=find_packages(),
+        include_package_data=True,
         setup_requires=[
             'setuptools_git',
             'setuptools_scm',
