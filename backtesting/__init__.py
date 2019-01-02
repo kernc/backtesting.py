@@ -14,7 +14,8 @@
 You can also [try these tutorials out] live.
 
 [try these tutorials out]: \
-    https://mybinder.org/v2/gh/kernc/backtesting.py/master?urlpath=lab%2Ftree%2Fdoc%2Fexamples
+    https://mybinder.org/v2/gh/kernc/backtesting.py/master?\
+urlpath=lab%2Ftree%2Fdoc%2Fexamples%2FQuick%20Start%20User%20Guide.ipynb
 
 ## Example Strategies
 
