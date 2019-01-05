@@ -11,9 +11,10 @@
 * [Multiple Time Frames](../examples/Multiple Time Frames.html)
 * [Parameter Heatmap](../examples/Parameter Heatmap.html)
 
-You can also [try these tutorials out] live.
+These tutorials are also available as live notebooks:
+[![Binder](https://mybinder.org/badge_logo.svg)][binder]
 
-[try these tutorials out]: \
+[binder]: \
     https://mybinder.org/v2/gh/kernc/backtesting.py/master?\
 urlpath=lab%2Ftree%2Fdoc%2Fexamples%2FQuick%20Start%20User%20Guide.ipynb
 

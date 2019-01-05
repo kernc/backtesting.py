@@ -1,6 +1,6 @@
 """
 Core backtesting data structures.
-Stuff from this module can be imported from the top-level
+Objects from this module can be imported from the top-level
 module directly, e.g.
 
     from backtesting import Backtest, Strategy
