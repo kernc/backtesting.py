@@ -15,6 +15,6 @@ mkdir -p gh-pages/doc
 cp -R doc/build/* gh-pages/doc/
 cd gh-pages
 git add *
-git diff --quiet && echo "$0: No changes to commit." && exit 0
+git diff --staged --quiet && echo "$0: No changes to commit." && exit 0
 git commit -a -m "CI: Update docs for $TRAVIS_TAG ($head)"
 git push
