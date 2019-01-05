@@ -56,9 +56,9 @@ PYTHONWARNINGS='ignore::UserWarning' \
 if [ "$IS_RELEASE" ]; then
     echo -e '\nAdding GAnalytics code\n'
 
-    ANALYTICS="<script>window.dataLayer=[['js',new Date()],['config','UA-43663477-4']]</script><script async src='https://www.googletagmanager.com/gtag/js?id=UA-43663477-4'></script>"
+    ANALYTICS="<script>window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;ga('create','UA-43663477-4','auto');ga('send','pageview');</script><script async src='https://www.google-analytics.com/analytics.js'></script>"
     find "$BUILDROOT" -name '*.html' -print0 |
-        xargs -0 -- sed -i "s#<head>#<head>$ANALYTICS#i"
+        xargs -0 -- sed -i "s#</body>#$ANALYTICS</body>#i"
 fi
 
 
