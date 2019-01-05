@@ -47,7 +47,10 @@ if __name__ == '__main__':
             ],
             'test': [
                 'seaborn',
-            ]
+            ],
+            'dev': [
+                'flake8',
+            ],
         },
         test_suite="setup._discover_tests",
         python_requires='>=3.4',

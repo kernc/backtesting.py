@@ -20,7 +20,7 @@ matrix:
       before_script:
         - pip install flake8 coverage
       script:
-        - flake8 --max-line-length=120 --exclude doc/examples .
+        - flake8
         - BOKEH_BROWSER=none catchsegv coverage run setup.py test
       after_success:
         - bash <(curl -s https://codecov.io/bash)

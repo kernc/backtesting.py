@@ -9,11 +9,3 @@ Backtest trading strategies with Python.
 [**Project website**](https://kernc.github.io/backtesting.py/)
 
 [Documentation](https://kernc.github.io/backtesting.py/doc/backtesting/)
-
-Development
------------
-Fork the project. Then:
-
-    git clone git@github.com:YOUR_USERNAME/backtesting.py
-    cd backtesting.py
-    pip3 install -e .[doc]
