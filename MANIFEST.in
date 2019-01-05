@@ -2,4 +2,5 @@ exclude MANIFEST.in
 exclude .*
 exclude logo.*
 
+recursive-exclude .* *
 recursive-exclude doc *
