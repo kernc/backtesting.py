@@ -32,7 +32,7 @@ popd >/dev/null
 echo
 echo 'Ensuring example notebooks match their py counterparts'
 echo
-strip_yaml () { awk -f "$DOCROOT/strip_yaml.awk" "$@"; }
+strip_yaml () { awk -f "$DOCROOT/scripts/strip_yaml.awk" "$@"; }
 for ipynb in "$DOCROOT"/examples/*.ipynb; do
     echo "Checking: '$ipynb'"
     diff <(strip_yaml "${ipynb%.ipynb}.py") <(jupytext --to py --output - "$ipynb" | strip_yaml) ||
@@ -45,7 +45,7 @@ echo 'Converting example notebooks → py → HTML'
 echo
 jupytext --test --update --to ipynb "$DOCROOT/examples"/*.py
 { mkdir -p ~/.ipython/profile_default/startup
-  cp -f "$DOCROOT/ipython_config.py" ~/.ipython/profile_default/startup/99-backtesting-docs.py
+  cp -f "$DOCROOT/scripts/ipython_config.py" ~/.ipython/profile_default/startup/99-backtesting-docs.py
   trap 'rm -f ~/.ipython/profile_default/startup/99-backtesting-docs.py' EXIT; }
 PYTHONWARNINGS='ignore::UserWarning,ignore::RuntimeWarning' \
     jupyter-nbconvert --execute --to=html \

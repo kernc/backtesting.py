@@ -33,7 +33,7 @@ matrix:
       script:
         - doc/build.sh
       after_success:
-        - if [ "$TRAVIS_BRANCH" = "$TRAVIS_TAG" ]; then bash doc/deploy.sh; fi
+        - if [ "$TRAVIS_BRANCH" = "$TRAVIS_TAG" ]; then bash .github/deploy-gh-pages.sh; fi
 
 before_install:
   - set -e
