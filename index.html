@@ -333,7 +333,9 @@ _strategy              SmaCross(n1=10, n2=30)</samp></pre>
             </div>
         </div>
         <div class="snippet snippet-plot has-text-centered" style="background: white">
-            <iframe src="example.html" style="width:100%; margin-top:1em; height:566px; overflow:hidden;"></iframe>
+            <iframe src="example.html" id="iframe"
+                    style="width:100%; margin-top:1em; height:566px; overflow:hidden;"
+                    data-ga-on="wheel" data-ga-event-category="iframe" data-ga-event-action="wheel"></iframe>
         </div>
 
         <div class="columns content is-centered is-vcentered has-text-centered" style="margin-top:2em;">
@@ -434,7 +436,7 @@ ga('require', 'cleanUrlTracker', {
     trailingSlash: 'add'});
 ga('require', 'eventTracker', {
     attributePrefix: 'data-ga-',
-    events: ['click', 'auxclick', 'contextmenu']});
+    events: ['click', 'auxclick', 'contextmenu', 'wheel']});
 ga('require', 'outboundLinkTracker', {
     attributePrefix: 'data-ga-',
     events: ['click', 'auxclick', 'contextmenu'],
@@ -444,6 +446,12 @@ ga('require', 'pageVisibilityTracker');
 
 ga('send', 'pageview');
 setTimeout(function () { ga('send', 'event', 'pageview', 'view') }, 15000);
+
+var iframe = document.getElementById('iframe');
+var insideIframe = false;
+window.addEventListener('blur', function (){ insideIframe && iframe.dispatchEvent(new Event('wheel')) });
+iframe.addEventListener('mouseover', function (){ window.focus(); insideIframe = true });
+iframe.addEventListener('mouseout', function (){ insideIframe = false });
 </script>
 <script async src='https://www.google-analytics.com/analytics.js'></script>
 <script async src='https://cdnjs.cloudflare.com/ajax/libs/autotrack/2.4.1/autotrack.js'></script>
