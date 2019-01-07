@@ -56,7 +56,7 @@ PYTHONWARNINGS='ignore::UserWarning,ignore::RuntimeWarning' \
 if [ "$IS_RELEASE" ]; then
     echo -e '\nAdding GAnalytics code\n'
 
-    ANALYTICS="<script>window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;ga('create','UA-43663477-4','auto');ga('send','pageview');</script><script async src='https://www.google-analytics.com/analytics.js'></script>"
+    ANALYTICS="<script>window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;ga('create','UA-43663477-4','auto');ga('require','cleanUrlTracker',{indexFilename:'index.html',trailingSlash:'add'});ga('require','outboundLinkTracker',{events:['click','auxclick','contextmenu']});ga('require', 'maxScrollTracker');ga('require', 'pageVisibilityTracker');ga('send', 'pageview');setTimeout(function(){ga('send','event','pageview','view')},15000);</script><script async src='https://www.google-analytics.com/analytics.js'></script><script async src='https://cdnjs.cloudflare.com/ajax/libs/autotrack/2.4.1/autotrack.js'></script>"
     find "$BUILDROOT" -name '*.html' -print0 |
         xargs -0 -- sed -i "s#</body>#$ANALYTICS</body>#i"
 fi
