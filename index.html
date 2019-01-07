@@ -207,7 +207,7 @@
                     <input class="input is-medium is-dark" readonly value="pip3 install backtesting"
                            style="background:#ffd; cursor:pointer; caret-color:transparent; font-family:monospace;"
                            onclick="getSelection().removeAllRanges(); this.select();"
-                           data-ga-category="cmdline" data-ga-action="select">
+                           data-ga-on="click,auxclick,contextmenu" data-ga-event-category="cmdline" data-ga-event-action="select">
                     <span class="icon is-left has-text-grey" ><i class="fa fa-dollar-sign"></i></span>
                     <span class="icon is-right has-text-grey"><i class="fa fa-download"></i></span>
                 </div>
@@ -216,13 +216,13 @@
             <div class="column is-narrow has-text-centered buttons">
                 <a class="button is-success is-large"
                    title="Backtesting on PyPI" href="https://pypi.org/project/backtesting/"
-                   data-ga-category="PyPI">
+                   data-ga-event-category="PyPI">
                     <span class="icon"><i class="fa fa-download"></i></span>
                     <span>PyPI</span>
                 </a>
                 <a class="button is-large has-background-white-ter"
                    title="Backtesting.py on GitHub" href="https://github.com/kernc/backtesting.py"
-                   data-ga-category="GitHub">
+                   data-ga-event-category="GitHub">
                     <span class="icon"><i class="fab fa-github"></i></span>
                     <span>GitHub</span>
                 </a>
@@ -427,26 +427,25 @@ _strategy              SmaCross(n1=10, n2=30)</samp></pre>
 
 <script>
 window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;
-ga('create', 'UA-43663477-4', 'auto'); ga('send', 'pageview');
+ga('create', 'UA-43663477-4', 'auto');
 
-document.querySelectorAll('[data-ga-action]').forEach(function (el) {
-    el.addEventListener('mousedown', function () {
-        ga('send', 'event',
-            el.dataset.gaCategory || el.id || el.tagName,
-            el.dataset.gaAction || 'click',
-            {transport: 'beacon'});
-    });
+ga('require', 'cleanUrlTracker', {
+    indexFilename: 'index.html',
+    trailingSlash: 'add'});
+ga('require', 'eventTracker', {
+    attributePrefix: 'data-ga-',
+    events: ['click', 'auxclick', 'contextmenu']});
+ga('require', 'outboundLinkTracker', {
+    attributePrefix: 'data-ga-',
+    events: ['click', 'auxclick', 'contextmenu'],
 });
-document.querySelectorAll('a').forEach(function (el) {
-    el.addEventListener('mousedown', function () {
-        ga('send', 'event',
-            el.dataset.gaCategory || el.id || (el.hostname === location.hostname ? 'Internal' : 'Outgoing'),
-            el.dataset.gaAction || 'click',
-            el.href,
-            {transport: 'beacon'});
-    });
-});
-setInterval(function () { ga('send', 'event', 'pageview', 'view') }, 15000);
-</script><script async src='https://www.google-analytics.com/analytics.js'></script>
+ga('require', 'maxScrollTracker');
+ga('require', 'pageVisibilityTracker');
+
+ga('send', 'pageview');
+setTimeout(function () { ga('send', 'event', 'pageview', 'view') }, 15000);
+</script>
+<script async src='https://www.google-analytics.com/analytics.js'></script>
+<script async src='https://cdnjs.cloudflare.com/ajax/libs/autotrack/2.4.1/autotrack.js'></script>
 </body>
 </html>
