@@ -5,12 +5,11 @@ IS_RELEASE=${TRAVIS_TAG+1}
 die () { echo "ERROR: $*" >&2; exit 2; }
 
 for cmd in pdoc     \
-           jupytext ; do
+           jupytext \
+           jupyter-nbconvert; do
     command -v "$cmd" >/dev/null ||
-        die "Missing $cmd; \`pip install $cmd\`"
+        die "Missing $cmd; \`pip install backtesting[doc]\`"
 done
-command -v "jupyter-nbconvert" >/dev/null ||
-    die "Missing jupyter-nbconvert; \`pip install nbconvert\`"
 
 DOCROOT="$(dirname "$(readlink -f "$0")")"
 BUILDROOT="$DOCROOT/build"
