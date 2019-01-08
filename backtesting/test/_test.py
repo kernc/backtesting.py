@@ -500,6 +500,10 @@ class TestUtil(TestCase):
             self.assertEqual(_as_str(_Array([1], name=s)), s[0])
 
 
+@unittest.skipUnless(
+    os.path.isdir(os.path.join(os.path.dirname(__file__),
+                               '..', '..', 'doc')),
+    "docs dir doesn't exist")
 class TestDocs(TestCase):
     def test_examples(self):
         examples = glob(os.path.join(os.path.dirname(__file__),

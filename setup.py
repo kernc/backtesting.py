@@ -5,13 +5,6 @@ if sys.version_info < (3, 4):
     sys.exit('ERROR: Backtesting.py requires Python 3.4+')
 
 
-def _discover_tests():
-    import unittest
-    return unittest.defaultTestLoader.discover('backtesting.test',
-                                               pattern='*test*.py',
-                                               top_level_dir='.')
-
-
 if __name__ == '__main__':
     from setuptools import setup, find_packages
 
@@ -52,7 +45,7 @@ if __name__ == '__main__':
                 'flake8',
             ],
         },
-        test_suite="setup._discover_tests",
+        test_suite="backtesting.test",
         python_requires='>=3.4',
         author='Zach Lûster',
         classifiers=[
