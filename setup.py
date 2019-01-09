@@ -12,7 +12,12 @@ if __name__ == '__main__':
         name='Backtesting',
         description="Backtest trading strategies in Python",
         license='AGPL-3.0',
-        url="https://github.com/kernc/backtesting.py",
+        url='https://kernc.github.io/backtesting.py/',
+        project_urls={
+            'Documentation': 'https://kernc.github.io/backtesting.py/doc/backtesting/',
+            'Source': 'https://github.com/kernc/backtesting.py/',
+            'Tracker': 'https://github.com/kernc/backtesting.py/issues',
+        },
         long_description=open(os.path.join(os.path.dirname(__file__), 'README.md')).read(),
         long_description_content_type='text/markdown',
         packages=find_packages(),
