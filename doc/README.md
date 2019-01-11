@@ -2,7 +2,7 @@ Backtesting.py Documentation
 ============================
 After installing documentation dependencies:
 
-    pip install .[doc]
+    pip install .[doc,test]
 
 build HTML documentation by running:
 

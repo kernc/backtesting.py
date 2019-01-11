@@ -4,7 +4,7 @@ IS_RELEASE=${TRAVIS_TAG+1}
 
 die () { echo "ERROR: $*" >&2; exit 2; }
 
-for cmd in pdoc     \
+for cmd in pdoc3    \
            jupytext \
            jupyter-nbconvert; do
     command -v "$cmd" >/dev/null ||
@@ -21,7 +21,7 @@ echo
 mkdir -p "$BUILDROOT"
 rm -r "$BUILDROOT" 2>/dev/null || true
 pushd "$DOCROOT/.." >/dev/null
-pdoc --html --html-no-source \
+pdoc3 --html --html-no-source \
      ${IS_RELEASE+--template-dir "$DOCROOT/pdoc_template"} \
      --html-dir "$BUILDROOT" \
      backtesting

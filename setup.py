@@ -45,6 +45,7 @@ if __name__ == '__main__':
             ],
             'test': [
                 'seaborn',
+                'matplotlib',
             ],
             'dev': [
                 'flake8',
