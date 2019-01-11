@@ -23,8 +23,6 @@ import pandas as pd
 try:
     from tqdm.auto import tqdm as _tqdm
     _tqdm = partial(_tqdm, leave=False)
-    warnings.warn('Using tqdm in Jupyter Notebook mode. '
-                  'Raise an issue if you experience problems.')
 except ImportError:
     def _tqdm(seq, **_):
         return seq
