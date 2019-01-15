@@ -231,7 +231,9 @@ class Strategy(metaclass=ABCMeta):
           `backtesting.backtesting.Backtest` internally),
           the last array value (e.g. `data.Close[-1]`)
           is always the _most recent_ value.
-
+        * If you need data arrays (e.g. `data.Close`) to be indexed
+          Pandas series, you can call their `.to_series()` method
+          (e.g. `data.Close.to_series()`).
         """
         return self._data
 

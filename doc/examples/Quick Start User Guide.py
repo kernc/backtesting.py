@@ -127,7 +127,7 @@ class SmaCross(Strategy):
 #
 # In `init()`, the whole series of points was available, whereas **in `next()`, the length of `self.data` and any declared indicator arrays is adjusted** on each `next()` call so that `array[-1]` (e.g. `self.data.Close[-1]` or `self.sma1[-1]`) always contains the most recent value, `array[-2]` the previous value, etc. (ordinary Python indexing of ascending-sorted 1D arrays).
 #
-# **Note**: `self.data` and any indicators wrapped with `self.I` (e.g. `self.sma1`) are **NumPy arrays** for performance reasons. If you need `pandas.Series`, use, e.g., `pd.Series(self.data.Close, index=self.data.index)`.
+# **Note**: `self.data` and any indicators wrapped with `self.I` (e.g. `self.sma1`) are **NumPy arrays for performance reasons**. If you need `pandas.Series`, use `.to_series()` method (e.g. `self.data.Close.to_series()`) or construct the series manually (e.g. `pd.Series(self.data.Close, index=self.data.index)`).
 #
 # Let's see how our strategy performs on historical Google data. We begin with 10,000 units of cash and set broker's commission to realistic 0.2%.
 

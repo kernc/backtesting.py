@@ -456,7 +456,7 @@ class TestLib(TestCase):
     def test_SignalStrategy(self):
         class S(SignalStrategy):
             def init(self):
-                sma = pd.Series(self.data.Close).rolling(10).mean()
+                sma = self.data.Close.to_series().rolling(10).mean()
                 self.set_signal(self.data.Close > sma,
                                 self.data.Close < sma)
 
@@ -469,9 +469,7 @@ class TestLib(TestCase):
                 super().init()
                 self.set_atr_periods(40)
                 self.set_trailing_sl(3)
-                self.sma = self.I(
-                    lambda: pd.Series(self.data.Close,
-                                      index=self.data.index).rolling(10).mean())
+                self.sma = self.I(lambda: self.data.Close.to_series().rolling(10).mean())
 
             def next(self):
                 super().next()

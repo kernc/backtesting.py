@@ -22,7 +22,7 @@ import pandas as pd
 
 from .backtesting import Strategy
 from ._plotting import plot_heatmaps as _plot_heatmaps
-from ._util import _Indicator, _as_str
+from ._util import _Array, _Indicator, _as_str
 
 
 OHLCV_AGG = OrderedDict((
@@ -175,9 +175,7 @@ def resample_apply(rule: str,
             def init(self):
                 # Strategy exposes `self.data` as raw NumPy arrays.
                 # Let's convert closing prices back to pandas Series.
-                close = pd.Series(self.data.Close,
-                                  index=self.data.index,
-                                  name='Close')
+                close = self.data.Close.to_series()
 
                 # Resample to daily resolution. Aggregate groups
                 # using their last value (i.e. closing price at the end
@@ -200,9 +198,9 @@ def resample_apply(rule: str,
 
     """
     if not isinstance(series, pd.Series):
-        series = pd.Series(series,
-                           index=series._opts['data'].index,
-                           name=series.name)
+        assert isinstance(series, _Array), \
+            'resample_apply() takes either a `pd.Series` or a `Strategy.data.*` array'
+        series = series.to_series()
 
     resampled = series.resample(rule, label='right').agg('last').dropna()
     resampled.name = _as_str(series) + '[' + rule + ']'

@@ -2,6 +2,7 @@
 from numbers import Number
 
 import numpy as np
+import pandas as pd
 
 
 def _as_str(value):
@@ -51,6 +52,9 @@ class _Array(np.ndarray):
             return float(self[-1])
         except IndexError:
             return super().__float__()
+
+    def to_series(self):
+        return pd.Series(self, index=self._opts['data'].index, name=self.name)
 
 
 class _Indicator(_Array):
