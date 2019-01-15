@@ -4,6 +4,7 @@
 _version.py
 
 *.egg-info
+.eggs/*
 __pycache__/*
 dist/*
 
