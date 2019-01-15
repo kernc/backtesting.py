@@ -20,7 +20,7 @@
 # It is assumed you're already familiar with
 # [basic _backtesting.py_ usage](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html).
 #
-# First, let's again import a helper moving average function.
+# First, let's again import our helper moving average function.
 # In practice, one can use functions from any indicator library, such as
 # [TA-Lib](https://github.com/mrjbq7/ta-lib),
 # [Tulipy](https://tulipindicators.org),
@@ -30,7 +30,7 @@ from backtesting.test import SMA
 
 # Our strategy will be a similar moving average cross-over strategy to the one in
 # [Quick Start User Guide](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html),
-# but there will be four moving averages in total:
+# but we will use four moving averages in total:
 # two moving averages whose relationship determines a general trend
 # (we only trade long when the shorter MA is above the longer one, and vice versa),
 # and two moving averages whose cross-over with Close prices determine the signal to enter or exit the position.
@@ -110,23 +110,23 @@ stats, heatmap = backtest.optimize(
 # [`Backtest.optimize()`](https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Backtest.optimize).
 # It makes the function return a heatmap series along with the usual stats of the best run.
 # `heatmap` is a pandas Series indexed with a MultiIndex, a cartesian product of all permissible parameter values.
-# The series vales are from the `maximize=` field we provided.
+# The series values are from the `maximize=` argument we provided.
 
 heatmap
 
 # This heatmap contains the results of all the runs,
-# and it's very easy to obtain parameter combinations for e.g. three best runs:
+# making it very easy to obtain parameter combinations for e.g. three best runs:
 
 heatmap.sort_values().iloc[-3:]
 
-# But people have this enormous faculty of vision we use to make judgements on much larger data sets much faster.
+# But people have this enormous faculty of vision, used to make judgements on much larger data sets much faster.
 # Let's plot the whole heatmap by projecting it on two chosen dimensions.
-# Say we're mostly interested how parameters `n1` and `n2`, on average, affect the outcome.
+# Say we're mostly interested in how parameters `n1` and `n2`, on average, affect the outcome.
 
 hm = heatmap.groupby(['n1', 'n2']).mean().unstack()
 hm
 
-# Let's plot that using the excellent [_Seaborn_](https://seaborn.pydata.org) package:
+# Let's plot this table using the excellent [_Seaborn_](https://seaborn.pydata.org) package:
 
 # +
 # %matplotlib inline

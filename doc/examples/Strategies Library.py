@@ -23,7 +23,7 @@
 # [Quick Start User Guide](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html),
 # but we'll rewrite it as a vectorized signal strategy and add trailing stop-loss.
 #
-# We'll again use a helper moving average function.
+# Again, we use our helper moving average function.
 # In practice, one can use functions from any indicator library, such as
 # [TA-Lib](https://github.com/mrjbq7/ta-lib),
 # [Tulipy](https://tulipindicators.org),

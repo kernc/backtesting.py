@@ -21,9 +21,9 @@
 # It is assumed you're already familiar with
 # [basic _backtesting.py_ usage](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html).
 #
-# We will test this supposed long-only
+# We will put to the test this long-only, supposed
 # [400%-a-year trading strategy](http://jbmarwood.com/stock-trading-strategy-300/),
-# which daily and weekly
+# which uses daily and weekly
 # [relative strength index](https://en.wikipedia.org/wiki/Relative_strength_index)
 # (RSI) values and moving averages (MA).
 #
@@ -60,10 +60,10 @@ def RSI(array, n):
 # * Close $>$ MA(10) $>$ MA(20) $>$ MA(50) $>$ MA(100)
 #
 # Close the position when:
-# * Close more than 2% _below_ MA(10)
+# * Daily close is more than 2% _below_ MA(10)
 # * 8% fixed stop loss is hit
 #
-# We need to provide bars data in the _lowest time frame_ (i.e. daily) and resample it to any higher time frames (i.e. weekly) that our strategy requires.
+# We need to provide bars data in the _lowest time frame_ (i.e. daily) and resample it to any higher time frame (i.e. weekly) that our strategy requires.
 
 # +
 from backtesting import Strategy, Backtest
@@ -122,7 +122,7 @@ backtest = Backtest(GOOG, System, commission=.002)
 backtest.run()
 # -
 
-# Meager four trades in a span of nine years with effectively zero return? How about if we optimize the parameters a bit?
+# Meager four trades in the span of nine years and with zero return? How about if we optimize the parameters a bit?
 
 # +
 # %%time
