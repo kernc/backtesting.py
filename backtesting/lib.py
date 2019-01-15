@@ -168,6 +168,36 @@ def resample_apply(rule: str,
             def init(self):
                 self.sma = resample_apply(
                     'D', SMA, self.data.Close, 10, plot=False)
+
+    This short snippet is roughly equivalent to:
+
+        class System(Strategy):
+            def init(self):
+                # Strategy exposes `self.data` as raw NumPy arrays.
+                # Let's convert closing prices back to pandas Series.
+                close = pd.Series(self.data.Close,
+                                  index=self.data.index,
+                                  name='Close')
+
+                # Resample to daily resolution. Aggregate groups
+                # using their last value (i.e. closing price at the end
+                # of the day). Notice `label='right'`. If it were set to
+                # 'left' (default), the strategy would exhibit
+                # look-ahead bias.
+                daily = close.resample('D', label='right').agg('last')
+
+                # We apply SMA(10) to daily close prices,
+                # then reindex it back to original hourly index,
+                # forward-filling the missing values in each day.
+                # We make a separate function that returns the final
+                # indicator array.
+                def SMA(series, n):
+                    from backtesting.test import SMA
+                    return SMA(series, n).reindex(close.index).ffill()
+
+                # The result equivalent to the short example above:
+                self.sma = self.I(SMA, daily, 10, plot=False)
+
     """
     if not isinstance(series, pd.Series):
         series = pd.Series(series,

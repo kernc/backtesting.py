@@ -85,40 +85,8 @@ class System(Strategy):
         # Compute daily RSI(30)
         self.daily_rsi = self.I(RSI, self.data.Close, self.d_rsi)
         
-        # To construct weekly RSI, we have to resample
-        # the daily values.
-        
-        # Strategy exposes `self.data` as raw NumPy arrays.
-        # Let's make closing prices back a pandas Series.
-        
-        close = pd.Series(self.data.Close,
-                          index=self.data.index,
-                          name='Close')
-        
-        # Resample to weekly resolution, ending weeks on
-        # fridays. Aggregate groups using their last value
-        # (i.e. week's closing price).
-        # Notice `label='right'`. If it were set to 'left' (default),
-        # the strategy would exhibit look-ahead bias.
-        
-        weekly_close = close.resample('W-FRI', label='right').agg('last')
-        
-        # We apply RSI(30) to weekly close
-        # prices, then reindex it back to original daily
-        # index, forward-filling the missing values in each
-        # week.
-        # We make a separate function that returns the final
-        # indicator array.
-        
-        def W_RSI(series, n):
-            return RSI(series, n).reindex(close.index).ffill()
-        
-        self.weekly_rsi = self.I(W_RSI, weekly_close, self.w_rsi)
-        
-        
-        # ... And, now that you know what goes on behind the scenes,
-        # we could achieve the whole *exact* same thing with simpler:
-        
+        # To construct weekly RSI, we can use `resample_apply()`
+        # helper function from the library
         self.weekly_rsi = resample_apply(
             'W-FRI', RSI, self.data.Close, self.w_rsi)
         
@@ -168,5 +136,5 @@ backtest.plot()
 
 # Better. While the strategy doesn't perform as well as simple buy & hold, it does so with significantly lower exposure (time in market).
 #
-# In conclusion, to test strategies on multiple time frames, you need to pass in data in the lowest time frame, then resample it to higher time frames, apply the indicators, then resample back to lower time frame, filling in the in-betweens.
-# Or simply use [`backtesting.lib.resample_apply()`](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html#backtesting.lib.resample_apply) function.
+# In conclusion, to test strategies on multiple time frames, you need to pass in data in the lowest time frame, then resample it to higher time frames, apply the indicators, then resample back to the lower time frame, filling in the in-betweens.
+# Which is what the function [`backtesting.lib.resample_apply()`](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html#backtesting.lib.resample_apply) does for you.
