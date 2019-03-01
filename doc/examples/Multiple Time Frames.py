@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.3'
-#       jupytext_version: 0.8.6
+#       jupytext_version: 1.0.2
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -51,6 +51,8 @@ def RSI(array, n):
     loss[loss > 0] = 0
     rs = gain.ewm(n).mean() / loss.abs().ewm(n).mean()
     return 100 - 100 / (1 + rs)
+
+
 # -
 
 # The strategy roughly goes like this:

@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.3'
-#       jupytext_version: 0.8.6
+#       jupytext_version: 1.0.2
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -58,6 +58,8 @@ def SMA(values, n):
     each step taking into account `n` previous values.
     """
     return pd.Series(values).rolling(n).mean()
+
+
 # -
 
 # Note, this is the exact same helper function as the one used in the project unit tests, so we could just import that instead.
@@ -99,6 +101,8 @@ class SmaCross(Strategy):
         # Else, if sma1 crosses below sma2, sell it
         elif crossover(self.sma2, self.sma1):
             self.sell()
+
+
 # -
 
 # In `init()` as well as in `next()`, the data the strategy is simulated on is available as an instance variable

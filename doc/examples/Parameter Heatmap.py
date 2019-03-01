@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.3'
-#       jupytext_version: 0.8.6
+#       jupytext_version: 1.0.2
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -83,6 +83,8 @@ class Sma4Cross(Strategy):
                 crossover(self.data.Close, self.sma_exit)):
                 
                 self.position.close()
+
+
 # -
 
 # It's not a robust strategy, but we can optimize it. Let's optimize our strategy on Google stock data.

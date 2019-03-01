@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.3'
-#       jupytext_version: 0.8.6
+#       jupytext_version: 1.0.2
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -79,6 +79,8 @@ class SmaCross(SignalStrategy,
         # Set trailing stop-loss to 4x ATR
         # using the method provided by TrailingStrategy
         self.set_trailing_sl(4)
+
+
 # -
 
 # Note, since the strategies in _lib_ may require their own intialization and next-tick logic, be sure to **always call `super().init()` and `super().next()` in your overridden methods**.
