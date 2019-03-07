@@ -1,4 +1,4 @@
-
+from collections import Sequence
 from numbers import Number
 
 import numpy as np
@@ -16,6 +16,12 @@ def _as_str(value):
     if len(name) > 10:
         name = name[:9] + '…'
     return name
+
+
+def _as_list(value):
+    if isinstance(value, Sequence) and not isinstance(value, str):
+        return list(value)
+    return [value]
 
 
 def _data_period(df):

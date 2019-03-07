@@ -25,8 +25,7 @@ from bokeh.layouts import gridplot
 from bokeh.palettes import Category10
 from bokeh.transform import factor_cmap
 
-from backtesting._util import _data_period
-
+from backtesting._util import _data_period, _as_list
 
 IS_JUPYTER_NOTEBOOK = 'JPY_PARENT_PID' in os.environ
 
@@ -425,12 +424,12 @@ return this.labels[index] || "";
             if not value._opts.get('plot') or _too_many_dims(value):
                 continue
 
-            color = value._opts['color']
             tooltips = []
 
             # Overlay indicators on the OHLC figure
             if value._opts['overlay']:
-                color = color or next(ohlc_colors)
+                color = value._opts['color']
+                color = color and _as_list(color)[0] or next(ohlc_colors)
                 legend = LegendStr(value.name)
                 for i, arr in enumerate(value):
                     source_name = '{}_{}'.format(value.name, i)
@@ -442,7 +441,8 @@ return this.labels[index] || "";
                 ohlc_tooltips.append((value.name, NBSP.join(tooltips)))
             else:
                 # Standalone indicator sections at the bottom
-                color = color or colorgen()
+                color = value._opts['color']
+                color = color and cycle(_as_list(color)) or colorgen()
                 fig = new_indicator_figure()
                 for i, arr in enumerate(value, 1):
                     legend = '{}-{}'.format(value.name, i) if len(value) > 1 else value.name
