@@ -89,18 +89,18 @@ def plot(*, results, df, indicators, filename='', plot_width=1200,
 
     # OHLC vbar width in msec.
     # +1 will work in case of non-datetime index where vbar width should just be =1
-    width = 1 + dict(day=86400,
-                     hour=3600,
-                     minute=60,
-                     second=1).get(time_resolution, 0) * 1000 * .85
+    bar_width = 1 + dict(day=86400,
+                         hour=3600,
+                         minute=60,
+                         second=1).get(time_resolution, 0) * 1000 * .85
 
     if is_datetime_index:
         # Add index as a separate data source column because true .index is offset to align vbars
         df['datetime'] = index
-        df.index = df.index + pd.Timedelta(width / 2, unit='ms')
+        df.index = df.index + pd.Timedelta(bar_width / 2, unit='ms')
 
     if omit_missing:
-        width = .8
+        bar_width = .8
         df = df.reset_index(drop=True)
         trade_data = trade_data.reset_index(drop=True)
         index = df.index
@@ -315,7 +315,7 @@ return this.labels[index] || "";
         fig.xaxis.formatter = fig_ohlc.xaxis[0].formatter
         fig.xaxis.visible = True
         fig_ohlc.xaxis.visible = False  # Show only Volume's xaxis
-        r = fig.vbar('index', width, 'Volume', source=source, color=inc_cmap)
+        r = fig.vbar('index', bar_width, 'Volume', source=source, color=inc_cmap)
         set_tooltips(fig, [('Volume', '@Volume{0.00 a}')], renderers=[r])
         fig.yaxis.formatter = NumeralTickFormatter(format="0 a")
         return fig
@@ -374,7 +374,7 @@ return this.labels[index] || "";
     def _plot_ohlc():
         """Main OHLC bars"""
         fig_ohlc.segment('index', 'High', 'index', 'Low', source=source, color="black")
-        r = fig_ohlc.vbar('index', width, 'Open', 'Close', source=source,
+        r = fig_ohlc.vbar('index', bar_width, 'Open', 'Close', source=source,
                           line_color="black", fill_color=inc_cmap)
         return r
 
@@ -434,8 +434,15 @@ return this.labels[index] || "";
                 for i, arr in enumerate(value):
                     source_name = '{}_{}'.format(value.name, i)
                     source.add(arr, source_name)
-                    fig_ohlc.line('index', source_name, source=source,
-                                  line_width=1.3, line_color=color, legend=legend)
+                    if value._opts.get('scatter'):
+                        fig_ohlc.scatter(
+                            'index', source_name, source=source,
+                            color=color, line_color='black', fill_alpha=.8,
+                            marker='circle', radius=bar_width / 2 * 1.5, legend=legend)
+                    else:
+                        fig_ohlc.line(
+                            'index', source_name, source=source,
+                            line_width=1.3, line_color=color, legend=legend)
                     ohlc_extreme_values[source_name] = arr
                     tooltips.append('@{{{}}}{{0,0.0[0000]}}'.format(source_name))
                 ohlc_tooltips.append((value.name, NBSP.join(tooltips)))
@@ -449,8 +456,14 @@ return this.labels[index] || "";
                     name = legend + '_'  # Otherwise fig.line(legend=) is interpreted as col of source  # noqa: E501
                     tooltips.append('@{{{}}}'.format(name))
                     source.add(arr.astype(int if arr.dtype == bool else float), name)
-                    r = fig.line('index', name, source=source,
-                                 line_color=next(color), line_width=1.3, legend=LegendStr(legend))
+                    if value._opts.get('scatter'):
+                        r = fig.scatter(
+                            'index', name, source=source, color=next(color),
+                            marker='circle', radius=bar_width / 2 * .9, legend=LegendStr(legend))
+                    else:
+                        r = fig.line(
+                            'index', name, source=source, line_color=next(color),
+                            line_width=1.3, legend=LegendStr(legend))
 
                     # Add dashed centerline just because
                     mean = float(pd.Series(arr).mean())

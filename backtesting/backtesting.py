@@ -78,7 +78,7 @@ class Strategy(metaclass=ABCMeta):
 
     def I(self,  # noqa: E743
           func: Callable, *args,
-          name=None, plot=True, overlay=None, color=None,
+          name=None, plot=True, overlay=None, color=None, scatter=False,
           **kwargs) -> np.ndarray:
         """
         Declare indicator. An indicator is just an array of values,
@@ -102,8 +102,11 @@ class Strategy(metaclass=ABCMeta):
         candlestick chart. By default, a heuristic is used which decides
         correctly most of the time.
 
-        `color` can be string hex RGB triplet. By default, the next
-        available color is assigned.
+        `color` can be string hex RGB triplet or X11 color name.
+        By default, the next available color is assigned.
+
+        If `scatter` is `True`, the plotted indicator marker will be a
+        circle instead of a connected line segment (default).
 
         Additional `*args` and `**kwargs` are passed to `func` and can
         be used for parameters.
@@ -137,7 +140,7 @@ class Strategy(metaclass=ABCMeta):
             with np.errstate(invalid='ignore'):
                 overlay = ((x < 1.4) & (x > .6)).mean() > .6
 
-        value = _Indicator(value, name, plot=plot, overlay=overlay, color=color,
+        value = _Indicator(value, name, plot=plot, overlay=overlay, color=color, scatter=scatter,
                            # lib.resample_apply() uses this:
                            data=self.data)
         self._indicators.append(value)

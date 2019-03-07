@@ -425,6 +425,21 @@ class TestPlot(TestCase):
                     plot_drawdown=False, plot_equity=False, plot_pl=False, plot_volume=False,
                     open_browser=False)
 
+    def test_indicator_scatter(self):
+        class S(Strategy):
+            def init(self):
+                self.I(SMA, self.data.Close, 5, overlay=True, scatter=True)
+                self.I(SMA, self.data.Close, 10, overlay=False, scatter=True)
+            def next(self):
+                pass
+
+        bt = Backtest(GOOG, S)
+        bt.run()
+        with _tempfile() as f:
+            bt.plot(filename=f,
+                    plot_drawdown=False, plot_equity=False, plot_pl=False, plot_volume=False,
+                    open_browser=False)
+
 
 class TestLib(TestCase):
     def test_barssince(self):
