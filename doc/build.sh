@@ -21,9 +21,9 @@ echo
 mkdir -p "$BUILDROOT"
 rm -r "$BUILDROOT" 2>/dev/null || true
 pushd "$DOCROOT/.." >/dev/null
-pdoc3 --html --html-no-source \
+pdoc3 --html \
      ${IS_RELEASE+--template-dir "$DOCROOT/pdoc_template"} \
-     --html-dir "$BUILDROOT" \
+     --output-dir "$BUILDROOT" \
      backtesting
 popd >/dev/null
 

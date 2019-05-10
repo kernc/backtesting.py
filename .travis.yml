@@ -29,7 +29,7 @@ matrix:
       name: 'Docs'
       stage: deploy
       install:
-        - pip install .[doc,test]
+        - pip install -e .[doc,test]
       script:
         - doc/build.sh
       after_success:
