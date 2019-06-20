@@ -11,7 +11,8 @@ import sys
 import warnings
 from abc import abstractmethod, ABCMeta
 from collections import Sequence
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed, ThreadPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from functools import partial
 from itertools import repeat, product, chain
 from numbers import Number
@@ -812,7 +813,18 @@ class Backtest:
             for i in range(0, len(seq), n):
                 yield seq[i:i + n]
 
-        with ProcessPoolExecutor() as executor:
+        # Determine multiprocessing pool executor. Ideal ProcessPoolExecutor
+        # (with start method 'spawn') routinely fails on Windos.
+        try:
+            ProcessPoolExecutor().submit(self._mp_task, [param_combos[0]])
+            ExecutorClass = ProcessPoolExecutor
+        except BrokenProcessPool:
+            ExecutorClass = ThreadPoolExecutor
+            warnings.warn("`Backtest.optimize()` calls outside `__main__` aren't supported "
+                          "on some platforms. Falling back to threads with expected performance "
+                          "degradation. See: https://github.com/kernc/backtesting.py/issues/5")
+
+        with ExecutorClass() as executor:
             futures = [executor.submit(self._mp_task, params)
                        for params in _batch(param_combos)]
             for future in _tqdm(as_completed(futures), total=len(futures)):
