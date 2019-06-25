@@ -418,6 +418,7 @@ class TestPlot(TestCase):
                 a = self.I(SMA, self.data.Close, 5, overlay=True, color='red')
                 b = self.I(SMA, self.data.Close, 10, overlay=False, color='blue')
                 self.I(lambda: (a, b), overlay=False, color=('green', 'orange'))
+
             def next(self):
                 pass
 
@@ -433,6 +434,7 @@ class TestPlot(TestCase):
             def init(self):
                 self.I(SMA, self.data.Close, 5, overlay=True, scatter=True)
                 self.I(SMA, self.data.Close, 10, overlay=False, scatter=True)
+
             def next(self):
                 pass
 
