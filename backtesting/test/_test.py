@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import unittest
 import warnings
@@ -30,6 +31,8 @@ from backtesting._util import _Indicator, _as_str, _Array
 @contextmanager
 def _tempfile():
     with NamedTemporaryFile(suffix='.html') as f:
+        if sys.platform.startswith('win'):
+            f.close()
         yield f.name
 
 
