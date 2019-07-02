@@ -5,14 +5,14 @@ module directly, e.g.
 
     from backtesting import Backtest, Strategy
 """
+import multiprocessing
 import os
 import re
 import sys
 import warnings
 from abc import abstractmethod, ABCMeta
 from collections import Sequence
-from concurrent.futures import ProcessPoolExecutor, as_completed, ThreadPoolExecutor
-from concurrent.futures.process import BrokenProcessPool
+from concurrent.futures import Executor, Future, ProcessPoolExecutor, as_completed
 from functools import partial
 from itertools import repeat, product, chain
 from numbers import Number
@@ -813,16 +813,22 @@ class Backtest:
             for i in range(0, len(seq), n):
                 yield seq[i:i + n]
 
-        # Determine multiprocessing pool executor. Ideal ProcessPoolExecutor
+        # Determine multiprocessing executor. Ideal ProcessPoolExecutor
         # (with start method 'spawn') routinely fails on Windos.
         try:
-            ProcessPoolExecutor().submit(self._mp_task, [param_combos[0]])
+            ProcessPoolExecutor().submit(self._mp_task, [param_combos[0]]).result()
             ExecutorClass = ProcessPoolExecutor
-        except BrokenProcessPool:
-            ExecutorClass = ThreadPoolExecutor
+        except (RuntimeError, MemoryError, multiprocessing.ProcessError):
+            class NonParallelExecutor(Executor):
+                def submit(self, fn, *args, **kwargs):
+                    future = Future()
+                    future.set_result(fn(*args, **kwargs))
+                    return future
+            ExecutorClass = NonParallelExecutor
             warnings.warn("`Backtest.optimize()` calls outside `__main__` aren't supported "
-                          "on some platforms. Falling back to threads with expected performance "
-                          "degradation. See: https://github.com/kernc/backtesting.py/issues/5")
+                          "on some platforms. Falling back to non-concurrent computation "
+                          "with expected performance degradation. See: "
+                          "https://github.com/kernc/backtesting.py/issues/5")
 
         with ExecutorClass() as executor:
             futures = [executor.submit(self._mp_task, params)

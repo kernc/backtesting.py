@@ -1,3 +1,4 @@
+import multiprocessing as mp
 import os
 import sys
 import time
@@ -323,6 +324,13 @@ class TestOptimize(TestCase):
 
         with _tempfile() as f:
             bt.plot(filename=f, open_browser=False)
+
+    @unittest.skipIf(mp.get_start_method(allow_none=False) == 'fork',
+                     "concurrency works with multiprocessing start method 'fork'")
+    def test_optimize_non_concurrent(self):
+        with self.assertWarnsRegex(UserWarning, 'non-concurrent computation'):
+            res = Backtest(GOOG.iloc[:100], SmaCross).optimize(fast=[2], slow=[5, 7])
+        self.assertIsInstance(res, pd.Series)
 
     def test_optimize_invalid_param(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
