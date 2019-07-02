@@ -5,7 +5,7 @@ module directly, e.g.
 
     from backtesting import Backtest, Strategy
 """
-import multiprocessing
+import multiprocessing as mp
 import os
 import re
 import sys
@@ -815,20 +815,18 @@ class Backtest:
 
         # Determine multiprocessing executor. Ideal ProcessPoolExecutor
         # (with start method 'spawn') routinely fails on Windos.
-        try:
-            ProcessPoolExecutor().submit(self._mp_task, [param_combos[0]]).result()
-            ExecutorClass = ProcessPoolExecutor
-        except (RuntimeError, MemoryError, multiprocessing.ProcessError):
+        ExecutorClass = ProcessPoolExecutor
+        if mp.get_start_method(allow_none=False) != 'fork':
             class NonParallelExecutor(Executor):
                 def submit(self, fn, *args, **kwargs):
                     future = Future()
                     future.set_result(fn(*args, **kwargs))
                     return future
             ExecutorClass = NonParallelExecutor
-            warnings.warn("`Backtest.optimize()` calls outside `__main__` aren't supported "
-                          "on some platforms. Falling back to non-concurrent computation "
-                          "with expected performance degradation. See: "
-                          "https://github.com/kernc/backtesting.py/issues/5")
+            if os.name == 'posix':
+                warnings.warn("For multiprocessing support in `Backtest.optimize()` "
+                              "set multiprocessing start method to 'fork'. "
+                              "See: https://github.com/kernc/backtesting.py/issues/5")
 
         with ExecutorClass() as executor:
             futures = [executor.submit(self._mp_task, params)
