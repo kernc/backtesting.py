@@ -326,11 +326,11 @@ class TestOptimize(TestCase):
             bt.plot(filename=f, open_browser=False)
 
     @unittest.skipIf(mp.get_start_method(allow_none=False) == 'fork',
-                     "concurrency works with multiprocessing start method 'fork'")
+                     "multiprocessing uses 'fork'")
     def test_optimize_non_concurrent(self):
-        with self.assertWarnsRegex(UserWarning, 'non-concurrent computation'):
-            res = Backtest(GOOG.iloc[:100], SmaCross).optimize(fast=[2], slow=[5, 7])
+        res = Backtest(GOOG.iloc[:100], SmaCross).optimize(fast=[2], slow=[5, 7])
         self.assertIsInstance(res, pd.Series)
+        self.assertGreater(res['# Trades'], 0)
 
     def test_optimize_invalid_param(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)

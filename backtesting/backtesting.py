@@ -12,7 +12,7 @@ import sys
 import warnings
 from abc import abstractmethod, ABCMeta
 from collections import Sequence
-from concurrent.futures import Executor, Future, ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from functools import partial
 from itertools import repeat, product, chain
 from numbers import Number
@@ -813,26 +813,22 @@ class Backtest:
             for i in range(0, len(seq), n):
                 yield seq[i:i + n]
 
-        # Determine multiprocessing executor. Ideal ProcessPoolExecutor
-        # (with start method 'spawn') routinely fails on Windos.
-        ExecutorClass = ProcessPoolExecutor
-        if mp.get_start_method(allow_none=False) != 'fork':
-            class NonParallelExecutor(Executor):
-                def submit(self, fn, *args, **kwargs):
-                    future = Future()
-                    future.set_result(fn(*args, **kwargs))
-                    return future
-            ExecutorClass = NonParallelExecutor
+        # If multiprocessing start method is 'fork' (i.e. on POSIX), use
+        # a pool of processes to compute results in parallel.
+        # Otherwise (i.e. on Windos), sequential computation will be "faster".
+        if mp.get_start_method(allow_none=False) == 'fork':
+            with ProcessPoolExecutor() as executor:
+                futures = [executor.submit(self._mp_task, params)
+                           for params in _batch(param_combos)]
+                for future in _tqdm(as_completed(futures), total=len(futures)):
+                    for params, stats in future.result():
+                        heatmap[tuple(params.values())] = maximize(stats)
+        else:
             if os.name == 'posix':
                 warnings.warn("For multiprocessing support in `Backtest.optimize()` "
-                              "set multiprocessing start method to 'fork'. "
-                              "See: https://github.com/kernc/backtesting.py/issues/5")
-
-        with ExecutorClass() as executor:
-            futures = [executor.submit(self._mp_task, params)
-                       for params in _batch(param_combos)]
-            for future in _tqdm(as_completed(futures), total=len(futures)):
-                for params, stats in future.result():
+                              "set multiprocessing start method to 'fork'.")
+            for params in _tqdm(param_combos):
+                for _, stats in self._mp_task([params]):
                     heatmap[tuple(params.values())] = maximize(stats)
 
         best_params = heatmap.idxmax()
