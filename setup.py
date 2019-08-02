@@ -32,7 +32,7 @@ if __name__ == '__main__':
         install_requires=[
             'typing ; python_version < "3.5"',
             'numpy',
-            'pandas >= 0.21.0',
+            'pandas >= 0.21.0, < 0.25.0',
             'bokeh >= 0.12.15',
         ],
         extras_require={
