@@ -65,7 +65,7 @@ def colorgen():
 
 def lightness(color, lightness=.94):
     color = color.to_hsl()
-    color.l = lightness
+    color.l = lightness  # noqa
     return color.to_rgb()
 
 
