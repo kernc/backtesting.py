@@ -874,7 +874,10 @@ class Backtest:
         df.index = data.index.tz_convert(None)
 
         def _round_timedelta(value, _period=_data_period(df)):
-            return value.ceil(_period.resolution) if isinstance(value, pd.Timedelta) else value
+            if not isinstance(value, pd.Timedelta):
+                return value
+            resolution = getattr(_period, 'resolution_string', None) or _period.resolution
+            return value.ceil(resolution)
 
         s = pd.Series()
         s['Start'] = df.index[0]
