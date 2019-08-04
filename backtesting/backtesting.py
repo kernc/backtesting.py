@@ -127,11 +127,15 @@ class Strategy(metaclass=ABCMeta):
         value = func(*args, **kwargs)
 
         try:
+            if isinstance(value, pd.DataFrame):
+                value = value.values.T
             value = np.asarray(value)
         except Exception:
             raise ValueError('Indicators must return array-like sequences of values')
         if value.shape[-1] != len(self._data.Close):
-            raise ValueError('Indicators must be arrays of same length as `data`')
+            raise ValueError('Indicators must be (a tuple of) arrays of same length as `data`'
+                             '(data: {}, indicator "{}": {})'.format(len(self._data.Close),
+                                                                     name, value.shape))
 
         if plot and overlay is None:
             x = value / self._data.Close
@@ -682,7 +686,7 @@ class Backtest:
 
         # Skip first few candles where indicators are still "warming up"
         # +1 to have at least two entries available
-        start = 1 + max((np.isnan(indicator).argmin()
+        start = 1 + max((np.isnan(indicator.astype(float)).argmin()
                          for _, indicator in indicator_attrs), default=0)
 
         # Disable "invalid value encountered in ..." warnings. Comparison

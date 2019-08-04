@@ -197,9 +197,10 @@ def resample_apply(rule: str,
                 self.sma = self.I(SMA, daily, 10, plot=False)
 
     """
-    if not isinstance(series, pd.Series):
+    if not isinstance(series, (pd.Series, pd.DataFrame)):
         assert isinstance(series, _Array), \
-            'resample_apply() takes either a `pd.Series` or a `Strategy.data.*` array'
+            'resample_apply() takes either a `pd.Series`, `pd.DataFrame`, ' \
+            'or a `Strategy.data.*` array'
         series = series.to_series()
 
     resampled = series.resample(rule, label='right').agg('last').dropna()
