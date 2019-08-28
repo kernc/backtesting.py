@@ -325,13 +325,6 @@ class TestOptimize(TestCase):
         with _tempfile() as f:
             bt.plot(filename=f, open_browser=False)
 
-    @unittest.skipIf(mp.get_start_method(allow_none=False) == 'fork',
-                     "multiprocessing uses 'fork'")
-    def test_optimize_non_concurrent(self):
-        res = Backtest(GOOG.iloc[:100], SmaCross).optimize(fast=[2], slow=[5, 7])
-        self.assertIsInstance(res, pd.Series)
-        self.assertGreater(res['# Trades'], 0)
-
     def test_optimize_invalid_param(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
         self.assertRaises(AttributeError, bt.optimize, foo=range(3))
