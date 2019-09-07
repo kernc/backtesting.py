@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" itemscope itemtype="https://schema.org/SoftwareApplication">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <title>Backtesting.py – Backtest trading strategies in Python</title>
-    <meta name="description" content="A fast Python framework for backtesting trading and investment strategies on historical candlestick data.">
+    <meta name="description" content="Fast Python framework for backtesting trading and investment strategies on historical candlestick data." itemprop="description">
 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.4/css/bulma.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.8.1/css/all.min.css">
@@ -56,11 +56,22 @@
         .no-ads .google-auto-placed {display:none !important;}
     </style>
 
-    <link rel="icon" type="image/png" href="logo.png" sizes="512x512">
-    <link rel="canonical home" href="https://kernc.github.io/backtesting.py/">
+    <link rel="icon" type="image/png" href="logo.png" sizes="512x512" itemprop="image">
+    <link rel="canonical home" href="https://kernc.github.io/backtesting.py/" itemprop="url">
+
+    <link href="https://github.com/kernc/backtesting.py" itemprop="sameAs">
+    <link href="https://pypi.org/project/Backtesting/" itemprop="sameAs">
+    <meta itemprop="isAccessibleForFree" content="True">
+    <meta itemprop="operatingSystem" content="Linux, macOS, Windows">
+    <meta itemprop="applicationCategory" content="FinanceApplication">
+
     <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script><script>(adsbygoogle = window.adsbygoogle || []).push({google_ad_client: "ca-pub-2900001379782823",enable_page_level_ads:true})</script>
 </head>
 <body>
+
+
+<div itemprop="offers" itemscope itemtype="http://schema.org/Offer"><meta itemprop="price" content="0"><meta itemprop="priceCurrency" content="BTC"></div>
+<div itemprop="aggregateRating" itemscope itemtype="http://schema.org/AggregateRating"><meta itemprop="reviewCount" content="1"><meta itemprop="ratingValue" content="4.2"></div>
 
 
 <section class="section no-ads">
@@ -106,13 +117,13 @@
             </div>
 
             <p>
-                <b><cite>Backtesting.py</cite></b> is a Python framework for inferring viability
+                <b><cite itemprop="name">Backtesting.py</cite></b> is a Python framework for inferring viability
                 of trading strategies on historical (past) data.
                 Of course, past performance is not indicative of future results,
                 but a strategy that proves itself resilient in a multitude of
                 market conditions can, with a little luck, remain just as reliable in the future.
                 Improved upon the vision of
-                <a href="https://www.backtrader.com/" rel="nofollow noreferrer noopener"><cite>Backtrader</cite></a>,
+                <a href="https://www.backtrader.com/" itemprop="isBasedOn" rel="nofollow noreferrer noopener"><cite>Backtrader</cite></a>,
                 and by all means surpassingly comparable to other accessible alternatives,
                 <cite>Backtesting.py</cite> is lightweight, fast, user-friendly, intuitive,
                 interactive, intelligent and, hopefully, future-proof.
@@ -121,7 +132,7 @@
             </p>
         </div>
 
-        <div class="columns" style="margin-top:3em">
+        <div class="columns" style="margin-top:3em" itemprop="featureList">
             <ul class="column">
                 <li class="media">
                     <div class="media-left"><span class="icon is-medium"><i class="fas fa-2x fa-hand-holding-usd"></i></span></div>
@@ -221,6 +232,7 @@
             <div class="column is-narrow has-text-centered buttons">
                 <a class="button is-success is-large"
                    title="Backtesting on PyPI" href="https://pypi.org/project/backtesting/"
+                   itemprop="downloadUrl"
                    data-ga-event-category="PyPI">
                     <span class="icon"><i class="fa fa-download"></i></span>
                     <span>PyPI</span>
@@ -241,7 +253,7 @@
         <p class="has-text-centered">
             <span class="icon" ><i class="fas fa-question-circle"></i></span>
             <cite>Backtesting.py</cite> works with <cite>Python 3</cite>.
-            You need to know some <a href="https://www.python.org">Python</a> to effectively use this software.
+            You need to know some <a href="https://www.python.org" itemprop="softwareRequirements">Python</a> to effectively use this software.
         </p>
     </div>
 
@@ -352,7 +364,8 @@ _strategy              SmaCross(n1=10, n2=30)</samp></pre>
                 project documentation.
             </p>
             <div class="column is-narrow">
-                <a class="button is-large is-link" title="Backtesting.py documentation" href="doc/backtesting/">
+                <a class="button is-large is-link" title="Backtesting.py documentation" href="doc/backtesting/"
+                   itemprop="softwareHelp mainEntityOfPage">
                     <span class="icon"><i class="fa fa-file-alt"></i></span>
                     <span>Documentation</span>
                 </a>
