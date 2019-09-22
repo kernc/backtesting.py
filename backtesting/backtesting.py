@@ -870,8 +870,7 @@ class Backtest:
         df['Drawdown Duration'] = dd_dur
         dd_dur = df['Drawdown Duration']
 
-        # Strip timezone info, otherwise pandas 0.24.2 errors when filling `s` ahead
-        df.index = data.index.tz_convert(None)
+        df.index = data.index
 
         def _round_timedelta(value, _period=_data_period(df)):
             if not isinstance(value, pd.Timedelta):
