@@ -4,7 +4,7 @@ Backtesting.py
 ==============
 [![Build Status](https://img.shields.io/travis/kernc/backtesting.py.svg?style=for-the-badge)](https://travis-ci.org/kernc/backtesting.py)
 [![Code Coverage](https://img.shields.io/codecov/c/gh/kernc/backtesting.py.svg?style=for-the-badge)](https://codecov.io/gh/kernc/backtesting.py)
-[![Backtesting on PyPI](https://img.shields.io/pypi/v/backtesting.svg?style=for-the-badge)](https://pypi.org/project/backtesting)
+[![Backtesting on PyPI](https://img.shields.io/pypi/v/backtesting.svg?color=blue&style=for-the-badge)](https://pypi.org/project/backtesting)
 
 Backtest trading strategies with Python.
 
