@@ -882,11 +882,13 @@ class Backtest:
         df['Drawdown Duration'] = dd_dur
         dd_dur = df['Drawdown Duration']
 
-        # Strip timezone info, otherwise pandas 0.24.2 errors when filling `s` ahead
-        df.index = data.index.tz_convert(None)
+        df.index = data.index
 
         def _round_timedelta(value, _period=_data_period(df)):
-            return value.ceil(_period.resolution) if isinstance(value, pd.Timedelta) else value
+            if not isinstance(value, pd.Timedelta):
+                return value
+            resolution = getattr(_period, 'resolution_string', None) or _period.resolution
+            return value.ceil(resolution)
 
         s = pd.Series()
         s['Start'] = df.index[0]

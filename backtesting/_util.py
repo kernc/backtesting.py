@@ -26,7 +26,11 @@ def _as_list(value):
 
 def _data_period(df):
     """Return data index period as pd.Timedelta"""
-    return df.index[:100].to_series(keep_tz=True).diff().median()
+    if df.index.is_all_dates:
+        values = df.index[:100].to_series(keep_tz=True)
+    else:
+        values = df.index[:100].to_series()
+    return values.diff().median()
 
 
 class _Array(np.ndarray):
