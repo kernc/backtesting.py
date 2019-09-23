@@ -112,7 +112,7 @@ from exhaustive grid search to random search. See notes in the source.</p>
 </div></section>
 </dd>
 <dt id="backtesting.backtesting.Backtest.plot"><code class="name flex">
-<span>def <span class="ident">plot</span></span>(<span>self, *, results=None, filename=None, plot_width=1200, plot_equity=True, plot_pl=True, plot_volume=True, plot_drawdown=False, smooth_equity=False, relative_equity=True, omit_missing=True, superimpose=True, show_legend=True, open_browser=True)</span>
+<span>def <span class="ident">plot</span></span>(<span>self, *, results=None, filename=None, plot_width=None, plot_equity=True, plot_pl=True, plot_volume=True, plot_drawdown=False, smooth_equity=False, relative_equity=True, omit_missing=True, superimpose=True, show_legend=True, open_browser=True)</span>
 </code></dt>
 <dd>
 <section class="desc"><p>Plot the progression of the last backtest run.</p>
@@ -124,12 +124,9 @@ run's results are used.</p>
 <p><code>filename</code> is the path to save the interactive HTML plot to.
 By default, a strategy/parameter-dependent file is created in the
 current working directory.</p>
-<p><code>plot_width</code> is the width of the plot in pixels. The height is
+<p><code>plot_width</code> is the width of the plot in pixels. If None (default),
+the plot is made to span 100% of browser width. The height is
 currently non-adjustable.</p>
-<div class="admonition todo">
-<p class="admonition-title">TODO</p>
-<p>Make Bokeh plot span 100% browser width by default.</p>
-</div>
 <p>If <code>plot_equity</code> is <code>True</code>, the resulting plot will contain
 an equity (cash plus assets) graph section.</p>
 <p>If <code>plot_pl</code> is <code>True</code>, the resulting plot will contain
@@ -501,7 +498,7 @@ one at take-profit price (<code>tp</code>; limit order).</p>
 </main>
 <footer id="footer">
 <p>
-<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.1.1</a>
+<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.1.2</a>
 <span style="color:#ddd">&#21328;</span>
 </p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
