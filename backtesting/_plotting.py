@@ -69,7 +69,7 @@ def lightness(color, lightness=.94):
     return color.to_rgb()
 
 
-def plot(*, results, df, indicators, filename='', plot_width=1200,
+def plot(*, results, df, indicators, filename='', plot_width=None,
          plot_equity=True, plot_pl=True,
          plot_volume=True, plot_drawdown=False,
          smooth_equity=False, relative_equity=True, omit_missing=True,
@@ -550,13 +550,17 @@ return this.labels[index] || "";
         wheelzoom_tool = next(wz for wz in f.tools if isinstance(wz, WheelZoomTool))
         wheelzoom_tool.maintain_focus = False
 
+    kwargs = {}
+    if plot_width is None:
+        kwargs['sizing_mode'] = 'stretch_width'
+
     fig = gridplot(
         plots,
         ncols=1,
         toolbar_location='right',
-        # sizing_mode='stretch_width',
         toolbar_options=dict(logo=None),
         merge_tools=True,
+        **kwargs
     )
     show(fig, browser=None if open_browser else 'none')
     return fig

@@ -934,7 +934,7 @@ class Backtest:
         s._trade_data = df  # Private API
         return s
 
-    def plot(self, *, results: pd.Series = None, filename=None, plot_width=1200,
+    def plot(self, *, results: pd.Series = None, filename=None, plot_width=None,
              plot_equity=True, plot_pl=True,
              plot_volume=True, plot_drawdown=False,
              smooth_equity=False, relative_equity=True,
@@ -953,10 +953,9 @@ class Backtest:
         By default, a strategy/parameter-dependent file is created in the
         current working directory.
 
-        `plot_width` is the width of the plot in pixels. The height is
+        `plot_width` is the width of the plot in pixels. If None (default),
+        the plot is made to span 100% of browser width. The height is
         currently non-adjustable.
-
-        .. TODO:: Make Bokeh plot span 100% browser width by default.
 
         If `plot_equity` is `True`, the resulting plot will contain
         an equity (cash plus assets) graph section.
