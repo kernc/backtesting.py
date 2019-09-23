@@ -3,15 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
-<meta name="generator" content="pdoc 0.5.2" />
+<meta name="generator" content="pdoc 0.6.3" />
 <title>backtesting.backtesting API documentation</title>
 <meta name="description" content="Core backtesting data structures.
 Objects from this module can be imported from the top-level
-module directly, e.g.
-from backtesting import Backtest, Strategy" />
+module directly, e.g …" />
 <link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
 <link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
-<style>.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{font-weight:bold}#index h4 + ul{margin-bottom:.6em}#index .two-column{column-count:2}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.name small{font-weight:normal}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase;cursor:pointer}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}.admonition{padding:.1em .5em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style>.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{font-weight:bold}#index h4 + ul{margin-bottom:.6em}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase;cursor:pointer}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
 <style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
 <style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
 <style>.homelink{display:block;font-size:2em;font-weight:bold;color:#555;background:#f6f6f6;text-align:center;padding:.5em 0}.homelink:hover{color:inherit}.homelink img{display:block;max-width:40%;max-height:5em;margin:auto;margin-bottom:.3em}</style>
@@ -23,7 +22,7 @@ from backtesting import Backtest, Strategy" />
 <main>
 <article id="content">
 <header>
-<h1 class="title"><code>backtesting.backtesting</code> module</h1>
+<h1 class="title">Module <code>backtesting.backtesting</code></h1>
 </header>
 <section id="section-intro">
 <p>Core backtesting data structures.
@@ -43,6 +42,7 @@ module directly, e.g.</p>
 <dl>
 <dt id="backtesting.backtesting.Backtest"><code class="flex name class">
 <span>class <span class="ident">Backtest</span></span>
+<span>(</span><span>data, strategy, *, cash=10000, commission=0.0, margin=1.0, trade_on_close=False)</span>
 </code></dt>
 <dd>
 <section class="desc"><p>Backtest a particular (parameterized) strategy
@@ -50,14 +50,8 @@ on particular data.</p>
 <p>Upon initialization, call method
 <a title="backtesting.backtesting.Backtest.run" href="#backtesting.backtesting.Backtest.run"><code>Backtest.run()</code></a> to run a backtest
 instance, or <a title="backtesting.backtesting.Backtest.optimize" href="#backtesting.backtesting.Backtest.optimize"><code>Backtest.optimize()</code></a> to
-optimize it.</p></section>
-<h3>Methods</h3>
-<dl>
-<dt id="backtesting.backtesting.Backtest.__init__"><code class="name flex">
-<span>def <span class="ident">__init__</span></span>(<span>self, data, strategy, *, cash=10000, commission=0.0, margin=1.0, trade_on_close=False)</span>
-</code></dt>
-<dd>
-<section class="desc"><p>Initialize a backtest. Requires data and a strategy to test.</p>
+optimize it.</p>
+<p>Initialize a backtest. Requires data and a strategy to test.</p>
 <p><code>data</code> is a <code>pd.DataFrame</code> with columns:
 <code>Open</code>, <code>High</code>, <code>Low</code>, <code>Close</code>, and (optionally) <code>Volume</code>.
 If any columns are missing, set them to what you have available,
@@ -67,23 +61,24 @@ e.g.</p>
 <p>DataFrame index can be either datetime index (timestamps)
 or a monotonic range index (i.e. a sequence of periods).</p>
 <p><code>strategy</code> is a <a title="backtesting.backtesting.Strategy" href="#backtesting.backtesting.Strategy"><code>Strategy</code></a>
-<em>subclass</em> (not instance).</p>
+<em>subclass</em> (not an instance).</p>
 <p><code>cash</code> is the initial cash to start with.</p>
 <p><code>commission</code> is the commision ratio. E.g. if your broker's commission
 is 1% of trade value, set commission to <code>0.01</code>. Note, if you wish to
-account for bid-ask spread, you approximate doing so by increasing
+account for bid-ask spread, you cam approximate doing so by increasing
 the commission, e.g. set it to <code>0.0002</code> for commission-less forex
-trading where average spread is roughly 0.2‰ of asking price.</p>
+trading where the average spread is roughly 0.2‰ of asking price.</p>
 <p><code>margin</code> is the required margin (ratio) of a leveraged account.
 No difference is made between initial and maintenance margins.
-To run the backtest using e.g. 50:1 leverge your broker allows,
-set margin to <code>0.02</code>.</p>
+To run the backtest using e.g. 50:1 leverge that your broker allows,
+set margin to <code>0.02</code> (1 / leverage).</p>
 <p>If <code>trade_on_close</code> is <code>True</code>, market orders will be executed
 with respect to the current bar's closing price instead of the
 next bar's open.</p></section>
-</dd>
+<h3>Methods</h3>
+<dl>
 <dt id="backtesting.backtesting.Backtest.optimize"><code class="name flex">
-<span>def <span class="ident">optimize</span></span>(<span>self, maximize=&#39;SQN&#39;, constraint=None, return_heatmap=False, **kwargs)</span>
+<span>def <span class="ident">optimize</span></span>(<span>self, maximize='SQN', constraint=None, return_heatmap=False, **kwargs)</span>
 </code></dt>
 <dd>
 <section class="desc"><p>Optimize strategy parameters to an optimal combination using
@@ -101,7 +96,8 @@ is considered admissible.</p>
 <p>If <code>return_heatmap</code> is <code>True</code>, besides returning the result
 series, an additional <code>pd.Series</code> is returned with a multiindex
 of all admissible parameter combinations, which can be further
-inspected or projected onto 2D to plot a heatmap.</p>
+inspected or projected onto 2D to plot a heatmap
+(see <code>backtesting.backtesting.lib.plot_heatmaps()</code>).</p>
 <p>Additional keyword arguments represent strategy arguments with
 list-like collections of possible values. For example, the following
 code finds and returns the "best" of the 7 admissible (of the
@@ -132,7 +128,7 @@ current working directory.</p>
 currently non-adjustable.</p>
 <div class="admonition todo">
 <p class="admonition-title">TODO</p>
-<p>Make Bokeh plot span 100% browser width by default. </p>
+<p>Make Bokeh plot span 100% browser width by default.</p>
 </div>
 <p>If <code>plot_equity</code> is <code>True</code>, the resulting plot will contain
 an equity (cash plus assets) graph section.</p>
@@ -304,7 +300,7 @@ your own strategy.</p></section>
 <dt id="backtesting.backtesting.Strategy.data"><code class="name">var <span class="ident">data</span></code></dt>
 <dd>
 <section class="desc"><p>Price data, roughly as passed into
-<a title="backtesting.backtesting.Backtest.__init__" href="#backtesting.backtesting.Backtest.__init__"><code>Backtest.__init__()</code></a>,
+<a title="backtesting.backtesting.Backtest" href="#backtesting.backtesting.Backtest"><code>Backtest</code></a>,
 but with two significant exceptions:</p>
 <ul>
 <li><code>data</code> is <em>not</em> a DataFrame, but a custom structure
@@ -313,7 +309,7 @@ and convenience. Besides OHLCV columns, <code>.index</code> and length,
 it offers <code>.pip</code> property, the smallest price unit of change.</li>
 <li>Within <a title="backtesting.backtesting.Strategy.init" href="#backtesting.backtesting.Strategy.init"><code>Strategy.init()</code></a>, <code>data</code> arrays
 are available in full length, as passed into
-<a title="backtesting.backtesting.Backtest.__init__" href="#backtesting.backtesting.Backtest.__init__"><code>Backtest.__init__()</code></a>
+<a title="backtesting.backtesting.Backtest" href="#backtesting.backtesting.Backtest"><code>Backtest</code></a>
 (for precomputing indicators and such). However, within
 <a title="backtesting.backtesting.Strategy.next" href="#backtesting.backtesting.Strategy.next"><code>Strategy.next()</code></a>, <code>data</code> arrays are
 only as long as the current iteration, simulating gradual
@@ -343,7 +339,7 @@ Pandas series, you can call their <code>.to_series()</code> method
 <h3>Methods</h3>
 <dl>
 <dt id="backtesting.backtesting.Strategy.I"><code class="name flex">
-<span>def <span class="ident">I</span></span>(<span>self, func, *args, name=None, plot=True, overlay=None, color=None, **kwargs)</span>
+<span>def <span class="ident">I</span></span>(<span>self, func, *args, name=None, plot=True, overlay=None, color=None, scatter=False, **kwargs)</span>
 </code></dt>
 <dd>
 <section class="desc"><p>Declare indicator. An indicator is just an array of values,
@@ -351,7 +347,7 @@ but one that is revealed gradually in
 <a title="backtesting.backtesting.Strategy.next" href="#backtesting.backtesting.Strategy.next"><code>Strategy.next()</code></a> much like
 <a title="backtesting.backtesting.Strategy.data" href="#backtesting.backtesting.Strategy.data"><code>Strategy.data</code></a> is.
 Returns <code>np.ndarray</code> of indicator values.</p>
-<p><code>func</code> is a function that returns the indicator array of
+<p><code>func</code> is a function that returns the indicator array(s) of
 same length as <a title="backtesting.backtesting.Strategy.data" href="#backtesting.backtesting.Strategy.data"><code>Strategy.data</code></a>.</p>
 <p>In the plot legend, the indicator is labeled with
 function name, unless <code>name</code> overrides it.</p>
@@ -362,8 +358,10 @@ price candlestick chart (suitable e.g. for moving averages).
 If <code>False</code>, the indicator is plotted standalone below the
 candlestick chart. By default, a heuristic is used which decides
 correctly most of the time.</p>
-<p><code>color</code> can be string hex RGB triplet. By default, the next
-available color is assigned.</p>
+<p><code>color</code> can be string hex RGB triplet or X11 color name.
+By default, the next available color is assigned.</p>
+<p>If <code>scatter</code> is <code>True</code>, the plotted indicator marker will be a
+circle instead of a connected line segment (default).</p>
 <p>Additional <code>*args</code> and <code>**kwargs</code> are passed to <code>func</code> and can
 be used for parameters.</p>
 <p>For example, using simple moving average function from TA-Lib:</p>
@@ -450,7 +448,6 @@ one at take-profit price (<code>tp</code>; limit order).</p>
 <li>
 <h4><code><a title="backtesting.backtesting.Backtest" href="#backtesting.backtesting.Backtest">Backtest</a></code></h4>
 <ul class="">
-<li><code><a title="backtesting.backtesting.Backtest.__init__" href="#backtesting.backtesting.Backtest.__init__">__init__</a></code></li>
 <li><code><a title="backtesting.backtesting.Backtest.optimize" href="#backtesting.backtesting.Backtest.optimize">optimize</a></code></li>
 <li><code><a title="backtesting.backtesting.Backtest.plot" href="#backtesting.backtesting.Backtest.plot">plot</a></code></li>
 <li><code><a title="backtesting.backtesting.Backtest.run" href="#backtesting.backtesting.Backtest.run">run</a></code></li>
@@ -504,12 +501,12 @@ one at take-profit price (<code>tp</code>; limit order).</p>
 </main>
 <footer id="footer">
 <p>
-<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.1.0</a>
+<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.1.1</a>
 <span style="color:#ddd">&#21328;</span>
 </p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
 <script>hljs.configure({languages: ['python']}); hljs.initHighlightingOnLoad()</script>
-<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.5.2</a>.</p>
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.6.3</a>.</p>
 </footer>
 <script>window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;ga('create','UA-43663477-4','auto');ga('require','cleanUrlTracker',{indexFilename:'index.html',trailingSlash:'add'});ga('require','outboundLinkTracker',{events:['click','auxclick','contextmenu']});ga('require', 'maxScrollTracker');ga('require', 'pageVisibilityTracker');ga('send', 'pageview');setTimeout(function(){ga('send','event','pageview','view')},15000);</script><script async src='https://www.google-analytics.com/analytics.js'></script><script async src='https://cdnjs.cloudflare.com/ajax/libs/autotrack/2.4.1/autotrack.js'></script></body>
 </html>
