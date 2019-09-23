@@ -63,7 +63,7 @@ if __name__ == '__main__':
             'Topic :: Office/Business :: Financial :: Investment',
             'Topic :: Scientific/Engineering :: Visualization',
         ],
-        keywords=(
+        keywords=[
             'algo',
             'algorithmic',
             'ashi',
@@ -118,5 +118,5 @@ if __name__ == '__main__':
             'trading',
             'tradingview',
             'usd',
-        ),
+        ],
     )
