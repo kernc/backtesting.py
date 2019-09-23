@@ -475,6 +475,13 @@ class TestLib(TestCase):
         self.assertEqual(res.iloc[-48:].unique().tolist(),
                          [1.2426429999999997, 1.2423809999999995, 1.2422749999999998])
 
+        def resets_index(*args):
+            return pd.Series(SMA(*args).values)
+
+        res2 = resample_apply('D', resets_index, EURUSD.Close, 10)
+        self.assertTrue((res.dropna() == res2.dropna()).all())
+        self.assertTrue((res.index == res2.index).all())
+
     def test_plot_heatmaps(self):
         bt = Backtest(GOOG, SmaCross)
         stats, heatmap = bt.optimize(fast=range(2, 7, 2),
