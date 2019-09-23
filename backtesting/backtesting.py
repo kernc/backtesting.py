@@ -5,6 +5,7 @@ module directly, e.g.
 
     from backtesting import Backtest, Strategy
 """
+import multiprocessing as mp
 import os
 import re
 import sys
@@ -812,11 +813,22 @@ class Backtest:
             for i in range(0, len(seq), n):
                 yield seq[i:i + n]
 
-        with ProcessPoolExecutor() as executor:
-            futures = [executor.submit(self._mp_task, params)
-                       for params in _batch(param_combos)]
-            for future in _tqdm(as_completed(futures), total=len(futures)):
-                for params, stats in future.result():
+        # If multiprocessing start method is 'fork' (i.e. on POSIX), use
+        # a pool of processes to compute results in parallel.
+        # Otherwise (i.e. on Windos), sequential computation will be "faster".
+        if mp.get_start_method(allow_none=False) == 'fork':
+            with ProcessPoolExecutor() as executor:
+                futures = [executor.submit(self._mp_task, params)
+                           for params in _batch(param_combos)]
+                for future in _tqdm(as_completed(futures), total=len(futures)):
+                    for params, stats in future.result():
+                        heatmap[tuple(params.values())] = maximize(stats)
+        else:
+            if os.name == 'posix':
+                warnings.warn("For multiprocessing support in `Backtest.optimize()` "
+                              "set multiprocessing start method to 'fork'.")
+            for params in _tqdm(param_combos):
+                for _, stats in self._mp_task([params]):
                     heatmap[tuple(params.values())] = maximize(stats)
 
         best_params = heatmap.idxmax()
