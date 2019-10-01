@@ -891,46 +891,38 @@ class Backtest:
             return value.ceil(resolution)
 
         s = pd.Series()
-        s['Start'] = df.index[0]
-        s['End'] = df.index[-1]
-        # Assigning Timedeltas needs the key to exist beforehand,
-        # otherwise the value is interpreted as nanosec *int*. See:
-        # https://github.com/pandas-dev/pandas/issues/22717
-        s['Duration'] = 0
-        s['Duration'] = s.End - s.Start
+        s.loc['Start'] = df.index[0]
+        s.loc['End'] = df.index[-1]
+        s.loc['Duration'] = s.End - s.Start
         exits = df['Exit Entry']  # After reindexed
         durations = (exits.dropna().index - df.index[exits.dropna().values.astype(int)]).to_series()
-        s['Exposure [%]'] = np.nan_to_num(durations.sum() / (s['Duration'] or np.nan) * 100)
-        s['Equity Final [$]'] = equity[-1]
-        s['Equity Peak [$]'] = equity.max()
-        s['Return [%]'] = (equity[-1] - equity[0]) / equity[0] * 100
+        s.loc['Exposure [%]'] = np.nan_to_num(durations.sum() / (s.loc['Duration'] or np.nan) * 100)
+        s.loc['Equity Final [$]'] = equity[-1]
+        s.loc['Equity Peak [$]'] = equity.max()
+        s.loc['Return [%]'] = (equity[-1] - equity[0]) / equity[0] * 100
         c = data.Close.values
-        s['Buy & Hold Return [%]'] = abs(c[-1] - c[0]) / c[0] * 100  # long OR short
-        s['Max. Drawdown [%]'] = max_dd = -np.nan_to_num(dd.max()) * 100
-        s['Avg. Drawdown [%]'] = -dd_peaks.mean() * 100
-        s['Max. Drawdown Duration'] = 0
-        s['Max. Drawdown Duration'] = _round_timedelta(dd_dur.max())
-        s['Avg. Drawdown Duration'] = 0
-        s['Avg. Drawdown Duration'] = _round_timedelta(dd_dur.mean())
-        s['# Trades'] = n_trades = pl.count()
-        s['Win Rate [%]'] = win_rate = np.nan if not n_trades else (pl > 0).sum() / n_trades * 100
-        s['Best Trade [%]'] = returns.max() * 100
-        s['Worst Trade [%]'] = returns.min() * 100
+        s.loc['Buy & Hold Return [%]'] = abs(c[-1] - c[0]) / c[0] * 100  # long OR short
+        s.loc['Max. Drawdown [%]'] = max_dd = -np.nan_to_num(dd.max()) * 100
+        s.loc['Avg. Drawdown [%]'] = -dd_peaks.mean() * 100
+        s.loc['Max. Drawdown Duration'] = _round_timedelta(dd_dur.max())
+        s.loc['Avg. Drawdown Duration'] = _round_timedelta(dd_dur.mean())
+        s.loc['# Trades'] = n_trades = pl.count()
+        s.loc['Win Rate [%]'] = win_rate = np.nan if not n_trades else (pl > 0).sum() / n_trades * 100  # noqa: E501
+        s.loc['Best Trade [%]'] = returns.max() * 100
+        s.loc['Worst Trade [%]'] = returns.min() * 100
         mean_return = returns.mean()
-        s['Avg. Trade [%]'] = mean_return * 100
-        s['Max. Trade Duration'] = 0
-        s['Max. Trade Duration'] = _round_timedelta(durations.max())
-        s['Avg. Trade Duration'] = 0
-        s['Avg. Trade Duration'] = _round_timedelta(durations.mean())
-        s['Expectancy [%]'] = ((returns[returns > 0].mean() * win_rate -
-                                returns[returns < 0].mean() * (100 - win_rate)))
+        s.loc['Avg. Trade [%]'] = mean_return * 100
+        s.loc['Max. Trade Duration'] = _round_timedelta(durations.max())
+        s.loc['Avg. Trade Duration'] = _round_timedelta(durations.mean())
+        s.loc['Expectancy [%]'] = ((returns[returns > 0].mean() * win_rate -
+                                    returns[returns < 0].mean() * (100 - win_rate)))
         pl = pl.dropna()
-        s['SQN'] = np.sqrt(n_trades) * pl.mean() / pl.std()
-        s['Sharpe Ratio'] = mean_return / (returns.std() or np.nan)
-        s['Sortino Ratio'] = mean_return / (returns[returns < 0].std() or np.nan)
-        s['Calmar Ratio'] = mean_return / ((-max_dd / 100) or np.nan)
+        s.loc['SQN'] = np.sqrt(n_trades) * pl.mean() / pl.std()
+        s.loc['Sharpe Ratio'] = mean_return / (returns.std() or np.nan)
+        s.loc['Sortino Ratio'] = mean_return / (returns[returns < 0].std() or np.nan)
+        s.loc['Calmar Ratio'] = mean_return / ((-max_dd / 100) or np.nan)
 
-        s['_strategy'] = strategy
+        s.loc['_strategy'] = strategy
         s._trade_data = df  # Private API
         return s
 
