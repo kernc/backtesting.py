@@ -935,7 +935,7 @@ class Backtest:
         """
         Plot the progression of the last backtest run.
 
-        If `results` is proided, it should be a particular result
+        If `results` is provided, it should be a particular result
         `pd.Series` such as returned by
         `backtesting.backtesting.Backtest.run` or
         `backtesting.backtesting.Backtest.optimize`, otherwise the last
