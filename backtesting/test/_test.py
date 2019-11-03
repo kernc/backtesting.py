@@ -24,7 +24,7 @@ from backtesting.lib import (
     resample_apply,
     plot_heatmaps
 )
-from backtesting.test import GOOG, EURUSD, SMA
+from backtesting.test import GOOG, EURUSD, SMA, standard_deviation, bollinger_low
 from backtesting._util import _Indicator, _as_str, _Array
 
 
@@ -60,6 +60,53 @@ class SmaCross(Strategy):
             self.buy()
         elif crossover(self.sma2, self.sma1):
             self.sell()
+
+
+class TestBollingerBands(TestCase):
+
+    def test_standard_deviation(self):
+        arr = pd.Series([1, 3, 5, 12, 6, 8])
+        n = 3
+        expected = [
+            np.nan,
+            np.nan,
+            2.0,
+            4.725815626252608,
+            3.7859388972001824,
+            3.055050463303893,
+        ]
+        actual = standard_deviation(arr, n)
+        np.testing.assert_equal(actual.values, expected)
+
+    def test_bollinger_low(self):
+        arr = pd.Series([1, 1, 2, 3, 5, 8, 13, 21])
+        n = 3
+        std_mul = 2
+        actual = bollinger_low(arr, n, std_mul)
+        expected = [
+            np.nan,
+            np.nan,
+            0.1786327949540818,
+            0,
+            0.2782828700294404,
+            0.3001103764861668,
+            0.583762898011905,
+            0.8851229513959993,
+        ]
+        np.testing.assert_equal(actual.values, expected)
+        std_mul = 1.5
+        actual = bollinger_low(arr, n, std_mul)
+        expected = [
+            np.nan,
+            np.nan,
+            0.46730792954889466,
+            0.5,
+            1.0420454858554136,
+            1.5584161156979581,
+            2.604488840175595,
+            4.1638422135469995,
+        ]
+        np.testing.assert_equal(actual.values, expected)
 
 
 class TestBacktest(TestCase):
