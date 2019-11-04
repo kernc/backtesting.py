@@ -50,6 +50,7 @@ class Strategy(metaclass=ABCMeta):
     `backtesting.backtesting.Strategy.next` to define
     your own strategy.
     """
+
     def __init__(self, broker, data):
         self._indicators = []
         self._broker = broker  # type: _Broker
@@ -182,7 +183,7 @@ class Strategy(metaclass=ABCMeta):
             super().next()
         """
 
-    def buy(self, price=None, *, sl=None, tp=None):
+    def buy(self, price=None, *, sl=None, tp=None, size=None):
         """
         Let the strategy close any current position and
         use _all available funds_ to
@@ -195,9 +196,10 @@ class Strategy(metaclass=ABCMeta):
         """
         self._broker.buy(price and float(price),
                          sl and float(sl),
-                         tp and float(tp))
+                         tp and float(tp),
+                         size and float(size))
 
-    def sell(self, price=None, *, sl=None, tp=None):
+    def sell(self, price=None, *, sl=None, tp=None, size=None):
         """
         Let the strategy close any current position and
         use _all available funds_ to
@@ -210,7 +212,8 @@ class Strategy(metaclass=ABCMeta):
         """
         self._broker.sell(price and float(price),
                           sl and float(sl),
-                          tp and float(tp))
+                          tp and float(tp),
+                          size and float(size))
 
     @property
     def equity(self):
@@ -267,16 +270,18 @@ class Orders:
     `backtesting.backtesting.Orders.set_sl` and
     `backtesting.backtesting.Orders.set_tp`.
     """
+
     def __init__(self, broker):
         self._broker = broker
-        self._entry = self._sl = self._tp = self._close = self._is_long = None
+        self._entry = self._sl = self._tp = self._close = self._is_long = self._size = None
 
-    def _update(self, entry, sl, tp, is_long=True):
+    def _update(self, entry, sl, tp, size, is_long=True):
         self._entry = entry and float(entry) or _MARKET_PRICE
         self._sl = sl and float(sl) or None
         self._tp = tp and float(tp) or None
         self._close = False
         self._is_long = is_long
+        self._size = size and float(size) or None
 
     @property
     def is_long(self):
@@ -367,6 +372,7 @@ class Position:
         if self.position:
             ...  # we have a position, either long or short
     """
+
     def __init__(self, broker):
         self._broker = broker
 
@@ -459,13 +465,13 @@ class _Broker:
     def __repr__(self):
         return '<Broker: {:.0f}{:+.1f}>'.format(self._cash, self.position.pl)
 
-    def buy(self, price=None, sl=None, tp=None):
+    def buy(self, price=None, sl=None, tp=None, size:float=None):
         assert (sl or -np.inf) <= (price or self.last_close) <= (tp or np.inf), "For long orders should be: SL ({}) < BUY PRICE ({}) < TP ({})".format(sl, price or self.last_close, tp)  # noqa: E501
-        self.orders._update(price, sl, tp)
+        self.orders._update(price, sl, tp, size)
 
-    def sell(self, price=None, sl=None, tp=None):
+    def sell(self, price=None, sl=None, tp=None, size:float=None):
         assert (tp or -np.inf) <= (price or self.last_close) <= (sl or np.inf), "For short orders should be: TP ({}) < BUY PRICE ({}) < SL ({})".format(tp, price or self.last_close, sl)  # noqa: E501
-        self.orders._update(price, sl, tp, is_long=False)
+        self.orders._update(price, sl, tp, size, is_long=False)
 
     def close(self):
         self.orders.cancel()
@@ -493,7 +499,8 @@ class _Broker:
 
         i, price = self._get_market_price(price)
 
-        position = float(self._cash * self._leverage / (price * (1 + self._commission)))
+        size = self._cash if self.orders._size == None else self.orders._size
+        position = float(size * self._leverage / (price * (1 + self._commission)))
         self._position = position if is_long else -position
         self._position_open_price = price
         self._position_open_i = i
@@ -580,6 +587,7 @@ class Backtest:
     instance, or `backtesting.backtesting.Backtest.optimize` to
     optimize it.
     """
+
     def __init__(self,
                  data: pd.DataFrame,
                  strategy: type(Strategy),
