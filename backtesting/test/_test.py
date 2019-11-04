@@ -270,6 +270,17 @@ class TestBacktest(TestCase):
                 if self.position:
                     self.position.close()
 
+        class SingleFixedSizeTrade(Strategy):
+            def init(self):
+                self._done = False
+
+            def next(self):
+                if not self._done:
+                    self.buy(size=1000)
+                    self._done = True
+                if self.position:
+                    self.position.close()
+
         class SinglePosition(Strategy):
             def init(self):
                 pass
@@ -287,6 +298,7 @@ class TestBacktest(TestCase):
 
         for strategy in (SmaCross,
                          SingleTrade,
+                         SingleFixedSizeTrade,
                          SinglePosition,
                          NoTrade):
             with self.subTest(strategy=strategy.__name__):

@@ -193,6 +193,8 @@ class Strategy(metaclass=ABCMeta):
         one at take-profit price (`tp`; limit order).
 
         If `price` is not set, market price is assumed.
+        
+        If `size` is not set, entire holding cash is assumed.
         """
         self._broker.buy(price and float(price),
                          sl and float(sl),
@@ -209,6 +211,8 @@ class Strategy(metaclass=ABCMeta):
         one at take-profit price (`tp`; limit order).
 
         If `price` is not set, market price is assumed.
+        
+        If `size` is not set, entire holding cash is assumed.
         """
         self._broker.sell(price and float(price),
                           sl and float(sl),
