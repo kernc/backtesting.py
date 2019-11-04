@@ -193,7 +193,7 @@ class Strategy(metaclass=ABCMeta):
         one at take-profit price (`tp`; limit order).
 
         If `price` is not set, market price is assumed.
-        
+
         If `size` is not set, entire holding cash is assumed.
         """
         self._broker.buy(price and float(price),
@@ -211,7 +211,7 @@ class Strategy(metaclass=ABCMeta):
         one at take-profit price (`tp`; limit order).
 
         If `price` is not set, market price is assumed.
-        
+
         If `size` is not set, entire holding cash is assumed.
         """
         self._broker.sell(price and float(price),
@@ -469,11 +469,11 @@ class _Broker:
     def __repr__(self):
         return '<Broker: {:.0f}{:+.1f}>'.format(self._cash, self.position.pl)
 
-    def buy(self, price=None, sl=None, tp=None, size:float=None):
+    def buy(self, price=None, sl=None, tp=None, size: float = None):
         assert (sl or -np.inf) <= (price or self.last_close) <= (tp or np.inf), "For long orders should be: SL ({}) < BUY PRICE ({}) < TP ({})".format(sl, price or self.last_close, tp)  # noqa: E501
         self.orders._update(price, sl, tp, size)
 
-    def sell(self, price=None, sl=None, tp=None, size:float=None):
+    def sell(self, price=None, sl=None, tp=None, size: float = None):
         assert (tp or -np.inf) <= (price or self.last_close) <= (sl or np.inf), "For short orders should be: TP ({}) < BUY PRICE ({}) < SL ({})".format(tp, price or self.last_close, sl)  # noqa: E501
         self.orders._update(price, sl, tp, size, is_long=False)
 
@@ -503,7 +503,7 @@ class _Broker:
 
         i, price = self._get_market_price(price)
 
-        size = self._cash if self.orders._size == None else self.orders._size
+        size = self._cash if self.orders._size is None else self.orders._size
         position = float(size * self._leverage / (price * (1 + self._commission)))
         self._position = position if is_long else -position
         self._position_open_price = price
