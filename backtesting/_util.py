@@ -5,6 +5,13 @@ import numpy as np
 import pandas as pd
 
 
+def try_(lazy_func, default=None, exception=Exception):
+    try:
+        return lazy_func()
+    except exception:
+        return default
+
+
 def _as_str(value):
     if isinstance(value, (Number, str)):
         return str(value)

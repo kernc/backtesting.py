@@ -406,7 +406,7 @@ class Position:
         Profit (positive) or loss (negative) of current position,
         in percent of position open price.
         """
-        return self.pl / (self.open_price * abs(self.size))
+        return self.pl / (self.open_price * abs(self.size) or 1)
 
     @property
     def is_long(self):
@@ -514,6 +514,8 @@ class _Broker:
 
         self._cash += pl
         self._position = 0
+        self._position_open_price = 0
+        self._position_open_i = None
 
     @property
     def equity(self):
