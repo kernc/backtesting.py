@@ -5,8 +5,8 @@
 #     text_representation:
 #       extension: .py
 #       format_name: light
-#       format_version: '1.3'
-#       jupytext_version: 1.0.2
+#       format_version: '1.5'
+#       jupytext_version: 1.3.0
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -116,7 +116,7 @@ class SmaCross(Strategy):
 # [`backtesting.lib.crossover()`](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html#backtesting.lib.crossover)
 # function instead of writing more obscure and confusing conditions, such as:
 
-# + {"active": ""}
+# + active=""
 #     def next(self):
 #         if (self.sma1[-2] < self.sma2[-2] and
 #             self.sma1[-1] > self.sma2[-1]):

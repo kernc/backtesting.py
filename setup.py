@@ -38,7 +38,7 @@ if __name__ == '__main__':
         extras_require={
             'doc': [
                 'pdoc3',
-                'jupytext >= 1.0.2',
+                'jupytext >= 1.3',
                 'nbconvert',
                 'ipykernel',       # for nbconvert
                 'jupyter_client',  # for nbconvert
