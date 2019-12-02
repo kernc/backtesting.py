@@ -263,11 +263,11 @@ return this.labels[index] || "";
         # Peaks
         argmax = equity.idxmax()
         fig.scatter(argmax, equity[argmax],
-                    legend='Peak ({})'.format(
+                    legend_label='Peak ({})'.format(
                         legend_format.format(equity[argmax] * (100 if relative_equity else 1))),
                     color='cyan', size=8)
         fig.scatter(index[-1], equity.values[-1],
-                    legend='Final ({})'.format(
+                    legend_label='Final ({})'.format(
                         legend_format.format(equity.iloc[-1] * (100 if relative_equity else 1))),
                     color='blue', size=8)
 
@@ -275,13 +275,13 @@ return this.labels[index] || "";
             drawdown = trade_data['Drawdown']
             argmax = drawdown.idxmax()
             fig.scatter(argmax, equity[argmax],
-                        legend='Max Drawdown (-{:.1f}%)'.format(100 * drawdown[argmax]),
+                        legend_label='Max Drawdown (-{:.1f}%)'.format(100 * drawdown[argmax]),
                         color='red', size=8)
         fig.line([dd_start, dd_end], equity[dd_start],
                  line_color='red', line_width=2,
-                 legend='Max Dd Dur. ({})'.format(timedelta)
-                                          .replace(' 00:00:00', '')
-                                          .replace('(0 days ', '('))
+                 legend_label='Max Dd Dur. ({})'.format(timedelta)
+                 .replace(' 00:00:00', '')
+                 .replace('(0 days ', '('))
 
         figs_above_ohlc.append(fig)
 
@@ -293,7 +293,7 @@ return this.labels[index] || "";
         source.add(drawdown, 'drawdown')
         r = fig.line('index', 'drawdown', source=source, line_width=1.3)
         fig.scatter(argmax, drawdown[argmax],
-                    legend='Peak (-{:.1f}%)'.format(100 * drawdown[argmax]),
+                    legend_label='Peak (-{:.1f}%)'.format(100 * drawdown[argmax]),
                     color='red', size=8)
         set_tooltips(fig, [('Drawdown', '@drawdown{-0.[0]%}')], renderers=[r])
         fig.yaxis.formatter = NumeralTickFormatter(format="-0.[0]%")
@@ -402,7 +402,7 @@ return this.labels[index] || "";
                          'position_lines_ys')
         fig_ohlc.multi_line(xs='position_lines_xs', ys='position_lines_ys',
                             source=trade_source, line_color=trades_cmap,
-                            legend='Trades',
+                            legend_label='Trades',
                             line_width=8, line_alpha=1, line_dash='dotted')
 
     def _plot_indicators():
@@ -452,11 +452,11 @@ return this.labels[index] || "";
                         fig_ohlc.scatter(
                             'index', source_name, source=source,
                             color=color, line_color='black', fill_alpha=.8,
-                            marker='circle', radius=bar_width / 2 * 1.5, legend=legend)
+                            marker='circle', radius=bar_width / 2 * 1.5, legend_label=legend)
                     else:
                         fig_ohlc.line(
                             'index', source_name, source=source,
-                            line_width=1.3, line_color=color, legend=legend)
+                            line_width=1.3, line_color=color, legend_label=legend)
                     ohlc_extreme_values[source_name] = arr
                     tooltips.append('@{{{}}}{{0,0.0[0000]}}'.format(source_name))
                 ohlc_tooltips.append((value.name, NBSP.join(tooltips)))
@@ -473,11 +473,12 @@ return this.labels[index] || "";
                     if value._opts.get('scatter'):
                         r = fig.scatter(
                             'index', name, source=source, color=next(color),
-                            marker='circle', radius=bar_width / 2 * .9, legend=LegendStr(legend))
+                            marker='circle', radius=bar_width / 2 * .9,
+                            legend_label=LegendStr(legend))
                     else:
                         r = fig.line(
                             'index', name, source=source, line_color=next(color),
-                            line_width=1.3, legend=LegendStr(legend))
+                            line_width=1.3, legend_label=LegendStr(legend))
 
                     # Add dashed centerline just because
                     mean = float(pd.Series(arr).mean())
