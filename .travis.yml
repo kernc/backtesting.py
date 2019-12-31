@@ -12,7 +12,7 @@ matrix:
     - python: '3.5'
     - python: '3.8'
 
-    - python: '3.7'
+    - python: '3.6'
       name: 'Lint, Test w/ Coverage'
       before_script:
         - pip install flake8 coverage
