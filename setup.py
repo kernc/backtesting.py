@@ -33,7 +33,7 @@ if __name__ == '__main__':
             'typing ; python_version < "3.5"',
             'numpy',
             'pandas >= 0.25.0, != 0.25.0',
-            'bokeh >= 1.1.0',
+            'bokeh >= 1.4.0',
         ],
         extras_require={
             'doc': [
