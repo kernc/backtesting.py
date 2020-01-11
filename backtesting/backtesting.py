@@ -11,7 +11,7 @@ import re
 import sys
 import warnings
 from abc import abstractmethod, ABCMeta
-from collections import Sequence
+from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from functools import partial
 from itertools import repeat, product, chain
