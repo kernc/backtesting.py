@@ -422,15 +422,12 @@ return this.labels[index] || "";
             # legend items are listed separately even when they have the
             # same string contents. Otherwise, Bokeh would always consider
             # equal strings as one and the same legend item.
-            # This also prevents legend items named the same as some
-            # ColumnDataSource's column to be replaced with that column's
-            # values.
             def __eq__(self, other):
                 return self is other
 
         ohlc_colors = colorgen()
 
-        for value in indicators:
+        for i, value in enumerate(indicators):
             value = np.atleast_2d(value)
 
             # Use .get()! A user might have assigned a Strategy.data-evolved
@@ -438,48 +435,49 @@ return this.labels[index] || "";
             if not value._opts.get('plot') or _too_many_dims(value):
                 continue
 
-            tooltips = []
-
-            # Overlay indicators on the OHLC figure
-            if value._opts['overlay']:
-                color = value._opts['color']
-                color = color and _as_list(color)[0] or next(ohlc_colors)
-                legend = LegendStr(value.name)
-                for i, arr in enumerate(value):
-                    source_name = '{}_{}'.format(value.name, i)
-                    source.add(arr, source_name)
-                    if value._opts.get('scatter'):
-                        fig_ohlc.scatter(
-                            'index', source_name, source=source,
-                            color=color, line_color='black', fill_alpha=.8,
-                            marker='circle', radius=bar_width / 2 * 1.5, legend_label=legend)
-                    else:
-                        fig_ohlc.line(
-                            'index', source_name, source=source,
-                            line_width=1.3, line_color=color, legend_label=legend)
-                    ohlc_extreme_values[source_name] = arr
-                    tooltips.append('@{{{}}}{{0,0.0[0000]}}'.format(source_name))
-                ohlc_tooltips.append((value.name, NBSP.join(tooltips)))
+            is_overlay = value._opts['overlay']
+            is_scatter = value._opts['scatter']
+            if is_overlay:
+                fig = fig_ohlc
             else:
-                # Standalone indicator sections at the bottom
-                color = value._opts['color']
-                color = color and cycle(_as_list(color)) or colorgen()
                 fig = new_indicator_figure()
-                for i, arr in enumerate(value, 1):
-                    legend = '{}-{}'.format(value.name, i) if len(value) > 1 else value.name
-                    name = legend + '_'  # Otherwise fig.line(legend=) is interpreted as col of source  # noqa: E501
-                    tooltips.append('@{{{}}}'.format(name))
-                    source.add(arr.astype(int if arr.dtype == bool else float), name)
-                    if value._opts.get('scatter'):
+                figs_below_ohlc.append(fig)
+            tooltips = []
+            colors = value._opts['color']
+            colors = colors and cycle([_as_list(colors)[0]]) or (
+                cycle([next(ohlc_colors)]) if is_overlay else colorgen())
+            legend_label = LegendStr(value.name)
+            for j, arr in enumerate(value, 1):
+                color = next(colors)
+                source_name = '{}_{}_{}'.format(legend_label, i, j)
+                if arr.dtype == bool:
+                    arr = arr.astype(int)
+                source.add(arr, source_name)
+                tooltips.append('@{{{}}}{{0,0.0[0000]}}'.format(source_name))
+                if is_overlay:
+                    ohlc_extreme_values[source_name] = arr
+                    if is_scatter:
+                        fig.scatter(
+                            'index', source_name, source=source,
+                            legend_label=legend_label, color=color,
+                            line_color='black', fill_alpha=.8,
+                            marker='circle', radius=bar_width / 2 * 1.5)
+                    else:
+                        fig.line(
+                            'index', source_name, source=source,
+                            legend_label=legend_label, line_color=color,
+                            line_width=1.3)
+                else:
+                    if is_scatter:
                         r = fig.scatter(
-                            'index', name, source=source, color=next(color),
-                            marker='circle', radius=bar_width / 2 * .9,
-                            legend_label=LegendStr(legend))
+                            'index', source_name, source=source,
+                            legend_label=LegendStr(legend_label), color=color,
+                            marker='circle', radius=bar_width / 2 * .9)
                     else:
                         r = fig.line(
-                            'index', name, source=source, line_color=next(color),
-                            line_width=1.3, legend_label=LegendStr(legend))
-
+                            'index', source_name, source=source,
+                            legend_label=LegendStr(legend_label), line_color=color,
+                            line_width=1.3)
                     # Add dashed centerline just because
                     mean = float(pd.Series(arr).mean())
                     if not np.isnan(mean) and (abs(mean) < .1 or
@@ -488,15 +486,14 @@ return this.labels[index] || "";
                         fig.add_layout(Span(location=float(mean), dimension='width',
                                             line_color='#666666', line_dash='dashed',
                                             line_width=.5))
-
-                set_tooltips(fig, [(value.name, NBSP.join(tooltips))], vline=True, renderers=[r])
-
+            if is_overlay:
+                ohlc_tooltips.append((legend_label, NBSP.join(tooltips)))
+            else:
+                set_tooltips(fig, [(legend_label, NBSP.join(tooltips))], vline=True, renderers=[r])
                 # If the sole indicator line on this figure,
                 # have the legend only contain text without the glyph
                 if len(value) == 1:
                     fig.legend.glyph_width = 0
-
-                figs_below_ohlc.append(fig)
 
     # Construct figure ...
 
