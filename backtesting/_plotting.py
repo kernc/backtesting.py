@@ -483,6 +483,7 @@ return this.labels[index] || "";
                     # Add dashed centerline just because
                     mean = float(pd.Series(arr).mean())
                     if not np.isnan(mean) and (abs(mean) < .1 or
+                                               round(abs(mean), 1) == .5 or
                                                round(abs(mean), -1) in (50, 100, 200)):
                         fig.add_layout(Span(location=float(mean), dimension='width',
                                             line_color='#666666', line_dash='dashed',
