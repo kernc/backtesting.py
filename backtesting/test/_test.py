@@ -410,7 +410,7 @@ class TestPlot(TestCase):
         with _tempfile() as f:
             for rule in 'LSTHDWM':
                 with self.subTest(rule=rule):
-                    df = EURUSD.iloc[:2].resample(rule).agg(OHLCV_AGG).iloc[:1100]
+                    df = EURUSD.iloc[:2].resample(rule).agg(OHLCV_AGG).dropna().iloc[:1100]
                     bt = Backtest(df, SmaCross)
                     bt.run()
                     bt.plot(filename=f, open_browser=False)
