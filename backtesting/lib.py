@@ -133,7 +133,9 @@ def quantile(series, quantile=None):
 def resample_apply(rule: str,
                    func: Callable,
                    series,
-                   *args, **kwargs):
+                   *args,
+                   agg='last',
+                   **kwargs):
     """
     Apply `func` (such as an indicator) to `series`, resampled to
     a time frame specified by `rule`. When called from inside
@@ -154,6 +156,10 @@ def resample_apply(rule: str,
     `backtesting.backtesting.Strategy.data` series. Due to pandas
     resampling limitations, this only works when input series
     has a datetime index.
+
+    `agg` is the aggregation function to use on resampled groups of data.
+    Default value is `"last"`, which may be suitable for closing prices,
+    but you might prefer another (e.g. 'max' for peaks, or similar).
 
     Finally, any `*args` and `**kwargs` that are not already eaten by
     implicit `backtesting.backtesting.Strategy.I` call
@@ -203,7 +209,7 @@ def resample_apply(rule: str,
             'or a `Strategy.data.*` array'
         series = series.to_series()
 
-    resampled = series.resample(rule, label='right').agg('last').dropna()
+    resampled = series.resample(rule, label='right').agg(agg).dropna()
     resampled.name = _as_str(series) + '[' + rule + ']'
 
     # Check first few stack frames if we are being called from
