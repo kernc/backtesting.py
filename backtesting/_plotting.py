@@ -102,11 +102,13 @@ def plot(*, results, df, indicators, filename='', plot_width=None,
 
     COLORS = [BEAR_COLOR, BULL_COLOR]
 
-    orig_trade_data = trade_data = results._trade_data.copy(False)
+    equity_data = results['_equity_curve'].copy(False)
+    trades = results['_trades']
 
     orig_df = df = df.copy(False)
     df.index.name = None  # Provides source name @index
     index = df.index
+    assert df.index.equals(equity_data.index)
     time_resolution = getattr(index, 'resolution', None)
     is_datetime_index = index.is_all_dates
 
@@ -128,7 +130,7 @@ def plot(*, results, df, indicators, filename='', plot_width=None,
     if omit_missing:
         bar_width = .8
         df = df.reset_index(drop=True)
-        trade_data = trade_data.reset_index(drop=True)
+        equity_data = equity_data.reset_index(drop=True)
         index = df.index
 
     new_bokeh_figure = partial(
@@ -150,19 +152,23 @@ def plot(*, results, df, indicators, filename='', plot_width=None,
 
     source = ColumnDataSource(df)
     source.add((df.Close >= df.Open).values.astype(np.uint8).astype(str), 'inc')
-    returns = trade_data['Returns'].dropna()
+    trades_index = trades['ExitBar']
+    if not omit_missing:
+        trades_index = index[trades_index.astype(int)]
+
     trade_source = ColumnDataSource(dict(
-        index=returns.index,
-        datetime=orig_trade_data['Returns'].dropna().index,
-        exit_price=trade_data['Exit Price'].dropna(),
-        returns_pos=(returns > 0).astype(np.int8).astype(str),
+        index=trades_index,
+        datetime=trades['ExitTime'],
+        exit_price=trades['ExitPrice'],
+        size=trades['Size'],
+        returns_positive=(trades['ReturnPct'] > 0).astype(int).astype(str),
     ))
 
     inc_cmap = factor_cmap('inc', COLORS, ['0', '1'])
-    cmap = factor_cmap('returns_pos', COLORS, ['0', '1'])
+    cmap = factor_cmap('returns_positive', COLORS, ['0', '1'])
     colors_darker = [lightness(BEAR_COLOR, .35),
                      lightness(BULL_COLOR, .35)]
-    trades_cmap = factor_cmap('returns_pos', colors_darker, ['0', '1'])
+    trades_cmap = factor_cmap('returns_positive', colors_darker, ['0', '1'])
 
     if is_datetime_index and omit_missing:
         fig_ohlc.xaxis.formatter = FuncTickFormatter(
@@ -216,8 +222,8 @@ return this.labels[index] || "";
     def _plot_equity_section():
         """Equity section"""
         # Max DD Dur. line
-        equity = trade_data['Equity']
-        argmax = trade_data['Drawdown Duration'].idxmax()
+        equity = equity_data['Equity'].reset_index(drop=True)
+        argmax = equity_data['DrawdownDuration'].reset_index(drop=True).idxmax()
         try:
             dd_start = equity[:argmax].idxmax()
         except Exception:  # ValueError: attempt to get argmax of an empty sequence
@@ -231,20 +237,24 @@ return this.labels[index] || "";
             else:
                 timedelta = dd_end - dd_start
             # Get point intersection
-            if dd_end != index[-1]:
-                x1, x2 = index.get_loc(dd_end) - 1, index.get_loc(dd_end)
+            if dd_end != equity.index[-1]:
+                x1, x2 = dd_end - 1, dd_end
                 y, y1, y2 = equity[dd_start], equity[x1], equity[x2]
-                dd_end -= (1 - (y - y1) / (y2 - y1)) * (dd_end - index[x1])  # y = a x + b
+                dd_end -= (1 - (y - y1) / (y2 - y1)) * (dd_end - x1)  # y = a x + b
 
         if smooth_equity:
-            select = (trade_data[['Entry Price',
-                                  'Exit Price']].dropna(how='all').index |
-                      # Include beginning
-                      equity.index[:1] |
-                      # Include max dd end points. Otherwise, the MaxDD line looks amiss.
-                      pd.Index([dd_start, dd_end]))
-            equity = equity[select].reindex(equity.index)
+            select = (pd.Index(trades['ExitBar']) |
+                      # Include beginning and end
+                      equity.index[:1] | equity.index[-1:] |
+                      # Include peak equity and peak DD
+                      pd.Index([equity.idxmax(), argmax]) |
+                      # Include max dd end points. Otherwise the MaxDD line looks amiss.
+                      pd.Index([dd_start, int(dd_end), min(equity.size - 1, int(dd_end + 1))]))
+            select = select.unique().dropna()
+            equity = equity.iloc[select].reindex(equity.index)
             equity.interpolate(inplace=True)
+
+        equity.index = equity_data.index
 
         if relative_equity:
             equity /= equity.iloc[0]
@@ -287,12 +297,12 @@ return this.labels[index] || "";
                     color='blue', size=8)
 
         if not plot_drawdown:
-            drawdown = trade_data['Drawdown']
+            drawdown = equity_data['DrawdownPct']
             argmax = drawdown.idxmax()
             fig.scatter(argmax, equity[argmax],
                         legend_label='Max Drawdown (-{:.1f}%)'.format(100 * drawdown[argmax]),
                         color='red', size=8)
-        fig.line([dd_start, dd_end], equity[dd_start],
+        fig.line([index[dd_start], index[int(dd_end)]], equity.iloc[dd_start],
                  line_color='red', line_width=2,
                  legend_label='Max Dd Dur. ({})'.format(timedelta)
                  .replace(' 00:00:00', '')
@@ -303,7 +313,7 @@ return this.labels[index] || "";
     def _plot_drawdown_section():
         """Drawdown section"""
         fig = new_indicator_figure(y_axis_label="Drawdown")
-        drawdown = trade_data['Drawdown']
+        drawdown = equity_data['DrawdownPct']
         argmax = drawdown.idxmax()
         source.add(drawdown, 'drawdown')
         r = fig.line('index', 'drawdown', source=source, line_width=1.3)
@@ -319,20 +329,22 @@ return this.labels[index] || "";
         fig = new_indicator_figure(y_axis_label="Profit / Loss")
         fig.add_layout(Span(location=0, dimension='width', line_color='#666666',
                             line_dash='dashed', line_width=1))
-        position = trade_data['Exit Position'].dropna()
-        returns_long = returns.copy()
-        returns_short = returns.copy()
-        returns_long[position < 0] = np.nan
-        returns_short[position > 0] = np.nan
+        returns_long = np.where(trades['Size'] > 0, trades['ReturnPct'], np.nan)
+        returns_short = np.where(trades['Size'] < 0, trades['ReturnPct'], np.nan)
+        size = trades['Size'].abs()
+        size = np.interp(size, (size.min(), size.max()), (8, 20))
         trade_source.add(returns_long, 'returns_long')
         trade_source.add(returns_short, 'returns_short')
-        MARKER_SIZE = 13
+        trade_source.add(size, 'marker_size')
         r1 = fig.scatter('index', 'returns_long', source=trade_source, fill_color=cmap,
-                         marker='triangle', line_color='black', size=MARKER_SIZE)
+                         marker='triangle', line_color='black', size='marker_size')
         r2 = fig.scatter('index', 'returns_short', source=trade_source, fill_color=cmap,
-                         marker='inverted_triangle', line_color='black', size=MARKER_SIZE)
-        set_tooltips(fig, [("P/L", "@returns_long{+0.[000]%}")], vline=False, renderers=[r1])
-        set_tooltips(fig, [("P/L", "@returns_short{+0.[000]%}")], vline=False, renderers=[r2])
+                         marker='inverted_triangle', line_color='black', size='marker_size')
+        tooltips = [("Size", "@size{0,0}")]
+        set_tooltips(fig, tooltips + [("P/L", "@returns_long{+0.[000]%}")],
+                     vline=False, renderers=[r1])
+        set_tooltips(fig, tooltips + [("P/L", "@returns_short{+0.[000]%}")],
+                     vline=False, renderers=[r2])
         fig.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
         return fig
 
@@ -409,15 +421,11 @@ return this.labels[index] || "";
 
     def _plot_ohlc_trades():
         """Trade entry / exit markers on OHLC plot"""
-        exit_price = trade_data['Exit Price'].dropna()
-        entry_price = trade_data['Entry Price'].dropna().iloc[:exit_price.size]  # entry can be one more at the end  # noqa: E501
-        trade_source.add(np.column_stack((entry_price.index, exit_price.index)).tolist(),
-                         'position_lines_xs')
-        trade_source.add(np.column_stack((entry_price, exit_price)).tolist(),
-                         'position_lines_ys')
+        trade_source.add(trades[['EntryBar', 'ExitBar']].values.tolist(), 'position_lines_xs')
+        trade_source.add(trades[['EntryPrice', 'ExitPrice']].values.tolist(), 'position_lines_ys')
         fig_ohlc.multi_line(xs='position_lines_xs', ys='position_lines_ys',
                             source=trade_source, line_color=trades_cmap,
-                            legend_label='Trades ({})'.format(len(trade_data)),
+                            legend_label='Trades ({})'.format(len(trades)),
                             line_width=8, line_alpha=1, line_dash='dotted')
 
     def _plot_indicators():

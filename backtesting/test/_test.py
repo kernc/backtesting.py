@@ -252,7 +252,7 @@ class TestBacktest(TestCase):
                 'Equity Final [$]': 52624.29346696951,
                 'Equity Peak [$]': 76908.27001642012,
                 'Expectancy [%]': 8.774692825628644,
-                'Exposure [%]': 93.93453145057767,
+                'Exposure Time [%]': 93.93453145057767,
                 'Max. Drawdown Duration': pd.Timedelta('584 days 00:00:00'),
                 'Max. Drawdown [%]': -48.15069053929621,
                 'Max. Trade Duration': pd.Timedelta('183 days 00:00:00'),

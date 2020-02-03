@@ -7,13 +7,15 @@ module directly, e.g.
 """
 import multiprocessing as mp
 import os
+import sys
 import warnings
 from abc import abstractmethod, ABCMeta
 from concurrent.futures import ProcessPoolExecutor, as_completed
+from copy import copy
 from functools import partial
 from itertools import repeat, product, chain
 from numbers import Number
-from typing import Callable, Union, Sequence, Tuple, Type
+from typing import Callable, Union, List, Optional, Sequence, Tuple, Type
 
 import numpy as np
 import pandas as pd
@@ -28,15 +30,12 @@ except ImportError:
 from ._plotting import plot
 from ._util import _as_str, _Indicator, _Data, _data_period, try_
 
-
 __pdoc__ = {
     'Strategy.__init__': False,
-    'Orders.__init__': False,
+    'Order.__init__': False,
     'Position.__init__': False,
+    'Trade.__init__': False,
 }
-
-
-_MARKET_PRICE = 'market'
 
 
 class Strategy(metaclass=ABCMeta):
@@ -187,35 +186,35 @@ class Strategy(metaclass=ABCMeta):
             super().next()
         """
 
-    def buy(self, price=None, *, sl=None, tp=None):
+    def buy(self, *,
+            size: float = 1 - sys.float_info.epsilon,
+            limit: float = None,
+            stop: float = None,
+            sl: float = None,
+            tp: float = None):
         """
-        Let the strategy close any current position and
-        use _all available funds_ to
-        buy the asset for `price`,
-        optionally entering two other orders:
-        one at stop-loss price (`sl`; stop-limit order) and
-        one at take-profit price (`tp`; limit order).
+        Place a new short order. For explanation of parameters, see `Order` and its properties.
 
-        If `price` is not set, market price is assumed.
+        See also `Strategy.sell()`.
         """
-        self._broker.buy(price and float(price),
-                         sl and float(sl),
-                         tp and float(tp))
+        assert 0 < size < 1 or round(size) == size, \
+            "size must be a positive fraction of equity, or a positive whole number of units"
+        return self._broker.new_order(size, limit, stop, sl, tp)
 
-    def sell(self, price=None, *, sl=None, tp=None):
+    def sell(self, *,
+             size: float = 1 - sys.float_info.epsilon,
+             limit: float = None,
+             stop: float = None,
+             sl: float = None,
+             tp: float = None):
         """
-        Let the strategy close any current position and
-        use _all available funds_ to
-        short sell the asset for `price`,
-        optionally entering two other orders:
-        one at stop-loss price (`sl`; stop-limit order) and
-        one at take-profit price (`tp`; limit order).
+        Place a new short order. For explanation of parameters, see `Order` and its properties.
 
-        If `price` is not set, market price is assumed.
+        See also `Strategy.buy()`.
         """
-        self._broker.sell(price and float(price),
-                          sl and float(sl),
-                          tp and float(tp))
+        assert 0 < size < 1 or round(size) == size, \
+            "size must be a positive fraction of equity, or a positive whole number of units"
+        return self._broker.new_order(-size, limit, stop, sl, tp)
 
     @property
     def equity(self):
@@ -256,110 +255,40 @@ class Strategy(metaclass=ABCMeta):
         return self._broker.position
 
     @property
-    def orders(self) -> 'Orders':
-        """Instance of `backtesting.backtesting.Orders`."""
-        return self._broker.orders
+    def orders(self) -> '_Orders[Order]':
+        """List of orders (see `Order`) waiting for execution."""
+        return _Orders(self._broker.orders)
+
+    @property
+    def trades(self) -> 'Tuple[Trade]':
+        """List of active trades (see `Trade`)."""
+        return tuple(self._broker.trades)
+
+    @property
+    def closed_trades(self) -> 'Tuple[Trade]':
+        """List of settled trades (see `Trade`)."""
+        return tuple(self._broker.closed_trades)
 
 
-class Orders:
+class _Orders(tuple):
     """
-    Orders waiting for execution, available as
-    `backtesting.backtesting.Strategy.orders` within
-    `backtesting.backtesting.Strategy.next`.
-
-    Implied limit and stop-limit orders (taking profits and stopping loss)
-    are always present; set the limit price with
-    `backtesting.backtesting.Orders.set_sl` and
-    `backtesting.backtesting.Orders.set_tp`.
+    TODO: remove this class. Only for deprecation.
     """
-    def __init__(self, broker):
-        self._broker = broker
-        self._entry = self._sl = self._tp = self._close = self._is_long = None
-
-    def _update(self, entry, sl, tp, is_long=True):
-        self._entry = entry and float(entry) or _MARKET_PRICE
-        self._sl = sl and float(sl) or None
-        self._tp = tp and float(tp) or None
-        self._close = False
-        self._is_long = is_long
-
-    @property
-    def is_long(self):
-        """True if the waiting entry order is long."""
-        return self._is_long
-
-    @property
-    def is_short(self):
-        """True if the waiting entry order is short."""
-        return not self._is_long
-
-    @property
-    def entry(self):
-        """Price at which to enter the position if hit."""
-        return self._entry
-
-    @property
-    def sl(self):
-        """Stop-loss (stop-limit) price at which to exit the position if hit."""
-        return self._sl
-
-    @property
-    def tp(self):
-        """Take-profit (limit) price at which to exit the position if hit."""
-        return self._tp
-
-    def __is_price_ok(self, price, is_limit_order):
-        assert price is None or price > 0
-        if not price:
-            return
-        market_price = self._broker.last_close
-        # Entry (market/limit) or TP are limit orders, SL is stop order
-        if (is_limit_order and (self._is_long and price < market_price or
-                                not self._is_long and price > market_price) or
-            not is_limit_order and (self._is_long and price > market_price or
-                                    not self._is_long and price < market_price)):
-            raise ValueError("Setting the target price as sepcified would trigger "
-                             "the order immediately -- this is forbidden. "
-                             "Use `position.close()` to close the position, or similar.")
-
-    def set_entry(self, price):
-        """Set new entry price of the implied limit order)."""
-        if self._entry is None and price is not None:
-            raise RuntimeError("Can't reset order for position entry. "
-                               "The order has been already executed or no "
-                               "buy/sell order was put in place.")
-        self.__is_price_ok(price, True)
-        self._entry = price and float(price)
-
-    def set_sl(self, price):
-        """Set new stop-loss price (of the implied stop-limit order)."""
-        if self._entry is None and not self._broker._position:
-            raise RuntimeError("You don't currently hold a position to set "
-                               "stop-loss for.")
-        self.__is_price_ok(price, False)
-        self._sl = price and float(price)
-
-    def set_tp(self, price):
-        """Set new take-profit price (of the implied limit order)."""
-        if self._entry is None and not self._broker._position:
-            raise RuntimeError("You don't currently hold a position to set "
-                               "take-profit limit for.")
-        self.__is_price_ok(price, True)
-        self._tp = price and float(price)
-
     def cancel(self):
-        """Cancel all implied orders."""
-        self._entry = self._sl = self._tp = self._close = self._is_long = None
+        """Cancel all non-contingent (i.e. SL/TP) orders."""
+        for order in self:
+            if not order.is_contingent:
+                order.cancel()
 
-    def __bool__(self):
-        return bool(self._entry or self._sl or self._tp or self._close)
-
-    def __repr__(self):
-        return '<Orders: %.6f %.6f %.6f %d>' % (self._entry or np.nan,
-                                                self._sl or np.nan,
-                                                self._tp or np.nan,
-                                                self._close or 0)
-    __str__ = __repr__
+    def __getattr__(self, item):
+        # TODO: Warn on deprecations from the previous version. Remove in the next.
+        removed_attrs = ('entry', 'set_entry', 'is_long', 'is_short',
+                         'sl', 'tp', 'set_sl', 'set_tp')
+        if item in removed_attrs:
+            raise AttributeError('Strategy.orders.{} were removed in Backtesting 0.2.0. '
+                                 'Use `Order` API instead. See docs.'
+                                 .format('/.'.join(removed_attrs)))
+        raise AttributeError("'tuple' object has no attribute {!r}".format(item))
 
 
 class Position:
@@ -372,8 +301,8 @@ class Position:
         if self.position:
             ...  # we have a position, either long or short
     """
-    def __init__(self, broker):
-        self._broker = broker
+    def __init__(self, broker: '_Broker'):
+        self.__broker = broker
 
     def __bool__(self):
         return self.size != 0
@@ -381,37 +310,20 @@ class Position:
     @property
     def size(self):
         """Position size in units of asset. Negative if position is short."""
-        return self._broker._position
-
-    @property
-    def open_price(self):
-        """Price at which the position was opened."""
-        return self._broker._position_open_price
-
-    @property
-    def open_time(self):
-        """Data index value at which the position was opened."""
-        i = self._broker._position_open_i
-        return i if i is None else self._broker._data.index[i]
-
-    def _pl(self, price):
-        open, size = self.open_price, self.size
-        pl = (price - open) * size
-        pl -= open * self._broker._commission * abs(size)
-        return pl
+        return sum(trade.size for trade in self.__broker.trades)
 
     @property
     def pl(self):
-        """Profit (positive) or loss (negative) of current position."""
-        return self._pl(self._broker._data.Close[-1])
+        """Profit (positive) or loss (negative) of the current position in cash units."""
+        return sum(trade.pl for trade in self.__broker.trades)
 
     @property
     def pl_pct(self):
-        """
-        Profit (positive) or loss (negative) of current position,
-        in percent of position open price.
-        """
-        return self.pl / (self.open_price * abs(self.size) or 1)
+        """Profit (positive) or loss (negative) of the current position in percent."""
+        weights = np.abs([trade.size for trade in self.__broker.trades])
+        weights = weights / weights.sum()
+        pl_pcts = np.array([trade.pl_pct for trade in self.__broker.trades])
+        return (pl_pcts * weights).sum()
 
     @property
     def is_long(self):
@@ -423,29 +335,317 @@ class Position:
         """True if the position is short (position size is negative)."""
         return self.size < 0
 
-    def close(self):
-        """Close the position at current market price."""
-        self._broker.close()
+    def close(self, portion: float = 1.):
+        """
+        Close portion of position by closing `portion` of each active trade. See `Trade.close`.
+        """
+        for trade in self.__broker.trades:
+            trade.close(portion)
 
     def __repr__(self):
-        return '<Position: %d>' % self.size
+        return '<Position: {} ({} trades)>'.format(self.size, len(self.__broker.trades))
 
 
 class _OutOfMoneyError(Exception):
     pass
 
 
-class _Broker:
-    class _Log:
-        def __init__(self, length):
-            self.equity = np.tile(np.nan, length)
-            self.exit_entry = np.tile(np.nan, length)
-            self.exit_position = np.tile(np.nan, length)
-            self.entry_price = np.tile(np.nan, length)
-            self.exit_price = np.tile(np.nan, length)
-            self.pl = np.tile(np.nan, length)
+class Order:
+    """
+    Place new orders through `Strategy.buy()` and `Strategy.sell()`.
+    Query existing orders through `Strategy.orders`.
 
-    def __init__(self, *, data, cash, commission, margin, trade_on_close, length):
+    When an order is executed or [filled], it normally results in a `Trade`, except when an
+    existing opposite-facing trade can be sufficiently
+    reduced or closed in an [NFA compliant FIFO] manner.
+
+    If you wish to modify aspects of a placed but not yet filled order,
+    cancel it and place a new one instead.
+
+    All placed orders are [Good 'Til Canceled].
+
+    [filled]: https://www.investopedia.com/terms/f/fill.asp
+    [NFA compliant FIFO]: https://www.investopedia.com/terms/n/nfa-compliance-rule-2-43b.asp
+    [Good 'Til Canceled]: https://www.investopedia.com/terms/g/gtc.asp
+    """
+    def __init__(self, broker: '_Broker',
+                 size: float,
+                 limit_price: float = None,
+                 stop_price: float = None,
+                 sl_price: float = None,
+                 tp_price: float = None,
+                 parent_trade: 'Trade' = None):
+        self.__broker = broker
+        self.__size = size
+        self.__limit_price = limit_price
+        self.__stop_price = stop_price
+        self.__sl_price = sl_price
+        self.__tp_price = tp_price
+        self.__parent_trade = parent_trade
+
+    def _replace(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, '_{}__{}'.format(self.__class__.__qualname__, k), v)
+        return self
+
+    def __repr__(self):
+        return '<Order {}>'.format(', '.join('{}={}'.format(param, round(value, 5))
+                                             for param, value in (
+                                                 ('size', self.__size),
+                                                 ('limit', self.__limit_price),
+                                                 ('stop', self.__stop_price),
+                                                 ('sl', self.__sl_price),
+                                                 ('tp', self.__tp_price),
+                                                 ('contingent', self.is_contingent),
+                                             ) if value is not None))
+
+    def cancel(self):
+        """Cancel the order."""
+        self.__broker.orders.remove(self)
+        trade = self.__parent_trade
+        if trade:
+            if self is trade._sl_order:
+                trade._replace(sl_order=None)
+            elif self is trade._tp_order:
+                trade._replace(tp_order=None)
+            else:
+                assert False
+
+    # Fields getters
+
+    @property
+    def size(self):
+        """
+        Order size (negative for short orders).
+
+        If size is a value between 0 and 1, it is interpreted as a fraction of current
+        available liquidity (cash plus `Position.pl` minus used margin).
+        A value greater than or equal to 1 indicates an absolute number of units.
+        """
+        return self.__size
+
+    @property
+    def limit(self) -> float:
+        """
+        Order limit price for [limit orders], or None for [market orders],
+        which are filled at next available price.
+
+        [limit orders]: https://www.investopedia.com/terms/l/limitorder.asp
+        [market orders]: https://www.investopedia.com/terms/m/marketorder.asp
+        """
+        return self.__limit_price
+
+    @property
+    def stop(self):
+        """
+        Order stop price for [stop-limit/stop-market][_] order,
+        otherwise None if no stop was set, or the stop price has already been hit.
+
+        [_]: https://www.investopedia.com/terms/s/stoporder.asp
+        """
+        return self.__stop_price
+
+    @property
+    def sl(self):
+        """
+        A stop-loss price at which, if set, a new contingent stop-market order
+        will be placed upon the `Trade` following this order's execution.
+        See also `Trade.sl`.
+        """
+        return self.__sl_price
+
+    @property
+    def tp(self):
+        """
+        A take-profit price at which, if set, a new contingent limit order
+        will be placed upon the `Trade` following this order's execution.
+        See also `Trade.tp`.
+        """
+        return self.__tp_price
+
+    @property
+    def parent_trade(self):
+        return self.__parent_trade
+
+    __pdoc__['Order.parent_trade'] = False
+
+    # Extra properties
+
+    @property
+    def is_long(self):
+        """True if the order is long (order size is positive)."""
+        return self.__size > 0
+
+    @property
+    def is_short(self):
+        """True if the order is short (order size is negative)."""
+        return self.__size < 0
+
+    @property
+    def is_contingent(self):
+        """
+        True for [contingent] orders, i.e. [OCO] stop-loss and take-profit bracket orders
+        placed upon an active trade. Remaining contingent orders are canceled when
+        their parent `Trade` is closed.
+
+        You can modify contingent orders through `Trade.sl` and `Trade.tp`.
+
+        [contingent]: https://www.investopedia.com/terms/c/contingentorder.asp
+        [OCO]: https://www.investopedia.com/terms/o/oco.asp
+        """
+        return bool(self.__parent_trade)
+
+
+class Trade:
+    """
+    When an `Order` is filled, it results in an active `Trade`.
+    Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
+    """
+    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar):
+        self.__broker = broker
+        self.__size = size
+        self.__entry_price = entry_price
+        self.__entry_bar = entry_bar
+        self.__exit_price = None
+        self.__exit_bar = None
+        self.__sl_order = None  # type: Optional[Order]
+        self.__tp_order = None  # type: Optional[Order]
+
+    def __repr__(self):
+        return '<Trade size={} time={}-{} price={}-{} pl={:.0f}>'.format(
+            self.__size, self.__entry_bar, self.__exit_bar or '',
+            self.__entry_price, self.__exit_price or '', self.pl)
+
+    def _replace(self, **kwargs):
+        for k, v in kwargs.items():
+            setattr(self, '_{}__{}'.format(self.__class__.__qualname__, k), v)
+        return self
+
+    def _copy(self, **kwargs):
+        return copy(self)._replace(**kwargs)
+
+    def close(self, portion: float = 1.):
+        """Place new `Order` to close `portion` of the trade at next market price."""
+        assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
+        # TODO: check this insert
+        self.__broker.orders.insert(0, Order(self.__broker, -round(self.size * portion),
+                                             parent_trade=self))
+
+    # Fields getters
+
+    @property
+    def size(self):
+        """Trade size (volume; negative for short trades)."""
+        return self.__size
+
+    @property
+    def entry_price(self) -> float:
+        """Trade entry price."""
+        return self.__entry_price
+
+    @property
+    def exit_price(self) -> float:
+        """Trade exit price (or None if the trade is still active)."""
+        return self.__exit_price
+
+    @property
+    def entry_bar(self) -> int:
+        """Candlestick bar index of when the trade was entered."""
+        return self.__entry_bar
+
+    @property
+    def exit_bar(self) -> int:
+        """
+        Candlestick bar index of when the trade was exited
+        (or None if the trade is still active).
+        """
+        return self.__exit_bar
+
+    @property
+    def _sl_order(self):
+        return self.__sl_order
+
+    @property
+    def _tp_order(self):
+        return self.__tp_order
+
+    # Extra properties
+
+    @property
+    def is_long(self):
+        """True if the trade is long (trade size is positive)."""
+        return self.size > 0
+
+    @property
+    def is_short(self):
+        """True if the trade is short (trade size is negative)."""
+        return not self.is_long
+
+    @property
+    def pl(self):
+        """Trade profit (positive) or loss (negative) in cash units."""
+        price = self.__exit_price or self.__broker.last_price
+        return self.__size * (price - self.__entry_price)
+
+    @property
+    def pl_pct(self):
+        """Trade profit (positive) or loss (negative) in percent."""
+        price = self.__exit_price or self.__broker.last_price
+        return np.sign(self.__size) * (price / self.__entry_price - 1)
+
+    @property
+    def value(self):
+        """Trade total value in cash (volume × price)."""
+        price = self.__exit_price or self.__broker.last_price
+        return abs(self.__size) * price
+
+    # SL/TP management API
+
+    @property
+    def sl(self):
+        """
+        Stop-loss price at which to close the trade.
+
+        This variable is writable. By assigning it a new price value,
+        you create or modify the existing SL order.
+        By assigning it `None`, you cancel it.
+        """
+        return self.__sl_order and self.__sl_order.stop
+
+    @property
+    def tp(self):
+        """
+        Take-profit price at which to close the trade.
+
+        This property is writable. By assigning it a new price value,
+        you create or modify the existing TP order.
+        By assigning it `None`, you cancel it.
+        """
+        return self.__tp_order and self.__tp_order.limit
+
+    @sl.setter
+    def sl(self, price):
+        self.__set_contingent('sl', price)
+
+    @tp.setter
+    def tp(self, price):
+        self.__set_contingent('tp', price)
+
+    def __set_contingent(self, type, price):
+        assert type in ('sl', 'tp')
+        assert price is None or 0 < price < np.inf
+        attr = '_{}__{}_order'.format(self.__class__.__qualname__, type)
+        order = getattr(self, attr)  # type: Order
+        if order:
+            order.cancel()
+        if price:
+            kwargs = dict(stop=price) if type == 'sl' else dict(limit=price)
+            order = self.__broker.new_order(-self.size, trade=self, **kwargs)
+            setattr(self, attr, order)
+
+
+class _Broker:
+    def __init__(self, *, data, cash, commission, margin, trade_on_close, index):
         assert 0 < cash, "cash shosuld be >0, is {}".format(cash)
         assert 0 <= commission < .1, "commission should be between 0-10%, is {}".format(commission)
         assert 0 < margin <= 1, "margin should be between 0 and 1, is {}".format(margin)
@@ -454,127 +654,250 @@ class _Broker:
         self._commission = commission
         self._leverage = 1 / margin
         self._trade_on_close = trade_on_close
-        self._position = 0
-        self._position_open_price = 0
-        self._position_open_i = None
-        self.log = self._Log(length)
+
+        self._equity = np.tile(np.nan, len(index))
+        self.orders = []  # type: List[Order]
+        self.trades = []  # type: List[Trade]
         self.position = Position(self)
-        self.orders = Orders(self)
+        self.closed_trades = []  # type: List[Trade]
 
     def __repr__(self):
-        return '<Broker: {:.0f}{:+.1f}>'.format(self._cash, self.position.pl)
+        return '<Broker: {:.0f}{:+.1f} ({} trades)>'.format(
+            self._cash, self.position.pl, len(self.trades))
 
-    def buy(self, price=None, sl=None, tp=None):
-        assert (sl or -np.inf) <= (price or self.last_close) <= (tp or np.inf), "For long orders should be: SL ({}) < BUY PRICE ({}) < TP ({})".format(sl, price or self.last_close, tp)  # noqa: E501
-        self.orders._update(price, sl, tp)
+    def new_order(self,
+                  size: float = None,
+                  limit: float = None,
+                  stop: float = None,
+                  sl: float = None,
+                  tp: float = None,
+                  *,
+                  trade: Trade = None):
+        """
+        Argument size indicates whether the order is long or short
+        """
+        size = float(size)
+        stop = stop and float(stop)
+        limit = limit and float(limit)
+        sl = sl and float(sl)
+        tp = tp and float(tp)
 
-    def sell(self, price=None, sl=None, tp=None):
-        assert (tp or -np.inf) <= (price or self.last_close) <= (sl or np.inf), "For short orders should be: TP ({}) < BUY PRICE ({}) < SL ({})".format(tp, price or self.last_close, sl)  # noqa: E501
-        self.orders._update(price, sl, tp, is_long=False)
+        is_long = size > 0
 
-    def close(self):
-        self.orders.cancel()
-        self.orders._close = True
+        if is_long:
+            # TODO: check stop as well
+            assert (sl or -np.inf) <= (limit or self.last_price) <= (tp or np.inf), \
+                "Long orders require: SL ({}) < LIMIT ({}) < TP ({})".format(
+                    sl, limit or self.last_price, tp)
+        else:
+            assert (tp or -np.inf) <= (limit or self.last_price) <= (sl or np.inf), \
+                "Short orders require: TP ({}) < LIMIT ({}) < SL ({})".format(
+                    tp, limit or self.last_price, sl)
 
-    def _get_market_price(self, price):
-        i = self._i
-        if price in (_MARKET_PRICE, None):
-            price = self._data.Open[-1]
-            if self._trade_on_close:
-                price = self._data.Close[-2]
-                i -= 1
-        return i, price
+        order = Order(self, size, limit, stop, sl, tp, trade)
+        # Put the new order in the order queue,
+        # inserting SL/TP/trade-closing orders in-front
+        if trade:
+            self.orders.insert(0, order)
+        else:
+            self.orders.append(order)
+        return order
 
     @property
-    def last_close(self):
+    def last_price(self):
         """Return price at the last (current) close.
         Used e.g. in `Orders._is_price_ok()` to see if the set price is reasonable.
         """
         return self._data.Close[-1]
 
-    def _open_position(self, price, is_long):
-        assert not self._position
-        self.orders.set_entry(None)
-
-        i, price = self._get_market_price(price)
-
-        position = float(self._cash * self._leverage / (price * (1 + self._commission)))
-        self._position = position if is_long else -position
-        self._position_open_price = price
-        self._position_open_i = i
-
-        self.log.entry_price[i] = price
-
-    def _close_position(self, price=None):
-        if not self._position:
-            return
-
-        i, price = self._get_market_price(price)
-        pl = self.position._pl(price)
-
-        self.log.pl[i] = pl
-        self.log.exit_entry[i] = self._position_open_i
-        self.log.exit_price[i] = price
-        self.log.exit_position[i] = self._position
-
-        self._cash += pl
-        self._position = 0
-        self._position_open_price = 0
-        self._position_open_i = None
-
     @property
     def equity(self):
-        return self._cash + self.position.pl
+        return self._cash + sum(trade.pl for trade in self.trades)
+
+    @property
+    def margin_available(self):
+        # From https://github.com/QuantConnect/Lean/pull/3768
+        margin_used = sum(trade.value / self._leverage for trade in self.trades)
+        return max(0, self.equity - margin_used)
 
     def next(self):
-        data = self._data
-        i = self._i = len(data) - 1
-
-        if self.orders:
-            orders = self.orders
-            is_long = orders._is_long
-            entry, sl, tp = orders._entry, orders._sl, orders._tp
-            open, high, low = data.Open[-1], data.High[-1], data.Low[-1]
-
-            if entry or orders._close:
-                self._close_position()
-                orders._close = False
-
-            # First make the entry order, if hit
-            if entry:
-                if entry is _MARKET_PRICE or high > orders._entry > low:
-                    self._open_position(entry, is_long)
-
-            # Check if stop-loss threshold was hit
-            if sl and self._position:
-                price = (sl if low <= sl <= high else              # hit
-                         open if (is_long and open < sl or         # gapped hit
-                                  not is_long and open > sl) else
-                         None)                                     # not hit
-                if price is not None:
-                    self._close_position(price)
-                    self.orders.cancel()
-
-            # Check if take-profit threshold was hit
-            if tp and self._position:
-                price = (tp if low < tp < high else
-                         open if (is_long and open > tp or
-                                  not is_long and open > sl) else
-                         None)
-                if price is not None:
-                    self._close_position(price)
-                    self.orders.cancel()
+        i = self._i = len(self._data) - 1
+        self._process_orders()
 
         # Log account equity for the equity curve
         equity = self.equity
-        self.log.equity[i] = equity
+        self._equity[i] = equity
 
-        # Hovever, if negative, set all to 0 and stop the simulation
-        if equity < 0:
-            self._close_position()
+        # If equity is negative, set all to 0 and stop the simulation
+        if equity <= 0:
+            assert self.margin_available <= 0
+            for trade in self.trades:
+                self._close_trade(trade, self._data.Close[-1], i)
             self._cash = 0
-            self.log.equity[i:] = 0
+            self._equity[i:] = 0
             raise _OutOfMoneyError
+
+    def _process_orders(self):
+        data = self._data
+        open, high, low = data.Open[-1], data.High[-1], data.Low[-1]
+        prev_close = data.Close[-2]
+
+        # Process orders
+        for order in list(self.orders):  # type: Order
+
+            # Related SL/TP order was already removed
+            if order not in self.orders:
+                continue
+
+            # Check if stop condition was hit
+            stop_price = order.stop
+            if stop_price:
+                is_stop_hit = ((high > stop_price) if order.is_long else (low < stop_price))
+                if not is_stop_hit:
+                    continue
+
+                # > When the stop price is reached, a stop order becomes a market/limit order.
+                # https://www.sec.gov/fast-answers/answersstopordhtm.html
+                order._replace(stop_price=None)
+
+            # Determine purchase price.
+            # Check if limit order can be filled.
+            if order.limit:
+                is_limit_hit = low < order.limit if order.is_long else high > order.limit
+                # When stop and limit are hit within the same bar, we pessimistically
+                # assume limit was hit before the stop (i.e. "before it counts")
+                is_limit_hit_before_stop = (is_limit_hit and
+                                            (order.limit < (stop_price or -np.inf)
+                                             if order.is_long
+                                             else order.limit > (stop_price or np.inf)))
+                if not is_limit_hit or is_limit_hit_before_stop:
+                    continue
+
+                # stop_price, if set, was hit within this bar
+                price = (min(open, order.limit, stop_price or np.inf)
+                         if order.is_long else
+                         max(open, order.limit, stop_price or -np.inf))
+            else:
+                # Market-if-touched / market order
+                price = prev_close if self._trade_on_close else open
+                price = (max(price, stop_price or -np.inf)
+                         if order.is_long else
+                         min(price, stop_price or np.inf))
+
+            # Determine entry/exit bar index
+            is_market_order = not order.limit and not stop_price
+            time_index = (self._i - 1) if is_market_order and self._trade_on_close else self._i
+
+            # If order is a SL/TP order, it should close an existing trade it was contingent upon
+            if order.parent_trade:
+                trade = order.parent_trade
+                # If this trade isn't already closed (e.g. on multiple `trade.close(.5)` calls)
+                if trade in self.trades:
+                    self._reduce_trade(trade, price, order.size, time_index)
+                    assert order.size != -trade.size or trade not in self.trades
+                if order in (trade._sl_order,
+                             trade._tp_order):
+                    assert order.size == -trade.size
+                    assert order not in self.orders  # Removed when trade was closed
+                else:
+                    # It's a trade.close() order, now done
+                    assert abs(trade.size) >= abs(order.size) >= 1
+                    self.orders.remove(order)
+                continue
+
+            # Else this is a stand-alone trade
+
+            # Adjust price to include commission (or bid-ask spread).
+            # In long positions, the adjusted price is a fraction higher, and vice versa.
+            adjusted_price = price * (1 + (np.sign(order.size) * self._commission))
+
+            # If order size was specified proportionally,
+            # precompute true size in units, accounting for margin and spread/commissions
+            size = order.size
+            if -1 < size < 1:
+                size = np.sign(size) * int((self.margin_available * self._leverage * abs(size))
+                                           // adjusted_price)
+                # Not enough cash/margin even for a single unit
+                if not size:
+                    self.orders.remove(order)
+                    continue
+            assert size == round(size)
+            need_size = int(size)
+
+            # Fill position by FIFO closing/reducing existing opposite-facing trades.
+            # Existing trades are closed at unadjusted price, because the adjustment
+            # was already made when buying.
+            for trade in list(self.trades):
+                if trade.is_long == order.is_long:
+                    continue
+                assert np.sign(trade.size) + np.sign(order.size) == 0
+
+                # Order size greater than this opposite-directed existing trade,
+                # so it will be closed completely
+                if abs(need_size) >= abs(trade.size):
+                    self._close_trade(trade, price, time_index)
+                    need_size += trade.size
+                else:
+                    # The existing trade is larger than the new order,
+                    # so it will only be closed partially
+                    self._reduce_trade(trade, price, need_size, time_index)
+                    need_size = 0
+                    break
+
+            # If we don't have enough liquidity to cover for the order, cancel it
+            if abs(need_size) * adjusted_price > self.margin_available * self._leverage:
+                self.orders.remove(order)
+                continue
+
+            # Open a new trade
+            if need_size:
+                self._open_trade(adjusted_price, need_size, order.sl, order.tp, time_index)
+
+            # Order processed
+            self.orders.remove(order)
+
+    def _reduce_trade(self, trade: Trade, price: float, size: float, time_index: int):
+        assert np.sign(trade.size) != np.sign(size)
+        assert abs(trade.size) >= abs(size)
+
+        size_left = trade.size + size
+        if not size_left:
+            close_trade = trade
+        else:
+            # Reduce existing trade ...
+            trade._replace(size=size_left)
+            if trade._sl_order:
+                trade._sl_order._replace(size=-trade.size)
+            if trade._tp_order:
+                trade._tp_order._replace(size=-trade.size)
+
+            # ... by closing a reduced copy of it
+            close_trade = trade._copy(size=-size, sl_order=None, tp_order=None)
+            self.trades.append(close_trade)
+
+        self._close_trade(close_trade, price, time_index)
+
+    def _close_trade(self, trade: Trade, price: float, time_index: int):
+        self.trades.remove(trade)
+        if trade._sl_order:
+            self.orders.remove(trade._sl_order)
+        if trade._tp_order:
+            self.orders.remove(trade._tp_order)
+
+        self.closed_trades.append(trade._replace(exit_price=price, exit_bar=time_index))
+        self._cash += trade.pl
+
+    def _open_trade(self, price: float, size: int, sl: float, tp: float, time_index: int):
+        trade = Trade(self, size, price, time_index)
+        self.trades.append(trade)
+        # Create SL/TP (bracket) orders.
+        # Make sure SL order is created first so it gets adversarially processed before TP order
+        # in case of an ambiguous tie (both hit within a single bar).
+        # Note, sl/tp orders are inserted at the front of the list, thus order reversed.
+        if tp:
+            trade.tp = tp
+        if sl:
+            trade.sl = sl
 
 
 class Backtest:
@@ -674,7 +997,7 @@ class Backtest:
         self._data = data   # type: pd.DataFrame
         self._broker = partial(
             _Broker, cash=cash, commission=commission, margin=margin,
-            trade_on_close=trade_on_close, length=len(data)
+            trade_on_close=trade_on_close, index=data.index
         )
         self._strategy = strategy
         self._results = None
@@ -896,38 +1219,52 @@ class Backtest:
 
     def _compute_stats(self, broker: _Broker, strategy: Strategy) -> pd.Series:
         data = self._data
+        index = data.index
 
-        df = pd.DataFrame()
-        df['Equity'] = pd.Series(broker.log.equity).bfill().fillna(broker._cash)
-        equity = df.Equity.values
-        df['Exit Entry'] = broker.log.exit_entry
-        exits = df['Exit Entry']
-        df['Exit Position'] = broker.log.exit_position
-        df['Entry Price'] = broker.log.entry_price
-        df['Exit Price'] = broker.log.exit_price
-        df['P/L'] = broker.log.pl
-        pl = df['P/L']
-        df['Returns'] = returns = pl.dropna() / equity[exits.dropna().values.astype(int)]
-        df['Drawdown'] = dd = 1 - equity / np.maximum.accumulate(equity)
+        equity = pd.Series(broker._equity).bfill().fillna(broker._cash).values
+        dd = 1 - equity / np.maximum.accumulate(equity)
         dd_dur, dd_peaks = self._compute_drawdown_duration_peaks(pd.Series(dd, index=data.index))
-        df['Drawdown Duration'] = dd_dur.values
-        dd_dur = df['Drawdown Duration']
 
-        df.index = data.index
+        equity_df = pd.DataFrame({
+            'Equity': equity,
+            'DrawdownPct': dd,
+            'DrawdownDuration': dd_dur},
+            index=index)
 
-        def _round_timedelta(value, _period=_data_period(df)):
+        trades = broker.closed_trades
+        trades_df = pd.DataFrame({
+            'Size': [t.size for t in trades],
+            'EntryBar': [t.entry_bar for t in trades],
+            'ExitBar': [t.exit_bar for t in trades],
+            'EntryPrice': [t.entry_price for t in trades],
+            'ExitPrice': [t.exit_price for t in trades],
+            'PnL': [t.pl for t in trades],
+            'ReturnPct': [t.pl_pct for t in trades],
+        })
+        trades_df['EntryTime'] = trades_df['EntryBar'].apply(index.__getitem__)
+        trades_df['ExitTime'] = trades_df['ExitBar'].apply(index.__getitem__)
+        trades_df['Duration'] = trades_df['ExitTime'] - trades_df['EntryTime']
+
+        pl = trades_df['PnL']
+        returns = trades_df['ReturnPct']
+        durations = trades_df['Duration']
+
+        def _round_timedelta(value, _period=_data_period(equity_df)):
             if not isinstance(value, pd.Timedelta):
                 return value
             resolution = getattr(_period, 'resolution_string', None) or _period.resolution
             return value.ceil(resolution)
 
         s = pd.Series(dtype=object)
-        s.loc['Start'] = df.index[0]
-        s.loc['End'] = df.index[-1]
+        s.loc['Start'] = index[0]
+        s.loc['End'] = index[-1]
         s.loc['Duration'] = s.End - s.Start
-        exits = df['Exit Entry']  # After reindexed
-        durations = (exits.dropna().index - df.index[exits.dropna().values.astype(int)]).to_series()
-        s.loc['Exposure [%]'] = np.nan_to_num(durations.sum() / (s.loc['Duration'] or np.nan) * 100)
+
+        have_position = np.repeat(0, len(index))
+        for t in trades:
+            have_position[t.entry_bar:t.exit_bar + 1] = 1
+
+        s.loc['Exposure Time [%]'] = have_position.mean() * 100  # In "n bars" time, not index time
         s.loc['Equity Final [$]'] = equity[-1]
         s.loc['Equity Peak [$]'] = equity.max()
         s.loc['Return [%]'] = (equity[-1] - equity[0]) / equity[0] * 100
@@ -937,7 +1274,7 @@ class Backtest:
         s.loc['Avg. Drawdown [%]'] = -dd_peaks.mean() * 100
         s.loc['Max. Drawdown Duration'] = _round_timedelta(dd_dur.max())
         s.loc['Avg. Drawdown Duration'] = _round_timedelta(dd_dur.mean())
-        s.loc['# Trades'] = n_trades = pl.count()
+        s.loc['# Trades'] = n_trades = len(trades)
         s.loc['Win Rate [%]'] = win_rate = np.nan if not n_trades else (pl > 0).sum() / n_trades * 100  # noqa: E501
         s.loc['Best Trade [%]'] = returns.max() * 100
         s.loc['Worst Trade [%]'] = returns.min() * 100
@@ -948,15 +1285,23 @@ class Backtest:
         s.loc['Profit Factor'] = returns[returns > 0].sum() / (abs(returns[returns < 0].sum()) or np.nan)  # noqa: E501
         s.loc['Expectancy [%]'] = ((returns[returns > 0].mean() * win_rate -
                                     returns[returns < 0].mean() * (100 - win_rate)))
-        pl = pl.dropna()
-        s.loc['SQN'] = np.sqrt(n_trades) * pl.mean() / pl.std()
+        s.loc['SQN'] = np.sqrt(n_trades) * pl.mean() / (pl.std() or np.nan)
         s.loc['Sharpe Ratio'] = mean_return / (returns.std() or np.nan)
         s.loc['Sortino Ratio'] = mean_return / (returns[returns < 0].std() or np.nan)
         s.loc['Calmar Ratio'] = mean_return / ((-max_dd / 100) or np.nan)
 
         s.loc['_strategy'] = strategy
-        s._trade_data = df  # Private API
+        s.loc['_equity_curve'] = equity_df
+        s.loc['_trades'] = trades_df
+
+        s = Backtest._Stats(s)
         return s
+
+    class _Stats(pd.Series):
+        def __repr__(self):
+            # Prevent expansion due to _equity and _trades dfs
+            with pd.option_context('max_colwidth', 20):
+                return super().__repr__()
 
     def plot(self, *, results: pd.Series = None, filename=None, plot_width=None,
              plot_equity=True, plot_pl=True,

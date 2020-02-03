@@ -39,6 +39,6 @@ try:
 except ImportError:
     pass  # Package not installed
 
-from .backtesting import Backtest, Strategy, Orders, Position   # noqa: F401
+from .backtesting import Backtest, Strategy  # noqa: F401
 from . import lib  # noqa: F401
 from ._plotting import set_bokeh_output  # noqa: F401

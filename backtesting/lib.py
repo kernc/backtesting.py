@@ -352,12 +352,13 @@ class TrailingStrategy(Strategy):
 
     def next(self):
         super().next()
-
-        if self.__n_atr and self.position:
-            if self.position.is_long:
-                self.orders.set_sl(self.data.Close[-1] - self.__atr[-1] * self.__n_atr)
+        for trade in self.trades:
+            if trade.is_long:
+                trade.sl = max(trade.sl or -np.inf,
+                               self.data.Close[-1] - self.__atr[-1] * self.__n_atr)
             else:
-                self.orders.set_sl(self.data.Close[-1] + self.__atr[-1] * self.__n_atr)
+                trade.sl = min(trade.sl or np.inf,
+                               self.data.Close[-1] + self.__atr[-1] * self.__n_atr)
 
 
 # NOTE: Don't put anything below this __all__ list
