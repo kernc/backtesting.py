@@ -228,8 +228,8 @@ class TestBacktest(TestCase):
             pd.Series({
                 # NOTE: These values are also used on the website!
                 '# Trades': 65,
-                'Avg. Drawdown Duration': pd.Timedelta('33 days 00:00:00'),
-                'Avg. Drawdown [%]': -5.494714447812327,
+                'Avg. Drawdown Duration': pd.Timedelta('41 days 00:00:00'),
+                'Avg. Drawdown [%]': -6.087158560194047,
                 'Avg. Trade Duration': pd.Timedelta('46 days 00:00:00'),
                 'Avg. Trade [%]': 3.0404430275631444,
                 'Best Trade [%]': 54.05363186670138,
@@ -241,7 +241,7 @@ class TestBacktest(TestCase):
                 'Equity Peak [$]': 76908.27001642012,
                 'Expectancy [%]': 8.774692825628644,
                 'Exposure [%]': 93.93453145057767,
-                'Max. Drawdown Duration': pd.Timedelta('477 days 00:00:00'),
+                'Max. Drawdown Duration': pd.Timedelta('584 days 00:00:00'),
                 'Max. Drawdown [%]': -48.15069053929621,
                 'Max. Trade Duration': pd.Timedelta('183 days 00:00:00'),
                 'Return [%]': 426.2429346696951,

@@ -866,6 +866,10 @@ class Backtest:
                         durations[j - 1] = index[j] - index[i]
                         peaks[j - 1] = dd[i:j].max()
                     i = j
+            j = len(dd) - 1
+            if dd[j - 1] != 0:
+                durations[j] = index[j] - index[i]
+                peaks[j] = dd[i:j].max()
             return pd.Series(durations), pd.Series(peaks)
 
         df = pd.DataFrame()
