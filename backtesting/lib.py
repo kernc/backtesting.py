@@ -209,6 +209,7 @@ def resample_apply(rule: str,
             'or a `Strategy.data.*` array'
         series = series.to_series()
 
+    series = series.copy()  # XXX: pandas 1.0.1 bug https://github.com/pandas-dev/pandas/issues/31710
     resampled = series.resample(rule, label='right').agg(agg).dropna()
     resampled.name = _as_str(series) + '[' + rule + ']'
 

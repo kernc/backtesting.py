@@ -896,7 +896,7 @@ class Backtest:
             resolution = getattr(_period, 'resolution_string', None) or _period.resolution
             return value.ceil(resolution)
 
-        s = pd.Series()
+        s = pd.Series(dtype=object)
         s.loc['Start'] = df.index[0]
         s.loc['End'] = df.index[-1]
         s.loc['Duration'] = s.End - s.Start

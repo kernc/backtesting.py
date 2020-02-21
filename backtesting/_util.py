@@ -33,10 +33,7 @@ def _as_list(value):
 
 def _data_period(df):
     """Return data index period as pd.Timedelta"""
-    if df.index.is_all_dates:
-        values = df.index[:100].to_series(keep_tz=True)
-    else:
-        values = df.index[:100].to_series()
+    values = df.index[-100:].to_series()
     return values.diff().median()
 
 
