@@ -402,7 +402,7 @@ return this.labels[index] || "";
                          'position_lines_ys')
         fig_ohlc.multi_line(xs='position_lines_xs', ys='position_lines_ys',
                             source=trade_source, line_color=trades_cmap,
-                            legend_label='Trades',
+                            legend_label='Trades ({})'.format(len(trade_data)),
                             line_width=8, line_alpha=1, line_dash='dotted')
 
     def _plot_indicators():
