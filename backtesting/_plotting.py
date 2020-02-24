@@ -49,14 +49,12 @@ with open(os.path.join(os.path.dirname(__file__), 'autoscale_cb.js'),
 
 def _bokeh_reset(filename=None):
     curstate().reset()
-    # Test if we are in Jupyter notebook
-    if IS_JUPYTER_NOTEBOOK:
-        curstate().output_notebook()
-    elif filename:
+    if filename:
         if not filename.endswith('.html'):
             filename += '.html'
-
         output_file(filename, title=filename)
+    elif IS_JUPYTER_NOTEBOOK:
+        curstate().output_notebook()
 
 
 def colorgen():
