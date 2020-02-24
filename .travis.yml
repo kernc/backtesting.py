@@ -15,7 +15,7 @@ matrix:
     - python: '3.5'
     - python: '3.7'
 
-    - python: '3.6'
+    - python: '3.8'
       name: 'Lint, Test w/ Coverage'
       before_script:
         - pip install flake8 coverage
@@ -25,7 +25,7 @@ matrix:
       after_success:
         - bash <(curl -s https://codecov.io/bash)
 
-    - python: '3.6'
+    - python: '3.8'
       name: 'Docs'
       stage: deploy
       install:
