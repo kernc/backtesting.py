@@ -41,3 +41,4 @@ except ImportError:
 
 from .backtesting import Backtest, Strategy, Orders, Position   # noqa: F401
 from . import lib  # noqa: F401
+from ._plotting import set_bokeh_output  # noqa: F401

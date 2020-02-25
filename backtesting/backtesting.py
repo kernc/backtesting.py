@@ -7,8 +7,6 @@ module directly, e.g.
 """
 import multiprocessing as mp
 import os
-import re
-import sys
 import warnings
 from abc import abstractmethod, ABCMeta
 from collections.abc import Sequence
@@ -999,16 +997,11 @@ class Backtest:
                 raise RuntimeError('First issue `backtest.run()` to obtain results.')
             results = self._results
 
-        def _windos_safe_filename(filename):
-            if sys.platform.startswith('win'):
-                return re.sub(r'[^a-zA-Z0-9,_-]', '_', filename.replace('=', '-'))
-            return filename
-
         plot(
             results=results,
             df=self._data,
             indicators=results._strategy._indicators,
-            filename=filename or _windos_safe_filename(str(results._strategy)),
+            filename=filename,
             plot_width=plot_width,
             plot_equity=plot_equity,
             plot_pl=plot_pl,

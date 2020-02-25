@@ -1,4 +1,6 @@
 import os
+import re
+import sys
 import warnings
 from itertools import cycle, combinations
 from functools import partial
@@ -31,6 +33,11 @@ from bokeh.transform import factor_cmap
 
 from backtesting._util import _data_period, _as_list
 
+
+with open(os.path.join(os.path.dirname(__file__), 'autoscale_cb.js'),
+          encoding='utf-8') as _f:
+    _AUTOSCALE_JS_CALLBACK = _f.read()
+
 IS_JUPYTER_NOTEBOOK = 'JPY_PARENT_PID' in os.environ
 
 if IS_JUPYTER_NOTEBOOK:
@@ -38,13 +45,24 @@ if IS_JUPYTER_NOTEBOOK:
                   'Setting Bokeh output to notebook. '
                   'This may not work in Jupyter clients without JavaScript '
                   'support (e.g. PyCharm, Spyder IDE). '
-                  'Reset with `bokeh.io.reset_output()`.')
+                  'Reset with `backtesting.set_bokeh_output(notebook=False)`.')
     output_notebook()
 
 
-with open(os.path.join(os.path.dirname(__file__), 'autoscale_cb.js'),
-          encoding='utf-8') as _f:
-    _AUTOSCALE_JS_CALLBACK = _f.read()
+def set_bokeh_output(notebook=False):
+    """
+    Set Bokeh to output either to a file or Jupyter notebook.
+    By default, Bokeh outputs to notebook if running from within
+    notebook was detected.
+    """
+    global IS_JUPYTER_NOTEBOOK
+    IS_JUPYTER_NOTEBOOK = notebook
+
+
+def _windos_safe_filename(filename):
+    if sys.platform.startswith('win'):
+        return re.sub(r'[^a-zA-Z0-9,_-]', '_', filename.replace('=', '-'))
+    return filename
 
 
 def _bokeh_reset(filename=None):
@@ -75,10 +93,11 @@ def plot(*, results, df, indicators, filename='', plot_width=None,
     """
     Like much of GUI code everywhere, this is a mess.
     """
-
     # We need to reset global Bokeh state, otherwise subsequent runs of
     # plot() contain some previous run's cruft data (was noticed when
     # TestPlot.test_file_size() test was failing).
+    if not filename and not IS_JUPYTER_NOTEBOOK:
+        filename = _windos_safe_filename(str(results._strategy))
     _bokeh_reset(filename)
 
     COLORS = [BEAR_COLOR, BULL_COLOR]
@@ -570,9 +589,7 @@ def plot_heatmaps(heatmap: pd.Series, agg: str, ncols: int,
         raise ValueError('heatmap must be heatmap Series as returned by '
                          '`Backtest.optimize(..., return_heatmap=True)`')
 
-    _bokeh_reset()
-    if filename:
-        output_file(filename)
+    _bokeh_reset(filename)
 
     param_combinations = combinations(heatmap.index.names, 2)
     dfs = [heatmap.groupby(list(dims)).agg(agg).to_frame(name='_Value')
