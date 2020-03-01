@@ -136,7 +136,7 @@ class Strategy(metaclass=ABCMeta):
                              '(data: {}, indicator "{}": {})'.format(len(self._data.Close),
                                                                      name, value.shape))
 
-        if plot and overlay is None:
+        if plot and overlay is None and np.issubdtype(value.dtype, np.number):
             x = value / self._data.Close
             # By default, overlay if strong majority of indicator values
             # is within 30% of Close
