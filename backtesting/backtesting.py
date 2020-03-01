@@ -9,12 +9,11 @@ import multiprocessing as mp
 import os
 import warnings
 from abc import abstractmethod, ABCMeta
-from collections.abc import Sequence
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from functools import partial
 from itertools import repeat, product, chain
 from numbers import Number
-from typing import Callable, Union, Tuple, Type
+from typing import Callable, Union, Sequence, Tuple, Type
 
 import numpy as np
 import pandas as pd
@@ -142,7 +141,8 @@ class Strategy(metaclass=ABCMeta):
             with np.errstate(invalid='ignore'):
                 overlay = ((x < 1.4) & (x > .6)).mean() > .6
 
-        value = _Indicator(value, name, plot=plot, overlay=overlay, color=color, scatter=scatter,
+        value = _Indicator(value, name=name, plot=plot, overlay=overlay,
+                           color=color, scatter=scatter,
                            # lib.resample_apply() uses this:
                            data=self.data)
         self._indicators.append(value)
@@ -812,7 +812,7 @@ class Backtest:
         # from non-tested parameter combos in heatmap.
 
         def _batch(seq):
-            n = np.clip(len(param_combos) // (os.cpu_count() or 1), 5, 300)
+            n = np.clip(len(seq) // (os.cpu_count() or 1), 5, 300)
             for i in range(0, len(seq), n):
                 yield seq[i:i + n]
 

@@ -1,4 +1,4 @@
-from collections import Sequence
+from typing import Sequence
 from numbers import Number
 
 import numpy as np
@@ -42,7 +42,7 @@ class _Array(np.ndarray):
     ndarray extended to supply .name and other arbitrary properties
     in ._opts dict.
     """
-    def __new__(cls, array, name=None, write=False, **kwargs):
+    def __new__(cls, array, *, name=None, write=False, **kwargs):
         obj = np.asarray(array).view(cls)
         obj.name = name or array.name
         obj._opts = kwargs
