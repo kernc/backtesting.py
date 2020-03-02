@@ -22,7 +22,7 @@ import pandas as pd
 
 from .backtesting import Strategy
 from ._plotting import plot_heatmaps as _plot_heatmaps
-from ._util import _Array, _Indicator, _as_str
+from ._util import _Array, _as_str
 
 __pdoc__ = {}
 
@@ -280,36 +280,51 @@ class SignalStrategy(Strategy):
 
     __pdoc__['SignalStrategy.__init__'] = False
 
-    def set_signal(self, entry: Sequence[int], exit: Optional[Sequence[bool]] = None,
+    def set_signal(self, entry_size: Sequence[float],
+                   exit_portion: Sequence[float] = None,
+                   *,
                    plot: bool = True):
         """
-        Set entry/exit signal vectors (arrays). An long entry signal is considered
-        present wherever `entry` is greater than zero. A short entry signal
-        is considered present wherever `entry` is less than zero. If `exit`
-        is provided, a nonzero value closes the position, if any; otherwise
-        the position is held until a reverse signal in `entry`.
+        Set entry/exit signal vectors (arrays).
+
+        A long entry signal is considered present wherever `entry_size`
+        is greater than zero, and a short signal wherever `entry_size`
+        is less than zero, following `backtesting.backtesting.Order.size` semantics.
+
+        If `exit_portion` is provided, a nonzero value closes portion the position
+        (see `backtesting.backtesting.Trade.close()`) in the respective direction
+        (positive values close long trades, negative short).
 
         If `plot` is `True`, the signal entry/exit indicators are plotted when
         `backtesting.backtesting.Backtest.plot` is called.
         """
-        self.__entry_signal = _Indicator(pd.Series(entry, dtype=float).fillna(0),
-                                         name='entry', plot=plot, overlay=False)
-        if exit is not None:
-            self.__exit_signal = _Indicator(pd.Series(exit, dtype=float).fillna(0),
-                                            name='exit', plot=plot, overlay=False)
+        self.__entry_signal = self.I(
+            lambda: pd.Series(entry_size, dtype=float).replace(0, np.nan),
+            name='entry size', plot=plot, overlay=False, scatter=True, color='black')
+
+        if exit_portion is not None:
+            self.__exit_signal = self.I(
+                lambda: pd.Series(exit_portion, dtype=float).replace(0, np.nan),
+                name='exit portion', plot=plot, overlay=False, scatter=True, color='black')
 
     def next(self):
         super().next()
 
-        if self.position and self.__exit_signal[-1]:
-            self.position.close()
+        exit_portion = self.__exit_signal[-1]
+        if exit_portion > 0:
+            for trade in self.trades:
+                if trade.is_long:
+                    trade.close(exit_portion)
+        elif exit_portion < 0:
+            for trade in self.trades:
+                if trade.is_short:
+                    trade.close(-exit_portion)
 
-        signal = self.__entry_signal[-1]
-
-        if signal > 0:
-            self.buy()
-        elif signal < 0:
-            self.sell()
+        entry_size = self.__entry_signal[-1]
+        if entry_size > 0:
+            self.buy(size=entry_size)
+        elif entry_size < 0:
+            self.sell(size=-entry_size)
 
 
 class TrailingStrategy(Strategy):
