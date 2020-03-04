@@ -850,25 +850,22 @@ class Backtest:
                                                       for params in param_combos)
                 if stats['# Trades']]
 
+    @staticmethod
+    def _compute_drawdown_duration_peaks(dd: pd.Series):
+        iloc = np.unique(np.r_[(dd == 0).values.nonzero()[0], len(dd) - 1])
+        iloc = pd.Series(iloc, index=dd.index[iloc])
+        df = iloc.to_frame('iloc').assign(prev=iloc.shift())
+        df = df[df['iloc'] > df['prev'] + 1].astype(int)
+        # If no drawdown since no trade, avoid below for pandas sake and return nan series
+        if not len(df):
+            return (dd.replace(0, np.nan),) * 2
+        df['duration'] = df['iloc'].map(dd.index.__getitem__) - df['prev'].map(dd.index.__getitem__)
+        df['peak_dd'] = df.apply(lambda row: dd.iloc[row['prev']:row['iloc'] + 1].max(), axis=1)
+        df = df.reindex(dd.index)
+        return df['duration'], df['peak_dd']
+
     def _compute_stats(self, broker: _Broker, strategy: Strategy) -> pd.Series:
         data = self._data
-
-        def _drawdown_duration_peaks(dd, index):
-            # XXX: possible to vectorize any of this?
-            durations = [np.nan] * len(dd)
-            peaks = [np.nan] * len(dd)
-            i = 0
-            for j in range(1, len(dd)):
-                if dd[j] == 0:
-                    if dd[j - 1] != 0:
-                        durations[j - 1] = index[j] - index[i]
-                        peaks[j - 1] = dd[i:j].max()
-                    i = j
-            j = len(dd) - 1
-            if dd[j - 1] != 0:
-                durations[j] = index[j] - index[i]
-                peaks[j] = dd[i:j].max()
-            return pd.Series(durations), pd.Series(peaks)
 
         df = pd.DataFrame()
         df['Equity'] = pd.Series(broker.log.equity).bfill().fillna(broker._cash)
@@ -882,8 +879,8 @@ class Backtest:
         pl = df['P/L']
         df['Returns'] = returns = pl.dropna() / equity[exits.dropna().values.astype(int)]
         df['Drawdown'] = dd = 1 - equity / np.maximum.accumulate(equity)
-        dd_dur, dd_peaks = _drawdown_duration_peaks(dd, data.index)
-        df['Drawdown Duration'] = dd_dur
+        dd_dur, dd_peaks = self._compute_drawdown_duration_peaks(pd.Series(dd, index=data.index))
+        df['Drawdown Duration'] = dd_dur.values
         dd_dur = df['Drawdown Duration']
 
         df.index = data.index

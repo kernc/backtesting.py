@@ -224,9 +224,7 @@ return this.labels[index] || "";
             dd_start = dd_end = equity.index[0]
             timedelta = 0
         else:
-            dd_end = (equity[argmax:] > equity[dd_start]).idxmax()
-            if dd_end == argmax:
-                dd_end = index[-1]
+            dd_end = argmax
             if is_datetime_index and omit_missing:
                 # "Calendar" duration
                 timedelta = df.datetime.iloc[dd_end] - df.datetime.iloc[dd_start]

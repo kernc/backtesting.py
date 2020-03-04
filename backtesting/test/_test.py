@@ -219,6 +219,12 @@ class TestBacktest(TestCase):
         self.assertEqual(str(bt.run()._strategy), SmaCross.__name__)
         self.assertEqual(str(bt.run(fast=11)._strategy), SmaCross.__name__ + '(fast=11)')
 
+    def test_compute_drawdown(self):
+        dd = pd.Series([0, 1, 7, 0, 4, 0, 0])
+        durations, peaks = Backtest._compute_drawdown_duration_peaks(dd)
+        np.testing.assert_array_equal(durations, pd.Series([3, 2], index=[3, 5]).reindex(dd.index))
+        np.testing.assert_array_equal(peaks, pd.Series([7, 4], index=[3, 5]).reindex(dd.index))
+
     def test_compute_stats(self):
         stats = Backtest(GOOG, SmaCross).run()
         # Pandas compares in 'almost equal' manner
