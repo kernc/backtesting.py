@@ -24,6 +24,8 @@ from .backtesting import Strategy
 from ._plotting import plot_heatmaps as _plot_heatmaps
 from ._util import _Array, _Indicator, _as_str
 
+__pdoc__ = {}
+
 
 OHLCV_AGG = OrderedDict((
     ('Open', 'first'),
@@ -266,6 +268,8 @@ class SignalStrategy(Strategy):
     __entry_signal = (0,)
     __exit_signal = (False,)
 
+    __pdoc__['SignalStrategy.__init__'] = False
+
     def set_signal(self, entry: Sequence[int], exit: Optional[Sequence[bool]] = None,
                    plot: bool = True):
         """
@@ -312,6 +316,8 @@ class TrailingStrategy(Strategy):
     """
     __n_atr = 6
     __atr = None
+
+    __pdoc__['SignalStrategy.__init__'] = False
 
     def init(self):
         super().init()
