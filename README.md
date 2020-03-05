@@ -33,9 +33,9 @@ from backtesting.test import SMA, GOOG
 
 class SmaCross(Strategy):
     def init(self):
-        Close = self.data.Close
-        self.ma1 = self.I(SMA, Close, 10)
-        self.ma2 = self.I(SMA, Close, 20)
+        price = self.data.Close
+        self.ma1 = self.I(SMA, price, 10)
+        self.ma2 = self.I(SMA, price, 20)
 
     def next(self):
         if crossover(self.ma1, self.ma2):
@@ -44,8 +44,8 @@ class SmaCross(Strategy):
             self.sell()
 
 
-bt = Backtest(GOOG, SmaCross,
-              cash=10000, commission=.002)
+bt = Backtest(GOOG, SmaCross, commission=.002,
+              exclusive_orders=True)
 bt.run()
 bt.plot()
 ```
@@ -56,30 +56,33 @@ Results in:
 Start                     2004-08-19 00:00:00
 End                       2013-03-01 00:00:00
 Duration                   3116 days 00:00:00
-Exposure [%]                            94.29
-Equity Final [$]                     69665.12
-Equity Peak [$]                      69722.15
-Return [%]                             596.65
+Exposure Time [%]                       94.27
+Equity Final [$]                     68935.12
+Equity Peak [$]                      68991.22
+Return [%]                             589.35
 Buy & Hold Return [%]                  703.46
-Max. Drawdown [%]                      -33.61
-Avg. Drawdown [%]                       -5.68
-Max. Drawdown Duration      689 days 00:00:00
+Max. Drawdown [%]                      -33.08
+Avg. Drawdown [%]                       -5.58
+Max. Drawdown Duration      688 days 00:00:00
 Avg. Drawdown Duration       41 days 00:00:00
 # Trades                                   93
 Win Rate [%]                            53.76
-Best Trade [%]                          56.98
-Worst Trade [%]                        -17.03
-Avg. Trade [%]                           2.44
+Best Trade [%]                          57.12
+Worst Trade [%]                        -16.63
+Avg. Trade [%]                           1.96
 Max. Trade Duration         121 days 00:00:00
 Avg. Trade Duration          32 days 00:00:00
-Expectancy [%]                           6.92
-SQN                                      1.77
-Sharpe Ratio                             0.22
-Sortino Ratio                            0.54
-Calmar Ratio                             0.07
-_strategy                            SmaCross
+Profit Factor                            2.13
+Expectancy [%]                           6.91
+SQN                                      1.78
+Sharpe Ratio                             0.18
+Sortino Ratio                            0.44
+Calmar Ratio                             0.06
+_strategy              SmaCross(n1=10, n2=20)
+_equity_curve                          Equ...
+_trades                       Size  EntryB...
 ```
-[![plot of trading simulation](https://i.imgur.com/q6OSQD8.png)](https://kernc.github.io/backtesting.py/#example)
+[![plot of trading simulation](https://i.imgur.com/xRFNHfg.png)](https://kernc.github.io/backtesting.py/#example)
 
 Find more usage examples in the [documentation].
 

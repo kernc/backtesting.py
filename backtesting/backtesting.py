@@ -1,9 +1,14 @@
 """
-Core backtesting data structures.
-Objects from this module can be imported from the top-level
+Core framework data structures.
+Objects from this module can also be imported from the top-level
 module directly, e.g.
 
     from backtesting import Backtest, Strategy
+
+.. warning:: v0.2.0 breaking changes
+   Version 0.2.0 introduced some **breaking API changes**. For quick ways to
+   migrate existing 0.1.x code, see the implementing
+   [pull request](https://github.com/kernc/backtesting.py/pull/47/).
 """
 import multiprocessing as mp
 import os
@@ -962,7 +967,7 @@ class Backtest:
         To run the backtest using e.g. 50:1 leverge that your broker allows,
         set margin to `0.02` (1 / leverage).
 
-        If `trade_on_close` is `True`, market orders will be executed
+        If `trade_on_close` is `True`, market orders will be filled
         with respect to the current bar's closing price instead of the
         next bar's open.
 
@@ -1029,6 +1034,37 @@ class Backtest:
         Run the backtest. Returns `pd.Series` with results and statistics.
 
         Keyword arguments are interpreted as strategy parameters.
+
+            >>> Backtest(GOOG, SmaCross).run()
+            Start                     2004-08-19 00:00:00
+            End                       2013-03-01 00:00:00
+            Duration                   3116 days 00:00:00
+            Exposure Time [%]                     93.9944
+            Equity Final [$]                      51959.9
+            Equity Peak [$]                       75787.4
+            Return [%]                            419.599
+            Buy & Hold Return [%]                 703.458
+            Max. Drawdown [%]                    -47.9801
+            Avg. Drawdown [%]                    -5.92585
+            Max. Drawdown Duration      584 days 00:00:00
+            Avg. Drawdown Duration       41 days 00:00:00
+            # Trades                                   65
+            Win Rate [%]                          46.1538
+            Best Trade [%]                         53.596
+            Worst Trade [%]                      -18.3989
+            Avg. Trade [%]                        2.35371
+            Max. Trade Duration         183 days 00:00:00
+            Avg. Trade Duration          46 days 00:00:00
+            Profit Factor                         2.08802
+            Expectancy [%]                        8.79171
+            SQN                                  0.916893
+            Sharpe Ratio                         0.179141
+            Sortino Ratio                         0.55887
+            Calmar Ratio                         0.049056
+            _strategy                            SmaCross
+            _equity_curve                           Eq...
+            _trades                       Size  EntryB...
+            dtype: object
         """
         data = _Data(self._data.copy(deep=False))
         broker = self._broker(data=data)  # type: _Broker
@@ -1160,7 +1196,7 @@ class Backtest:
             raise ValueError('No admissible parameter combinations to test')
 
         if len(param_combos) > 300:
-            warnings.warn('Searching best of {} configurations.'.format(len(param_combos)),
+            warnings.warn('Searching for best of {} configurations.'.format(len(param_combos)),
                           stacklevel=2)
 
         heatmap = pd.Series(np.nan,
@@ -1367,7 +1403,7 @@ class Backtest:
         a separate drawdown graph section.
 
         If `smooth_equity` is `True`, the equity graph will be
-        interpolated between points of cash-only positions,
+        interpolated between fixed points at trade closing times,
         unaffected by any interim asset volatility.
 
         If `relative_equity` is `True`, scale and label equity graph axis

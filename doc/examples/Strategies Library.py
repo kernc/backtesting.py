@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.3.0
+#       jupytext_version: 1.5.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -15,26 +15,22 @@
 # Library of Composable Base Strategies
 # ======================
 #
-# This tutorial will show how to reuse composable base strategies that are part of this software distribution.
-# It is assumed you're already familiar with
-# [basic _backtesting.py_ usage](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html).
+# This tutorial will show how to reuse composable base trading strategies that are part of _Backtesting.py_ software distribution.
+# It is, henceforth, assumed you're already familiar with
+# [basic package usage](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html).
 #
 # We'll extend the same moving average cross-over strategy as in
 # [Quick Start User Guide](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html),
 # but we'll rewrite it as a vectorized signal strategy and add trailing stop-loss.
 #
-# Again, we use our helper moving average function.
-# In practice, one can use functions from any indicator library, such as
-# [TA-Lib](https://github.com/mrjbq7/ta-lib),
-# [Tulipy](https://tulipindicators.org),
-# PyAlgoTrade, ...
+# Again, we'll use our helper moving average function.
 
 from backtesting.test import SMA
 
-# _Backtesting.py_ package includes
-# [_lib_](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html)
-# module that contains various reusable utilities for developing strategies.
-# Some of those utilities are composable base strategies one can extend and build upon.
+# Part of this software distribution is
+# [`backtesting.lib`](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html)
+# module that contains various reusable utilities for strategy development.
+# Some of those utilities are composable base strategies we can extend and build upon.
 #
 # We import and extend two of those strategies here:
 # * [`SignalStrategy`](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html#backtesting.lib.SignalStrategy)
@@ -54,36 +50,37 @@ from backtesting.lib import SignalStrategy, TrailingStrategy
 class SmaCross(SignalStrategy,
                TrailingStrategy):
     n1 = 10
-    n2 = 20
+    n2 = 25
     
     def init(self):
         # In init() and in next() it is important to call the
-        # super method to properly initialize all the classes
+        # super method to properly initialize the parent classes
         super().init()
         
         # Precompute the two moving averages
         sma1 = self.I(SMA, self.data.Close, self.n1)
         sma2 = self.I(SMA, self.data.Close, self.n2)
         
-        # Taking a first difference (`.diff()`) of a boolean
-        # series results in +1, 0, and -1 values. In our signal,
-        # as expected by SignalStrategy, +1 means buy,
-        # -1 means sell, and 0 means to hold whatever current
-        # position and wait. See the docs.
+        # Where sma1 crosses sma2 upwards. Diff gives us [-1,0, *1*]
         signal = (pd.Series(sma1) > sma2).astype(int).diff().fillna(0)
+        signal = signal.replace(-1, 0)  # Upwards/long only
         
-        # Set the signal vector using the method provided
-        # by SignalStrategy
-        self.set_signal(signal)
+        # Use 95% of available liquidity (at the time) on each order.
+        # (Leaving a value of 1. would instead buy a single share.)
+        entry_size = signal * .95
+                
+        # Set order entry sizes using the method provided by 
+        # `SignalStrategy`. See the docs.
+        self.set_signal(entry_size=entry_size)
         
-        # Set trailing stop-loss to 4x ATR
-        # using the method provided by TrailingStrategy
-        self.set_trailing_sl(4)
+        # Set trailing stop-loss to 2x ATR using
+        # the method provided by `TrailingStrategy`
+        self.set_trailing_sl(2)
 
 
 # -
 
-# Note, since the strategies in _lib_ may require their own intialization and next-tick logic, be sure to **always call `super().init()` and `super().next()` in your overridden methods**.
+# Note, since the strategies in `lib` may require their own intialization and next-tick logic, be sure to **always call `super().init()` and `super().next()` in your overridden methods**.
 #
 # Let's see how the example strategy fares on historical Google data.
 
@@ -97,7 +94,12 @@ bt.run()
 bt.plot()
 # -
 
-# Notice how managing risk with a trailing stop-loss severely limits our losses.
+# Notice how managing risk with a trailing stop-loss secures our gains and limits our losses.
 #
-# For other strategies of the sort, and other reusable utilities in general, see the
-# [_lib_ module reference](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html).
+# For other strategies of the sort, and other reusable utilities in general, see
+# [**_backtesting.lib_ module reference**](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html).
+
+# Learn more by exploring further
+# [examples](https://kernc.github.io/backtesting.py/doc/backtesting/index.html#tutorials)
+# or find more framework options in the
+# [full API reference](https://kernc.github.io/backtesting.py/doc/backtesting/index.html#header-submodules).

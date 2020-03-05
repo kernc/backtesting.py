@@ -175,7 +175,7 @@ def resample_apply(rule: str,
     a time frame to resample `series` to.
 
     [Pandas offset string]: \
-        http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
+http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
 
     `func` is the indicator function to apply on the resampled series.
 
@@ -202,7 +202,7 @@ def resample_apply(rule: str,
                 self.sma = resample_apply(
                     'D', SMA, self.data.Close, 10, plot=False)
 
-    This short snippet is roughly equivalent to:
+    The above short snippet is roughly equivalent to:
 
         class System(Strategy):
             def init(self):

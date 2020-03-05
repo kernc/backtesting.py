@@ -1,6 +1,11 @@
 """
 # Backtesting.py Documentation
 
+.. warning:: v0.2.0 breaking changes
+   Version 0.2.0 introduced some **breaking API changes**. For quick ways to
+   migrate existing 0.1.x code, see the implementing
+   [pull request](https://github.com/kernc/backtesting.py/pull/47/).
+
 ## Manuals
 
 * [**Quick Start User Guide**](../examples/Quick Start User Guide.html)
@@ -11,7 +16,7 @@
 * [Multiple Time Frames](../examples/Multiple Time Frames.html)
 * [Parameter Heatmap](../examples/Parameter Heatmap.html)
 
-These tutorials are also available as live notebooks:
+These tutorials are also available to test as live Jupyter notebooks:
 [![Binder](https://mybinder.org/badge_logo.svg)][binder]
 
 [binder]: \
@@ -21,6 +26,11 @@ urlpath=lab%2Ftree%2Fdoc%2Fexamples%2FQuick%20Start%20User%20Guide.ipynb
 ## Example Strategies
 
 * (contributions welcome)
+
+## FAQ
+
+Potentially outdated answers to popular questions can be found on the
+[issue tracker](https://github.com/kernc/backtesting.py/issues?q=label%3Aquestion).
 
 ## License
 
