@@ -244,8 +244,9 @@ class Strategy(metaclass=ABCMeta):
           the last array value (e.g. `data.Close[-1]`)
           is always the _most recent_ value.
         * If you need data arrays (e.g. `data.Close`) to be indexed
-          Pandas series, you can call their `.to_series()` method
-          (e.g. `data.Close.to_series()`).
+          **Pandas series**, you can call their `.s` accessor
+          (e.g. `data.Close.s`). If you need the whole of data
+          as a **DataFrame**, use `.df` accessor (i.e. `data.df`).
         """
         return self._data
 
@@ -1008,11 +1009,12 @@ class Backtest:
 
         Keyword arguments are interpreted as strategy parameters.
         """
-        data = _Data(self._data)
+        data = _Data(self._data.copy(deep=False))
         broker = self._broker(data=data)  # type: _Broker
         strategy = self._strategy(broker, data, kwargs)  # type: Strategy
 
         strategy.init()
+        data._update()  # Strategy.init might have changed/added to data.df
 
         # Indicators used in Strategy.next()
         indicator_attrs = {attr: indicator
