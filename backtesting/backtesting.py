@@ -625,11 +625,13 @@ class Backtest:
 
         if not (isinstance(strategy, type) and issubclass(strategy, Strategy)):
             raise TypeError('`strategy` must be a Strategy sub-type')
+        if not isinstance(data, pd.DataFrame):
+            raise TypeError("`data` must be a pandas.DataFrame with columns")
         if not isinstance(commission, Number):
             raise TypeError('`commission` must be a float value, percent of '
                             'entry order price')
 
-        data = data.copy(False)
+        data = data.copy(deep=False)
 
         # Convert index to datetime index
         if (not data.index.is_all_dates and
@@ -645,9 +647,11 @@ class Backtest:
         if 'Volume' not in data:
             data['Volume'] = np.nan
 
+        if len(data) == 0:
+            raise ValueError('OHLC `data` is empty')
         if len(data.columns & {'Open', 'High', 'Low', 'Close', 'Volume'}) != 5:
             raise ValueError("`data` must be a pandas.DataFrame with columns "
-                             "'Open', 'High', 'Low', 'Close', and (optionally) 'Volume'") from None
+                             "'Open', 'High', 'Low', 'Close', and (optionally) 'Volume'")
         if data[['Open', 'High', 'Low', 'Close']].isnull().values.any():
             raise ValueError('Some OHLC values are missing (NaN). '
                              'Please strip those lines with `df.dropna()` or '

@@ -81,7 +81,7 @@ class TestBacktest(TestCase):
         self.assertLess(end - start, .2)
 
     def test_data_missing_columns(self):
-        df = GOOG.copy()
+        df = GOOG.copy(deep=False)
         del df['Open']
         with self.assertRaises(ValueError):
             Backtest(df, SmaCross).run()
@@ -93,7 +93,7 @@ class TestBacktest(TestCase):
             Backtest(df, SmaCross).run()
 
     def test_data_extra_columns(self):
-        df = GOOG.copy()
+        df = GOOG.copy(deep=False)
         df['P/E'] = np.arange(len(df))
         df['MCap'] = np.arange(len(df))
 
@@ -107,6 +107,12 @@ class TestBacktest(TestCase):
                 assert len(self.data['P/E']) == len(self.data.Close)
 
         Backtest(df, S).run()
+
+    def test_data_invalid(self):
+        with self.assertRaises(TypeError):
+            Backtest(GOOG.index, SmaCross).run()
+        with self.assertRaises(ValueError):
+            Backtest(GOOG.iloc[:0], SmaCross).run()
 
     def test_assertions(self):
         class Assertive(Strategy):
