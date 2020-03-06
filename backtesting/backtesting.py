@@ -1251,7 +1251,7 @@ class Backtest:
         returns = trades_df['ReturnPct']
         durations = trades_df['Duration']
 
-        def _round_timedelta(value, _period=_data_period(equity_df)):
+        def _round_timedelta(value, _period=_data_period(index)):
             if not isinstance(value, pd.Timedelta):
                 return value
             resolution = getattr(_period, 'resolution_string', None) or _period.resolution
@@ -1309,7 +1309,7 @@ class Backtest:
              plot_equity=True, plot_pl=True,
              plot_volume=True, plot_drawdown=False,
              smooth_equity=False, relative_equity=True,
-             omit_missing=True, superimpose: Union[bool, str] = True,
+             superimpose: Union[bool, str] = True,
              show_legend=True, open_browser=True):
         """
         Plot the progression of the last backtest run.
@@ -1347,9 +1347,6 @@ class Backtest:
         If `relative_equity` is `True`, scale and label equity graph axis
         with return percent, not absolute cash-equivalent values.
 
-        If `omit_missing` is `True`, skip missing candlestick bars on the
-        datetime axis.
-
         If `superimpose` is `True`, superimpose downsampled candlesticks
         over the original candlestick chart. Default downsampling is:
         weekly for daily data, daily for hourly data, hourly for minute data,
@@ -1381,7 +1378,6 @@ class Backtest:
             plot_equity=plot_equity,
             plot_pl=plot_pl,
             plot_volume=plot_volume,
-            omit_missing=omit_missing,
             plot_drawdown=plot_drawdown,
             smooth_equity=smooth_equity,
             relative_equity=relative_equity,

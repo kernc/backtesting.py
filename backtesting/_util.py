@@ -34,9 +34,9 @@ def _as_list(value):
     return [value]
 
 
-def _data_period(df):
+def _data_period(index):
     """Return data index period as pd.Timedelta"""
-    values = df.index[-100:].to_series()
+    values = pd.Series(index[-100:])
     return values.diff().median()
 
 

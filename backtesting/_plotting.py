@@ -4,6 +4,7 @@ import sys
 import warnings
 from itertools import cycle, combinations
 from functools import partial
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -31,8 +32,7 @@ from bokeh.layouts import gridplot
 from bokeh.palettes import Category10
 from bokeh.transform import factor_cmap
 
-from backtesting._util import _data_period, _as_list
-
+from backtesting._util import _data_period, _as_list, _Indicator
 
 with open(os.path.join(os.path.dirname(__file__), 'autoscale_cb.js'),
           encoding='utf-8') as _f:
@@ -85,10 +85,13 @@ def lightness(color, lightness=.94):
     return color.to_rgb()
 
 
-def plot(*, results, df, indicators, filename='', plot_width=None,
+def plot(*, results: pd.Series,
+         df: pd.DataFrame,
+         indicators: List[_Indicator],
+         filename='', plot_width=None,
          plot_equity=True, plot_pl=True,
          plot_volume=True, plot_drawdown=False,
-         smooth_equity=False, relative_equity=True, omit_missing=True,
+         smooth_equity=False, relative_equity=True,
          superimpose=True, show_legend=True, open_browser=True):
     """
     Like much of GUI code everywhere, this is a mess.
@@ -101,41 +104,29 @@ def plot(*, results, df, indicators, filename='', plot_width=None,
     _bokeh_reset(filename)
 
     COLORS = [BEAR_COLOR, BULL_COLOR]
+    BAR_WIDTH = .8
 
-    equity_data = results['_equity_curve'].copy(False)
+    assert df.index.equals(results['_equity_curve'].index)
+    equity_data = results['_equity_curve'].copy(deep=False)
     trades = results['_trades']
 
-    orig_df = df = df.copy(False)
-    df.index.name = None  # Provides source name @index
-    index = df.index
-    assert df.index.equals(equity_data.index)
-    time_resolution = getattr(index, 'resolution', None)
-    is_datetime_index = index.is_all_dates
-
-    # If all Volume is NaN, don't plot volume
     plot_volume = plot_volume and not df.Volume.isnull().all()
+    time_resolution = getattr(df.index, 'resolution', None)
+    is_datetime_index = df.index.is_all_dates
 
-    # OHLC vbar width in msec.
-    # +1 will work in case of non-datetime index where vbar width should just be =1
-    bar_width = 1 + dict(day=86400,
-                         hour=3600,
-                         minute=60,
-                         second=1).get(time_resolution, 0) * 1000 * .85
+    from .lib import OHLCV_AGG
+    # ohlc df may contain many columns. We're only interested in, and pass on to Bokeh, these
+    df = df[list(OHLCV_AGG.keys())].copy(deep=False)
+    df.index.name = None  # Provides source name @index
+    df['datetime'] = df.index  # Save original, maybe datetime index
 
-    if is_datetime_index:
-        # Add index as a separate data source column because true .index is offset to align vbars
-        df['datetime'] = index
-        df.index = df.index + pd.Timedelta(bar_width / 2, unit='ms')
-
-    if omit_missing:
-        bar_width = .8
-        df = df.reset_index(drop=True)
-        equity_data = equity_data.reset_index(drop=True)
-        index = df.index
+    df = df.reset_index(drop=True)
+    equity_data = equity_data.reset_index(drop=True)
+    index = df.index
 
     new_bokeh_figure = partial(
         _figure,
-        x_axis_type='datetime' if is_datetime_index and not omit_missing else 'linear',
+        x_axis_type='linear',
         plot_width=plot_width,
         plot_height=400,
         tools="xpan,xwheel_zoom,box_zoom,undo,redo,reset,crosshair,save",
@@ -152,12 +143,9 @@ def plot(*, results, df, indicators, filename='', plot_width=None,
 
     source = ColumnDataSource(df)
     source.add((df.Close >= df.Open).values.astype(np.uint8).astype(str), 'inc')
-    trades_index = trades['ExitBar']
-    if not omit_missing:
-        trades_index = index[trades_index.astype(int)]
 
     trade_source = ColumnDataSource(dict(
-        index=trades_index,
+        index=trades['ExitBar'],
         datetime=trades['ExitTime'],
         exit_price=trades['ExitPrice'],
         size=trades['Size'],
@@ -170,7 +158,7 @@ def plot(*, results, df, indicators, filename='', plot_width=None,
                      lightness(BULL_COLOR, .35)]
     trades_cmap = factor_cmap('returns_positive', colors_darker, ['0', '1'])
 
-    if is_datetime_index and omit_missing:
+    if is_datetime_index:
         fig_ohlc.xaxis.formatter = FuncTickFormatter(
             args=dict(axis=fig_ohlc.xaxis[0],
                       formatter=DatetimeTickFormatter(days=['%d %b', '%a %d'],
@@ -184,7 +172,7 @@ return this.labels[index] || "";
         ''')
 
     NBSP = '&nbsp;' * 4
-    ohlc_extreme_values = df[['High', 'Low']].copy(False)
+    ohlc_extreme_values = df[['High', 'Low']].copy(deep=False)
     ohlc_tooltips = [
         ('x, y', NBSP.join(('$index',
                             '$y{0,0.0[0000]}'))),
@@ -222,39 +210,33 @@ return this.labels[index] || "";
     def _plot_equity_section():
         """Equity section"""
         # Max DD Dur. line
-        equity = equity_data['Equity'].reset_index(drop=True)
-        argmax = equity_data['DrawdownDuration'].reset_index(drop=True).idxmax()
-        try:
-            dd_start = equity[:argmax].idxmax()
-        except Exception:  # ValueError: attempt to get argmax of an empty sequence
+        equity = equity_data['Equity'].copy()
+        dd_end = equity_data['DrawdownDuration'].idxmax()
+        if np.isnan(dd_end):
             dd_start = dd_end = equity.index[0]
-            timedelta = 0
         else:
-            dd_end = argmax
-            if is_datetime_index and omit_missing:
-                # "Calendar" duration
-                timedelta = df.datetime.iloc[dd_end] - df.datetime.iloc[dd_start]
-            else:
-                timedelta = dd_end - dd_start
-            # Get point intersection
+            dd_start = equity[:dd_end].idxmax()
+            # If DD not extending into the future, get exact point of intersection with equity
             if dd_end != equity.index[-1]:
-                x1, x2 = dd_end - 1, dd_end
-                y, y1, y2 = equity[dd_start], equity[x1], equity[x2]
-                dd_end -= (1 - (y - y1) / (y2 - y1)) * (dd_end - x1)  # y = a x + b
+                dd_end = np.interp(equity[dd_start],
+                                   (equity[dd_end - 1], equity[dd_end]),
+                                   (dd_end - 1, dd_end))
 
         if smooth_equity:
-            select = (pd.Index(trades['ExitBar']) |
-                      # Include beginning and end
-                      equity.index[:1] | equity.index[-1:] |
-                      # Include peak equity and peak DD
-                      pd.Index([equity.idxmax(), argmax]) |
-                      # Include max dd end points. Otherwise the MaxDD line looks amiss.
-                      pd.Index([dd_start, int(dd_end), min(equity.size - 1, int(dd_end + 1))]))
+            interest_points = pd.Index([
+                # Beginning and end
+                equity.index[0], equity.index[-1],
+                # Peak equity and peak DD
+                equity.idxmax(), equity_data['DrawdownPct'].idxmax(),
+                # Include max dd end points. Otherwise the MaxDD line looks amiss.
+                dd_start, int(dd_end), min(int(dd_end + 1), equity.size - 1),
+            ])
+            select = pd.Index(trades['ExitBar']) | interest_points
             select = select.unique().dropna()
             equity = equity.iloc[select].reindex(equity.index)
             equity.interpolate(inplace=True)
 
-        equity.index = equity_data.index
+        assert equity.index.equals(equity_data.index)
 
         if relative_equity:
             equity /= equity.iloc[0]
@@ -302,9 +284,10 @@ return this.labels[index] || "";
             fig.scatter(argmax, equity[argmax],
                         legend_label='Max Drawdown (-{:.1f}%)'.format(100 * drawdown[argmax]),
                         color='red', size=8)
-        fig.line([index[dd_start], index[int(dd_end)]], equity.iloc[dd_start],
+        dd_timedelta_label = df['datetime'].iloc[int(round(dd_end))] - df['datetime'].iloc[dd_start]
+        fig.line([dd_start, dd_end], equity.iloc[dd_start],
                  line_color='red', line_width=2,
-                 legend_label='Max Dd Dur. ({})'.format(timedelta)
+                 legend_label='Max Dd Dur. ({})'.format(dd_timedelta_label)
                  .replace(' 00:00:00', '')
                  .replace('(0 days ', '('))
 
@@ -354,7 +337,7 @@ return this.labels[index] || "";
         fig.xaxis.formatter = fig_ohlc.xaxis[0].formatter
         fig.xaxis.visible = True
         fig_ohlc.xaxis.visible = False  # Show only Volume's xaxis
-        r = fig.vbar('index', bar_width, 'Volume', source=source, color=inc_cmap)
+        r = fig.vbar('index', BAR_WIDTH, 'Volume', source=source, color=inc_cmap)
         set_tooltips(fig, [('Volume', '@Volume{0.00 a}')], renderers=[r])
         fig.yaxis.formatter = NumeralTickFormatter(format="0 a")
         return fig
@@ -374,13 +357,13 @@ return this.labels[index] || "";
                 stacklevel=4)
             return
 
-        orig_df['_width'] = 1
-        from .lib import OHLCV_AGG
-        df2 = orig_df.resample(resample_rule, label='left').agg(dict(OHLCV_AGG, _width='count'))
+        df2 = (df.assign(_width=1).set_index('datetime')
+               .resample(resample_rule, label='left')
+               .agg(dict(OHLCV_AGG, _width='count')))
 
         # Check if resampling was downsampling; error on upsampling
-        orig_freq = _data_period(orig_df)
-        resample_freq = _data_period(df2)
+        orig_freq = _data_period(df['datetime'])
+        resample_freq = _data_period(df2.index)
         if resample_freq < orig_freq:
             raise ValueError('Invalid value for `superimpose`: Upsampling not supported.')
         if resample_freq == orig_freq:
@@ -388,34 +371,23 @@ return this.labels[index] || "";
                           stacklevel=4)
             return
 
-        if omit_missing:
-            width2 = '_width'
-            df2.index = df2['_width'].cumsum().shift(1).fillna(0)
-            df2.index += df2['_width'] / 2 - .5
-            df2['_width'] -= .1  # Candles don't touch
-        else:
-            del df['_width']
-            width2 = dict(day=86400 * 5,
-                          hour=86400,
-                          minute=3600,
-                          second=60)[time_resolution] * 1000
-            df2.index += pd.Timedelta(
-                width2 / 2 +
-                (width2 / 5 if resample_rule == 'W' else 0),  # Sunday week start
-                unit='ms')
-        df2['inc'] = (df2.Close >= df2.Open).astype(np.uint8).astype(str)
+        df2.index = df2['_width'].cumsum().shift(1).fillna(0)
+        df2.index += df2['_width'] / 2 - .5
+        df2['_width'] -= .1  # Candles don't touch
+
+        df2['inc'] = (df2.Close >= df2.Open).astype(int).astype(str)
         df2.index.name = None
         source2 = ColumnDataSource(df2)
         fig_ohlc.segment('index', 'High', 'index', 'Low', source=source2, color='#bbbbbb')
         colors_lighter = [lightness(BEAR_COLOR, .92),
                           lightness(BULL_COLOR, .92)]
-        fig_ohlc.vbar('index', width2, 'Open', 'Close', source=source2, line_color=None,
+        fig_ohlc.vbar('index', '_width', 'Open', 'Close', source=source2, line_color=None,
                       fill_color=factor_cmap('inc', colors_lighter, ['0', '1']))
 
     def _plot_ohlc():
         """Main OHLC bars"""
         fig_ohlc.segment('index', 'High', 'index', 'Low', source=source, color="black")
-        r = fig_ohlc.vbar('index', bar_width, 'Open', 'Close', source=source,
+        r = fig_ohlc.vbar('index', BAR_WIDTH, 'Open', 'Close', source=source,
                           line_color="black", fill_color=inc_cmap)
         return r
 
@@ -484,7 +456,7 @@ return this.labels[index] || "";
                             'index', source_name, source=source,
                             legend_label=legend_label, color=color,
                             line_color='black', fill_alpha=.8,
-                            marker='circle', radius=bar_width / 2 * 1.5)
+                            marker='circle', radius=BAR_WIDTH / 2 * 1.5)
                     else:
                         fig.line(
                             'index', source_name, source=source,
@@ -495,7 +467,7 @@ return this.labels[index] || "";
                         r = fig.scatter(
                             'index', source_name, source=source,
                             legend_label=LegendStr(legend_label), color=color,
-                            marker='circle', radius=bar_width / 2 * .9)
+                            marker='circle', radius=BAR_WIDTH / 2 * .9)
                     else:
                         r = fig.line(
                             'index', source_name, source=source,
