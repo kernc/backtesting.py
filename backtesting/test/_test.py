@@ -502,6 +502,39 @@ class TestPlot(TestCase):
             # Give browser time to open before tempfile is removed
             time.sleep(5)
 
+    def test_wellknown(self):
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                date = self.data.index[-1]
+                if date == pd.Timestamp('Thu 19 Oct 2006'):
+                    self.buy(stop=484, limit=466, size=100)
+                elif date == pd.Timestamp('Thu 30 Oct 2007'):
+                    self.position.close()
+                elif date == pd.Timestamp('Tue 11 Nov 2008'):
+                    self.sell(stop=self.data.Low,
+                              limit=324.90,  # High from 14 Nov
+                              size=200)
+
+        bt = Backtest(GOOG, S, margin=.1)
+        stats = bt.run()
+        trades = stats['_trades']
+
+        self.assertAlmostEqual(stats['Equity Peak [$]'], 46961)
+        self.assertEqual(stats['Equity Final [$]'], 0)
+        self.assertEqual(len(trades), 2)
+        assert trades[['EntryTime', 'ExitTime']].equals(
+            pd.DataFrame(dict(EntryTime=pd.to_datetime(['2006-11-01', '2008-11-14']),
+                              ExitTime=pd.to_datetime(['2007-10-31', '2009-09-21']))))
+        assert trades['PnL'].round().equals(pd.Series([23469., -34420.]))
+
+        with _tempfile() as f:
+            bt.plot(filename=f, plot_drawdown=True, smooth_equity=False)
+            # Give browser time to open before tempfile is removed
+            time.sleep(1)
+
     def test_indicator_color(self):
         class S(Strategy):
             def init(self):
