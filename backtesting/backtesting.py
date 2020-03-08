@@ -150,7 +150,7 @@ class Strategy(metaclass=ABCMeta):
 
         value = _Indicator(value, name=name, plot=plot, overlay=overlay,
                            color=color, scatter=scatter,
-                           # lib.resample_apply() uses this:
+                           # _Indicator.s Series accessor uses this:
                            data=self.data)
         self._indicators.append(value)
         return value
@@ -992,7 +992,8 @@ class Backtest:
                           stacklevel=2)
             data = data.sort_index()
         if not data.index.is_all_dates:
-            warnings.warn('Data index is not datetime. Assuming simple periods.',
+            warnings.warn('Data index is not datetime. Assuming simple periods, '
+                          'but `pd.DateTimeIndex` is advised.',
                           stacklevel=2)
 
         self._data = data   # type: pd.DataFrame
@@ -1045,6 +1046,10 @@ class Backtest:
 
                 # Next tick, a moment before bar close
                 strategy.next()
+
+        # Set data back to full length
+        # for future `indicator._opts['data'].index` calls to work
+        data._set_length(len(self._data))
 
         self._results = self._compute_stats(broker, strategy)
         return self._results
@@ -1310,6 +1315,7 @@ class Backtest:
              plot_volume=True, plot_drawdown=False,
              smooth_equity=False, relative_equity=True,
              superimpose: Union[bool, str] = True,
+             resample=True,
              show_legend=True, open_browser=True):
         """
         Plot the progression of the last backtest run.
@@ -1347,16 +1353,31 @@ class Backtest:
         If `relative_equity` is `True`, scale and label equity graph axis
         with return percent, not absolute cash-equivalent values.
 
-        If `superimpose` is `True`, superimpose downsampled candlesticks
-        over the original candlestick chart. Default downsampling is:
-        weekly for daily data, daily for hourly data, hourly for minute data,
-        and minute for second and sub-second data.
-        `superimpose` can also be a string, in which case it is a valid
-        [Pandas offset string], such as `'5T'` or `'5min'`.
+        If `superimpose` is `True`, superimpose larger-timeframe candlesticks
+        over the original candlestick chart. Default downsampling rule is:
+        monthly for daily data, daily for hourly data, hourly for minute data,
+        and minute for (sub-)second data.
+        `superimpose` can also be a valid [Pandas offset string],
+        such as `'5T'` or `'5min'`, in which case this frequency will be
+        used to superimpose.
         Note, this only works for data with a datetime index.
 
+        If `resample` is `True`, the OHLC data is resampled in a way that
+        makes the upper number of candles for Bokeh to plot limited to 10_000.
+        This may, in situations of overabundant data,
+        improve plot's interactive performance and avoid browser's
+        `Javascript Error: Maximum call stack size exceeded` or similar.
+        Equity & dropdown curves and individual trades data is,
+        likewise, [reasonably _aggregated_][TRADES_AGG].
+        `resample` can also be a [Pandas offset string],
+        such as `'5T'` or `'5min'`, in which case this frequency will be
+        used to resample, overriding above numeric limitation.
+        Note, all this only works for data with a datetime index.
+
         [Pandas offset string]: \
-            http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
+            https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#dateoffset-objects
+
+        [TRADES_AGG]: lib.html#backtesting.lib.TRADES_AGG
 
         If `show_legend` is `True`, the resulting plot graphs will contain
         labeled legends.
@@ -1382,5 +1403,6 @@ class Backtest:
             smooth_equity=smooth_equity,
             relative_equity=relative_equity,
             superimpose=superimpose,
+            resample=resample,
             show_legend=show_legend,
             open_browser=open_browser)

@@ -1,40 +1,13 @@
-if (!window._bt_extremes)
-    window._bt_extremes = function (arr, initial, agg_func) {
-        const CHUNK = 32768;
-        let extreme = initial;
-        for (let i = 0, len = arr.length; i < len; i += CHUNK) {
-            const subarr = CHUNK >= len ? arr : arr.slice(i, i + CHUNK);
-            extreme = agg_func(extreme, agg_func.apply(null, subarr));
-        }
-        return extreme;
-    };
-
-if (!window._bt_bin_search)
-    window._bt_bin_search = function (index, value) {
-        let mid,
-            min = 0,
-            max = index.length - 1;
-
-        while (min < max) {
-            mid = (min + max) / 2 | 0;
-            if (index[mid] < value)
-                min = mid + 1;
-            else
-                max = mid - 1;
-        }
-        return min;
-    };
-
-if (!window._bt_scale_range)
-    window._bt_scale_range = function (range, highs, lows) {
-        const max = _bt_extremes(highs, -Infinity, Math.max),
-              min = lows && _bt_extremes(lows, Infinity, Math.min);
+if (!window._bt_scale_range) {
+    window._bt_scale_range = function (range, min, max, pad) {
+        "use strict";
         if (min !== Infinity && max !== -Infinity) {
-            const pad = (max - min) * .03;
+            pad = pad ? (max - min) * .03 : 0;
             range.start = min - pad;
             range.end = max + pad;
-        }
+        } else console.error('backtesting: scale range error:', min, max, range);
     };
+}
 
 clearTimeout(window._bt_autoscale_timeout);
 
@@ -45,20 +18,18 @@ window._bt_autoscale_timeout = setTimeout(function () {
      * @variable ohlc_range `fig_ohlc.y_range`.
      * @variable volume_range `fig_volume.y_range`.
      */
+    "use strict";
 
-    let index = source.data['index'],
-        i = Math.max(_bt_bin_search(index, cb_obj.start) - 1, 0),
-        j = Math.min(_bt_bin_search(index, cb_obj.end) + 1, index.length);
+    let i = Math.max(Math.floor(cb_obj.start), 0),
+        j = Math.min(Math.ceil(cb_obj.end), source.data['ohlc_high'].length);
 
-    _bt_scale_range(
-        ohlc_range,
-        source.data['ohlc_high'].slice(i, j),
-        source.data['ohlc_low'].slice(i, j));
-    try {
-        _bt_scale_range(
-            volume_range,
-            source.data['Volume'].slice(i, j),
-            0);
-    } catch (e) {}  // volume_range may be undefined
+    let max = Math.max.apply(null, source.data['ohlc_high'].slice(i, j)),
+        min = Math.min.apply(null, source.data['ohlc_low'].slice(i, j));
+    _bt_scale_range(ohlc_range, min, max, true);
+
+    if (volume_range) {
+        max = Math.max.apply(null, source.data['Volume'].slice(i, j));
+        _bt_scale_range(volume_range, 0, max * 1.03, false);
+    }
 
 }, 50);

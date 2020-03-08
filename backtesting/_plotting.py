@@ -85,6 +85,63 @@ def lightness(color, lightness=.94):
     return color.to_rgb()
 
 
+_MAX_CANDLES = 10000
+
+
+def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
+    if isinstance(resample_rule, str):
+        freq = resample_rule
+    else:
+        if len(df) < _MAX_CANDLES:
+            return df, indicators, equity_data, trades
+
+        from_index = dict(day=-2, hour=-6, minute=1, second=0, millisecond=0,
+                          microsecond=0, nanosecond=0)[df.index.resolution]
+        FREQS = ('1T', '5T', '10T', '15T', '30T', '1H', '2H', '4H', '8H', '1D', '1W', '1M')
+        freq = next((f for f in FREQS[from_index:]
+                     if len(df.resample(f)) <= _MAX_CANDLES), FREQS[-1])
+        warnings.warn("Data contains too many candlesticks to plot; downsampling to {!r}. "
+                      "See `Backtest.plot(resample=...)`".format(freq))
+
+    from .lib import OHLCV_AGG, TRADES_AGG, _EQUITY_AGG
+    df = df.resample(freq, label='right').agg(OHLCV_AGG).dropna()
+
+    indicators = [_Indicator(i.df.resample(freq, label='right').mean()
+                             .dropna().reindex(df.index).values.T,
+                             **dict(i._opts, name=i.name,
+                                    # HACK: override `data` for its index
+                                    data=pd.Series(np.nan, index=df.index)))
+                  for i in indicators]
+    assert not indicators or indicators[0].df.index.equals(df.index)
+
+    equity_data = equity_data.resample(freq, label='right').agg(_EQUITY_AGG).dropna(how='all')
+    assert equity_data.index.equals(df.index)
+
+    def _weighted_returns(s, trades=trades):
+        df = trades.loc[s.index]
+        return ((df['Size'].abs() * df['ReturnPct']) / df['Size'].abs().sum()).sum()
+
+    def _group_trades(column):
+        def f(s, new_index=df.index.astype(np.int64), bars=trades[column]):
+            if s.size:
+                # Via int64 because on pandas recently broken datetime
+                mean_time = int(bars.loc[s.index].view('i8').mean())
+                new_bar_idx = new_index.get_loc(mean_time, method='nearest')
+                return new_bar_idx
+        return f
+
+    if len(trades):  # Avoid pandas "resampling on Int64 index" error
+        trades = trades.assign(count=1).resample(freq, on='ExitTime', label='right').agg(dict(
+            TRADES_AGG,
+            ReturnPct=_weighted_returns,
+            count='sum',
+            EntryBar=_group_trades('EntryTime'),
+            ExitBar=_group_trades('ExitTime'),
+        )).dropna()
+
+    return df, indicators, equity_data, trades
+
+
 def plot(*, results: pd.Series,
          df: pd.DataFrame,
          indicators: List[_Indicator],
@@ -92,7 +149,8 @@ def plot(*, results: pd.Series,
          plot_equity=True, plot_pl=True,
          plot_volume=True, plot_drawdown=False,
          smooth_equity=False, relative_equity=True,
-         superimpose=True, show_legend=True, open_browser=True):
+         superimpose=True, resample=True,
+         show_legend=True, open_browser=True):
     """
     Like much of GUI code everywhere, this is a mess.
     """
@@ -111,15 +169,19 @@ def plot(*, results: pd.Series,
     trades = results['_trades']
 
     plot_volume = plot_volume and not df.Volume.isnull().all()
-    time_resolution = getattr(df.index, 'resolution', None)
     is_datetime_index = df.index.is_all_dates
 
     from .lib import OHLCV_AGG
     # ohlc df may contain many columns. We're only interested in, and pass on to Bokeh, these
     df = df[list(OHLCV_AGG.keys())].copy(deep=False)
+
+    # Limit data to max_candles
+    if is_datetime_index:
+        df, indicators, equity_data, trades = _maybe_resample_data(
+            resample, df, indicators, equity_data, trades)
+
     df.index.name = None  # Provides source name @index
     df['datetime'] = df.index  # Save original, maybe datetime index
-
     df = df.reset_index(drop=True)
     equity_data = equity_data.reset_index(drop=True)
     index = df.index
@@ -319,11 +381,15 @@ return this.labels[index] || "";
         trade_source.add(returns_long, 'returns_long')
         trade_source.add(returns_short, 'returns_short')
         trade_source.add(size, 'marker_size')
+        if 'count' in trades:
+            trade_source.add(trades['count'], 'count')
         r1 = fig.scatter('index', 'returns_long', source=trade_source, fill_color=cmap,
                          marker='triangle', line_color='black', size='marker_size')
         r2 = fig.scatter('index', 'returns_short', source=trade_source, fill_color=cmap,
                          marker='inverted_triangle', line_color='black', size='marker_size')
         tooltips = [("Size", "@size{0,0}")]
+        if 'count' in trades:
+            tooltips.append(("Count", "@count{0,0}"))
         set_tooltips(fig, tooltips + [("P/L", "@returns_long{+0.[000]%}")],
                      vline=False, renderers=[r1])
         set_tooltips(fig, tooltips + [("P/L", "@returns_short{+0.[000]%}")],
@@ -344,8 +410,9 @@ return this.labels[index] || "";
 
     def _plot_superimposed_ohlc():
         """Superimposed, downsampled vbars"""
+        time_resolution = pd.DatetimeIndex(df['datetime']).resolution
         resample_rule = (superimpose if isinstance(superimpose, str) else
-                         dict(day='W',
+                         dict(day='M',
                               hour='D',
                               minute='H',
                               second='T',
