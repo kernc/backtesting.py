@@ -542,8 +542,8 @@ return this.labels[index] || "";
     if plot_volume:
         custom_js_args.update(volume_range=fig_volume.y_range)
 
-    fig_ohlc.x_range.callback = CustomJS(args=custom_js_args,
-                                         code=_AUTOSCALE_JS_CALLBACK)
+    fig_ohlc.x_range.js_on_change('end', CustomJS(args=custom_js_args,
+                                                  code=_AUTOSCALE_JS_CALLBACK))
 
     plots = figs_above_ohlc + [fig_ohlc] + figs_below_ohlc
     for f in plots:
