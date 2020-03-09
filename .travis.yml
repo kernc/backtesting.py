@@ -39,7 +39,7 @@ before_install:
   - set -e
 
 install:
-  - pip install .[test]
+  - pip install --pre .[test]
 
 script:
   - BOKEH_BROWSER=none time catchsegv python setup.py test
