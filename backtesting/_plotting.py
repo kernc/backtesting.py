@@ -203,7 +203,7 @@ return this.labels[index] || "";
         renderers = list(renderers)
 
         if is_datetime_index:
-            formatters = dict(datetime='datetime')
+            formatters = {'@datetime': 'datetime'}
             tooltips = [("Date", "@datetime{%c}")] + tooltips
         else:
             formatters = {}
