@@ -120,6 +120,9 @@ class TestBacktest(TestCase):
                 self.sma = self.I(SMA, self.data.Close, 10)
                 self.remains_indicator = np.r_[2] * np.cumsum(self.sma * 5 + 1) * np.r_[2]
 
+                self.transpose_invalid = self.I(lambda: np.column_stack((self.data.Open,
+                                                                         self.data.Close)))
+
                 resampled = resample_apply('W', SMA, self.data.Close, 3)
                 resampled_ind = resample_apply('W', SMA, self.sma, 3)
                 assert np.unique(resampled[-5:]).size == 1

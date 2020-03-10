@@ -26,7 +26,7 @@ except ImportError:
         return seq
 
 from ._plotting import plot
-from ._util import _as_str, _Indicator, _Data, _data_period
+from ._util import _as_str, _Indicator, _Data, _data_period, try_
 
 
 __pdoc__ = {
@@ -121,18 +121,26 @@ class Strategy(metaclass=ABCMeta):
             name = name.format(*map(_as_str, args),
                                **dict(zip(kwargs.keys(), map(_as_str, kwargs.values()))))
 
-        value = func(*args, **kwargs)
-
         try:
-            if isinstance(value, pd.DataFrame):
-                value = value.values.T
-            value = np.asarray(value)
-        except Exception:
-            raise ValueError('Indicators must return array-like sequences of values')
-        if value.shape[-1] != len(self._data.Close):
-            raise ValueError('Indicators must be (a tuple of) arrays of same length as `data`'
-                             '(data: {}, indicator "{}": {})'.format(len(self._data.Close),
-                                                                     name, value.shape))
+            value = func(*args, **kwargs)
+        except Exception as e:
+            raise RuntimeError('Indicator "{}" errored with exception: {}'.format(name, e))
+
+        if isinstance(value, pd.DataFrame):
+            value = value.values.T
+
+        value = try_(lambda: np.asarray(value, order='C'), None)
+        is_arraylike = value is not None
+
+        # Optionally flip the array if the user returned e.g. `df.values`
+        if is_arraylike and np.argmax(value.shape) == 0:
+            value = value.T
+
+        if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data.Close):
+            raise ValueError(
+                'Indicators must return (optionally a tuple of) numpy.arrays of same '
+                'length as `data`(data shape: {}; indicator "{}" shape: {}, value: {})'
+                .format(self._data.Close.shape, name, getattr(value, 'shape', ''), value))
 
         if plot and overlay is None and np.issubdtype(value.dtype, np.number):
             x = value / self._data.Close
