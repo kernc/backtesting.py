@@ -133,7 +133,7 @@ def quantile(series, quantile=None):
 
 
 def resample_apply(rule: str,
-                   func: Callable,
+                   func: Optional[Callable[..., Sequence]],
                    series,
                    *args,
                    agg='last',
@@ -205,6 +205,10 @@ def resample_apply(rule: str,
                 self.sma = self.I(SMA, daily, 10, plot=False)
 
     """
+    if func is None:
+        def func(x, *_, **__):
+            return x
+
     if not isinstance(series, (pd.Series, pd.DataFrame)):
         assert isinstance(series, _Array), \
             'resample_apply() takes either a `pd.Series`, `pd.DataFrame`, ' \
@@ -228,14 +232,20 @@ def resample_apply(rule: str,
         def strategy_I(func, *args, **kwargs):
             return func(*args, **kwargs)
 
-    # Resample back to data index
     def wrap_func(resampled, *args, **kwargs):
-        ind = pd.Series(np.asarray(func(resampled, *args, **kwargs)),
-                        index=resampled.index,
-                        name=resampled.name)
-        ind = ind.reindex(index=series.index | resampled.index,
-                          method='ffill').reindex(series.index)
-        return ind
+        result = func(resampled, *args, **kwargs)
+        if not isinstance(result, pd.DataFrame) and not isinstance(result, pd.Series):
+            result = np.asarray(result)
+            if result.ndim == 1:
+                result = pd.Series(result, name=resampled.name)
+            elif result.ndim == 2:
+                result = pd.DataFrame(result.T)
+        # Resample back to data index
+        if not result.index.is_all_dates:
+            result.index = resampled.index
+        result = result.reindex(index=series.index | resampled.index,
+                                method='ffill').reindex(series.index)
+        return result
 
     wrap_func.__name__ = func.__name__
 

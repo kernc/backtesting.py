@@ -530,6 +530,12 @@ class TestLib(TestCase):
         self.assertTrue((res.dropna() == res2.dropna()).all())
         self.assertTrue((res.index == res2.index).all())
 
+        res3 = resample_apply('D', None, EURUSD)
+        self.assertIn('Volume', res3)
+
+        res3 = resample_apply('D', lambda df: (df.Close, df.Close), EURUSD)
+        self.assertIsInstance(res3, pd.DataFrame)
+
     def test_plot_heatmaps(self):
         bt = Backtest(GOOG, SmaCross)
         stats, heatmap = bt.optimize(fast=range(2, 7, 2),
