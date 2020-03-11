@@ -698,7 +698,7 @@ class Backtest:
 
         # Skip first few candles where indicators are still "warming up"
         # +1 to have at least two entries available
-        start = 1 + max((np.isnan(indicator.astype(float)).argmin()
+        start = 1 + max((np.isnan(indicator.astype(float)).argmin(axis=-1).max()
                          for _, indicator in indicator_attrs), default=0)
 
         # Disable "invalid value encountered in ..." warnings. Comparison
