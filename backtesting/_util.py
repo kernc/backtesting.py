@@ -15,11 +15,13 @@ def try_(lazy_func, default=None, exception=Exception):
 def _as_str(value):
     if isinstance(value, (Number, str)):
         return str(value)
+    if isinstance(value, pd.DataFrame):
+        return 'df'
     name = str(getattr(value, 'name', '') or '')
+    if name in ('Open', 'High', 'Low', 'Close', 'Volume'):
+        return name[:1]
     if callable(value):
-        name = value.__name__.replace('<lambda>', '')
-    if name in ('Open', 'High', 'Low', 'Close'):
-        name = name[:1]
+        name = value.__name__.replace('<lambda>', 'λ')
     if len(name) > 10:
         name = name[:9] + '…'
     return name
@@ -93,13 +95,13 @@ class _Data:
         self.__arrays['__index'] = df.index.copy()
 
     def __getitem__(self, item):
-        return getattr(self, item)
+        return self.__get_array(item)
 
     def __getattr__(self, item):
         try:
             return self.__get_array(item)
         except KeyError:
-            raise KeyError("Column '{}' not in data".format(item)) from None
+            raise AttributeError("Column '{}' not in data".format(item)) from None
 
     def _set_length(self, i):
         self.__i = i

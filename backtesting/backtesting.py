@@ -115,7 +115,7 @@ class Strategy(metaclass=ABCMeta):
         """
         if name is None:
             params = ','.join(filter(None, map(_as_str, chain(args, kwargs.values()))))
-            func_name = func.__name__.replace('<lambda>', 'λ')
+            func_name = _as_str(func)
             name = ('{}({})' if params else '{}').format(func_name, params)
         else:
             name = name.format(*map(_as_str, args),

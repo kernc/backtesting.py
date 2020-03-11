@@ -130,12 +130,8 @@ class TestBacktest(TestCase):
                 assert resampled in self._indicators, "Strategy.I not called"
                 assert resampled_ind in self._indicators, "Strategy.I not called"
 
-                try:
-                    self.data.X
-                except KeyError:
-                    pass
-                else:
-                    assert False
+                assert 1 == try_(lambda: self.data.X, 1, AttributeError)
+                assert 1 == try_(lambda: self.data['X'], 1, KeyError)
 
                 assert self.data.pip == .01
 
@@ -588,8 +584,10 @@ class TestUtil(TestCase):
         self.assertEqual(_as_str(_Indicator([1, 2], name='x')), 'x')
         self.assertEqual(_as_str(func), 'func')
         self.assertEqual(_as_str(Class), 'Class')
-        self.assertEqual(_as_str(lambda x: x), '')
-        for s in ('Open', 'High', 'Low', 'Close'):
+        self.assertEqual(_as_str(pd.Series([1, 2], name='x')), 'x')
+        self.assertEqual(_as_str(pd.DataFrame()), 'df')
+        self.assertEqual(_as_str(lambda x: x), 'λ')
+        for s in ('Open', 'High', 'Low', 'Close', 'Volume'):
             self.assertEqual(_as_str(_Array([1], name=s)), s[0])
 
 
