@@ -150,6 +150,7 @@ def plot(*, results: pd.Series,
          plot_volume=True, plot_drawdown=False,
          smooth_equity=False, relative_equity=True,
          superimpose=True, resample=True,
+         reverse_indicators=True,
          show_legend=True, open_browser=True):
     """
     Like much of GUI code everywhere, this is a mess.
@@ -488,6 +489,7 @@ return this.labels[index] || "";
                 return self is other
 
         ohlc_colors = colorgen()
+        indicator_figs = []
 
         for i, value in enumerate(indicators):
             value = np.atleast_2d(value)
@@ -503,7 +505,7 @@ return this.labels[index] || "";
                 fig = fig_ohlc
             else:
                 fig = new_indicator_figure()
-                figs_below_ohlc.append(fig)
+                indicator_figs.append(fig)
             tooltips = []
             colors = value._opts['color']
             colors = colors and cycle(_as_list(colors)) or (
@@ -556,6 +558,7 @@ return this.labels[index] || "";
                 # have the legend only contain text without the glyph
                 if len(value) == 1:
                     fig.legend.glyph_width = 0
+        return indicator_figs
 
     # Construct figure ...
 
@@ -577,7 +580,10 @@ return this.labels[index] || "";
 
     ohlc_bars = _plot_ohlc()
     _plot_ohlc_trades()
-    _plot_indicators()
+    indicator_figs = _plot_indicators()
+    if reverse_indicators:
+        indicator_figs = indicator_figs[::-1]
+    figs_below_ohlc.extend(indicator_figs)
 
     set_tooltips(fig_ohlc, ohlc_tooltips, vline=True, renderers=[ohlc_bars])
 

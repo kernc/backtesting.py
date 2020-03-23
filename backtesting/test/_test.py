@@ -455,6 +455,7 @@ class TestPlot(TestCase):
                           resample='1W',
                           smooth_equity=False,
                           relative_equity=False,
+                          reverse_indicators=True,
                           show_legend=False).items():
                 with self.subTest(param=p[0]):
                     bt.plot(**dict([p]), filename=f, open_browser=False)
