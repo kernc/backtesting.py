@@ -459,7 +459,7 @@ return this.labels[index] || "";
                 figs_below_ohlc.append(fig)
             tooltips = []
             colors = value._opts['color']
-            colors = colors and cycle([_as_list(colors)[0]]) or (
+            colors = colors and cycle(_as_list(colors)) or (
                 cycle([next(ohlc_colors)]) if is_overlay else colorgen())
             legend_label = LegendStr(value.name)
             for j, arr in enumerate(value, 1):
