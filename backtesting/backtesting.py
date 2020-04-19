@@ -824,23 +824,35 @@ class Backtest:
             for i in range(0, len(seq), n):
                 yield seq[i:i + n]
 
-        # If multiprocessing start method is 'fork' (i.e. on POSIX), use
-        # a pool of processes to compute results in parallel.
-        # Otherwise (i.e. on Windos), sequential computation will be "faster".
-        if mp.get_start_method(allow_none=False) == 'fork':
-            with ProcessPoolExecutor() as executor:
-                futures = [executor.submit(self._mp_task, params)
-                           for params in _batch(param_combos)]
-                for future in _tqdm(as_completed(futures), total=len(futures)):
-                    for params, stats in future.result():
-                        heatmap[tuple(params.values())] = maximize(stats)
-        else:
-            if os.name == 'posix':
-                warnings.warn("For multiprocessing support in `Backtest.optimize()` "
-                              "set multiprocessing start method to 'fork'.")
-            for params in _tqdm(param_combos):
-                for _, stats in self._mp_task([params]):
-                    heatmap[tuple(params.values())] = maximize(stats)
+        # Save necessary objects into "global" state; pass into concurrent executor
+        # (and thus pickle) nothing but two numbers; receive nothing but numbers.
+        # With start method "fork", children processes will inherit parent address space
+        # in a copy-on-write manner, achieving better performance/RAM benefit.
+        backtest_uuid = np.random.random()
+        param_batches = list(_batch(param_combos))
+        Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)
+        try:
+            # If multiprocessing start method is 'fork' (i.e. on POSIX), use
+            # a pool of processes to compute results in parallel.
+            # Otherwise (i.e. on Windos), sequential computation will be "faster".
+            if mp.get_start_method(allow_none=False) == 'fork':
+                with ProcessPoolExecutor() as executor:
+                    futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
+                               for i in range(len(param_batches))]
+                    for future in _tqdm(as_completed(futures), total=len(futures)):
+                        batch_index, values = future.result()
+                        for value, params in zip(values, param_batches[batch_index]):
+                            heatmap[tuple(params.values())] = value
+            else:
+                if os.name == 'posix':
+                    warnings.warn("For multiprocessing support in `Backtest.optimize()` "
+                                  "set multiprocessing start method to 'fork'.")
+                for batch_index in _tqdm(range(len(param_batches))):
+                    _, values = Backtest._mp_task(backtest_uuid, batch_index)
+                    for value, params in zip(values, param_batches[batch_index]):
+                        heatmap[tuple(params.values())] = value
+        finally:
+            del Backtest._mp_backtests[backtest_uuid]
 
         best_params = heatmap.idxmax()
 
@@ -856,10 +868,14 @@ class Backtest:
             return self._results, heatmap
         return self._results
 
-    def _mp_task(self, param_combos):
-        return [(params, stats) for params, stats in ((params, self.run(**params))
-                                                      for params in param_combos)
-                if stats['# Trades']]
+    @staticmethod
+    def _mp_task(backtest_uuid, batch_index):
+        bt, param_batches, maximize_func = Backtest._mp_backtests[backtest_uuid]
+        return batch_index, [maximize_func(stats) if stats['# Trades'] else np.nan
+                             for stats in (bt.run(**params)
+                                           for params in param_batches[batch_index])]
+
+    _mp_backtests = {}
 
     @staticmethod
     def _compute_drawdown_duration_peaks(dd: pd.Series):

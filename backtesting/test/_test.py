@@ -8,6 +8,7 @@ from glob import glob
 from runpy import run_path
 from tempfile import NamedTemporaryFile, gettempdir
 from unittest import TestCase
+from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -371,6 +372,34 @@ class TestOptimize(TestCase):
 
         with _tempfile() as f:
             bt.plot(filename=f, open_browser=False)
+
+    def test_nowrite_df(self):
+        # Test we don't write into passed data df by default.
+        # Important for copy-on-write in Backtest.optimize()
+        df = EURUSD.astype(float)
+        values = df.values.ctypes.data
+        assert values == df.values.ctypes.data
+
+        class S(SmaCross):
+            def init(self):
+                super().init()
+                assert values == self.data.df.values.ctypes.data
+
+        bt = Backtest(df, S)
+        _ = bt.run()
+        assert values == bt._data.values.ctypes.data
+
+    def test_multiprocessing_windows_spawn(self):
+        df = GOOG.iloc[:100]
+        kw = dict(fast=[10])
+
+        stats1 = Backtest(df, SmaCross).optimize(**kw)
+        with patch('multiprocessing.get_start_method', lambda **_: 'spawn'):
+            with self.assertWarns(UserWarning) as cm:
+                stats2 = Backtest(df, SmaCross).optimize(**kw)
+
+        self.assertIn('multiprocessing support', cm.warning.args[0])
+        assert stats1.filter('[^_]').equals(stats2.filter('[^_]')), (stats1, stats2)
 
     def test_optimize_invalid_param(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
