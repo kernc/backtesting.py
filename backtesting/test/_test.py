@@ -373,6 +373,7 @@ class TestOptimize(TestCase):
         with _tempfile() as f:
             bt.plot(filename=f, open_browser=False)
 
+    @unittest.skipIf(not hasattr(_Array, 'df'), 'v2 branch is not merged')
     def test_nowrite_df(self):
         # Test we don't write into passed data df by default.
         # Important for copy-on-write in Backtest.optimize()
