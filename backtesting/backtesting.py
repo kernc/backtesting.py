@@ -749,7 +749,7 @@ class Backtest:
         series, an additional `pd.Series` is returned with a multiindex
         of all admissible parameter combinations, which can be further
         inspected or projected onto 2D to plot a heatmap
-        (see `backtesting.backtesting.lib.plot_heatmaps()`).
+        (see `backtesting.lib.plot_heatmaps()`).
 
         Additional keyword arguments represent strategy arguments with
         list-like collections of possible values. For example, the following
@@ -762,6 +762,9 @@ class Backtest:
         .. TODO::
             Add parameter `max_tries: Union[int, float] = None` which switches
             from exhaustive grid search to random search. See notes in the source.
+
+        .. TODO::
+            Improve multiprocessing/parallel execution on Windos with start method 'spawn'.
         """
         if not kwargs:
             raise ValueError('Need some strategy parameters to optimize')
