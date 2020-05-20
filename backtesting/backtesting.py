@@ -73,7 +73,7 @@ class Strategy(metaclass=ABCMeta):
             setattr(self, k, v)
         return params
 
-    def I(self,  # noqa: E743
+    def I(self,  # noqa: E741, E743
           func: Callable, *args,
           name=None, plot=True, overlay=None, color=None, scatter=False,
           **kwargs) -> np.ndarray:
