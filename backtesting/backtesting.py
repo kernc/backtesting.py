@@ -1285,7 +1285,7 @@ class Backtest:
         s.loc['Win Rate [%]'] = win_rate = np.nan if not n_trades else (pl > 0).sum() / n_trades * 100  # noqa: E501
         s.loc['Best Trade [%]'] = returns.max() * 100
         s.loc['Worst Trade [%]'] = returns.min() * 100
-        mean_return = returns.mean()
+        mean_return = np.exp(np.log(1 + returns).sum() / (len(returns) or np.nan)) - 1
         s.loc['Avg. Trade [%]'] = mean_return * 100
         s.loc['Max. Trade Duration'] = _round_timedelta(durations.max())
         s.loc['Avg. Trade Duration'] = _round_timedelta(durations.mean())
