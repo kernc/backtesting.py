@@ -39,6 +39,7 @@ before_install:
   - set -e
 
 install:
+  - pip install -U pip setuptools
   - pip uninstall -y numpy  # Avoid https://travis-ci.org/github/kernc/backtesting.py/jobs/704292730
   - pip install -U --pre .[test]
 
