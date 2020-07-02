@@ -14,6 +14,8 @@ matrix:
   include:
     - python: '3.5'
     - python: '3.7'
+      before_install:
+        - pip uninstall -y numpy  # Avoid https://travis-ci.org/github/kernc/backtesting.py/jobs/704292730
 
     - python: '3.8'
       name: 'Lint, Test w/ Coverage'
@@ -39,7 +41,8 @@ before_install:
   - set -e
 
 install:
-  - pip install --pre .[test]
+  - pip install -U pip setuptools
+  - pip install -U --pre .[test]
 
 script:
   - BOKEH_BROWSER=none time catchsegv python setup.py test
