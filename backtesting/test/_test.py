@@ -329,6 +329,16 @@ class TestBacktest(TestCase):
 
 
 class TestStrategy(TestCase):
+    def _Backtest(self, strategy_coroutine, **kwargs):
+        class S(Strategy):
+            def init(self):
+                self.step = strategy_coroutine(self)
+
+            def next(self):
+                try_(self.step.__next__, None, StopIteration)
+
+        return Backtest(SHORT_DATA, S, **kwargs)
+
     def test_position(self):
         def coroutine(self):
             yield self.buy()
@@ -349,14 +359,18 @@ class TestStrategy(TestCase):
             assert not self.position.pl
             assert not self.position.pl_pct
 
-        class S(Strategy):
-            def init(self):
-                self.step = coroutine(self)
+        self._Backtest(coroutine).run()
 
-            def next(self):
-                try_(self.step.__next__, None, StopIteration)
+    def test_broker_hedging(self):
+        def coroutine(self):
+            yield self.buy(size=2)
 
-        Backtest(SHORT_DATA, S).run()
+            assert len(self.trades) == 1
+            yield self.sell(size=1)
+
+            assert len(self.trades) == 2
+
+        self._Backtest(coroutine, hedging=True).run()
 
 
 class TestOptimize(TestCase):

@@ -356,9 +356,7 @@ class Order:
     Place new orders through `Strategy.buy()` and `Strategy.sell()`.
     Query existing orders through `Strategy.orders`.
 
-    When an order is executed or [filled], it normally results in a `Trade`, except when an
-    existing opposite-facing trade can be sufficiently
-    reduced or closed in an [NFA compliant FIFO] manner.
+    When an order is executed or [filled], it results in a `Trade`.
 
     If you wish to modify aspects of a placed but not yet filled order,
     cancel it and place a new one instead.
@@ -366,7 +364,6 @@ class Order:
     All placed orders are [Good 'Til Canceled].
 
     [filled]: https://www.investopedia.com/terms/f/fill.asp
-    [NFA compliant FIFO]: https://www.investopedia.com/terms/n/nfa-compliance-rule-2-43b.asp
     [Good 'Til Canceled]: https://www.investopedia.com/terms/g/gtc.asp
     """
     def __init__(self, broker: '_Broker',
@@ -646,7 +643,7 @@ class Trade:
 
 
 class _Broker:
-    def __init__(self, *, data, cash, commission, margin, trade_on_close, index):
+    def __init__(self, *, data, cash, commission, margin, trade_on_close, hedging, index):
         assert 0 < cash, "cash shosuld be >0, is {}".format(cash)
         assert 0 <= commission < .1, "commission should be between 0-10%, is {}".format(commission)
         assert 0 < margin <= 1, "margin should be between 0 and 1, is {}".format(margin)
@@ -655,6 +652,7 @@ class _Broker:
         self._commission = commission
         self._leverage = 1 / margin
         self._trade_on_close = trade_on_close
+        self._hedging = hedging
 
         self._equity = np.tile(np.nan, len(index))
         self.orders = []  # type: List[Order]
@@ -825,25 +823,26 @@ class _Broker:
             assert size == round(size)
             need_size = int(size)
 
-            # Fill position by FIFO closing/reducing existing opposite-facing trades.
-            # Existing trades are closed at unadjusted price, because the adjustment
-            # was already made when buying.
-            for trade in list(self.trades):
-                if trade.is_long == order.is_long:
-                    continue
-                assert np.sign(trade.size) + np.sign(order.size) == 0
+            if not self._hedging:
+                # Fill position by FIFO closing/reducing existing opposite-facing trades.
+                # Existing trades are closed at unadjusted price, because the adjustment
+                # was already made when buying.
+                for trade in list(self.trades):
+                    if trade.is_long == order.is_long:
+                        continue
+                    assert np.sign(trade.size) + np.sign(order.size) == 0
 
-                # Order size greater than this opposite-directed existing trade,
-                # so it will be closed completely
-                if abs(need_size) >= abs(trade.size):
-                    self._close_trade(trade, price, time_index)
-                    need_size += trade.size
-                else:
-                    # The existing trade is larger than the new order,
-                    # so it will only be closed partially
-                    self._reduce_trade(trade, price, need_size, time_index)
-                    need_size = 0
-                    break
+                    # Order size greater than this opposite-directed existing trade,
+                    # so it will be closed completely
+                    if abs(need_size) >= abs(trade.size):
+                        self._close_trade(trade, price, time_index)
+                        need_size += trade.size
+                    else:
+                        # The existing trade is larger than the new order,
+                        # so it will only be closed partially
+                        self._reduce_trade(trade, price, need_size, time_index)
+                        need_size = 0
+                        break
 
             # If we don't have enough liquidity to cover for the order, cancel it
             if abs(need_size) * adjusted_price > self.margin_available * self._leverage:
@@ -918,7 +917,8 @@ class Backtest:
                  cash: float = 10000,
                  commission: float = .0,
                  margin: float = 1.,
-                 trade_on_close=False
+                 trade_on_close=False,
+                 hedging=False,
                  ):
         """
         Initialize a backtest. Requires data and a strategy to test.
@@ -952,6 +952,12 @@ class Backtest:
         If `trade_on_close` is `True`, market orders will be executed
         with respect to the current bar's closing price instead of the
         next bar's open.
+
+        If `hedging` is `True`, allow trades in both directions simultaneously.
+        If `False`, the opposite-facing orders first close existing trades in
+        a [FIFO] manner.
+
+        [FIFO]: https://www.investopedia.com/terms/n/nfa-compliance-rule-2-43b.asp
         """
 
         if not (isinstance(strategy, type) and issubclass(strategy, Strategy)):
@@ -999,7 +1005,8 @@ class Backtest:
         self._data = data   # type: pd.DataFrame
         self._broker = partial(
             _Broker, cash=cash, commission=commission, margin=margin,
-            trade_on_close=trade_on_close, index=data.index
+            trade_on_close=trade_on_close, hedging=hedging,
+            index=data.index,
         )
         self._strategy = strategy
         self._results = None
