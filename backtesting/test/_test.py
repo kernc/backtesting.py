@@ -372,6 +372,18 @@ class TestStrategy(TestCase):
 
         self._Backtest(coroutine, hedging=True).run()
 
+    def test_broker_exclusive_orders(self):
+        def coroutine(self):
+            yield self.buy(size=2)
+
+            assert len(self.trades) == 1
+            yield self.sell(size=3)
+
+            assert len(self.trades) == 1
+            assert self.trades[0].size == -3
+
+        self._Backtest(coroutine, exclusive_orders=True).run()
+
 
 class TestOptimize(TestCase):
     def test_optimize(self):

@@ -643,7 +643,8 @@ class Trade:
 
 
 class _Broker:
-    def __init__(self, *, data, cash, commission, margin, trade_on_close, hedging, index):
+    def __init__(self, *, data, cash, commission, margin,
+                 trade_on_close, hedging, exclusive_orders, index):
         assert 0 < cash, "cash shosuld be >0, is {}".format(cash)
         assert 0 <= commission < .1, "commission should be between 0-10%, is {}".format(commission)
         assert 0 < margin <= 1, "margin should be between 0 and 1, is {}".format(margin)
@@ -653,6 +654,7 @@ class _Broker:
         self._leverage = 1 / margin
         self._trade_on_close = trade_on_close
         self._hedging = hedging
+        self._exclusive_orders = exclusive_orders
 
         self._equity = np.tile(np.nan, len(index))
         self.orders = []  # type: List[Order]
@@ -699,7 +701,17 @@ class _Broker:
         if trade:
             self.orders.insert(0, order)
         else:
+            # If exclusive orders (each new order auto-closes previous orders/position),
+            # cancel all non-contingent orders and close all open trades beforehand
+            if self._exclusive_orders:
+                for o in self.orders:
+                    if not o.is_contingent:
+                        o.cancel()
+                for t in self.trades:
+                    t.close()
+
             self.orders.append(order)
+
         return order
 
     @property
@@ -919,6 +931,7 @@ class Backtest:
                  margin: float = 1.,
                  trade_on_close=False,
                  hedging=False,
+                 exclusive_orders=False
                  ):
         """
         Initialize a backtest. Requires data and a strategy to test.
@@ -1006,7 +1019,7 @@ class Backtest:
         self._broker = partial(
             _Broker, cash=cash, commission=commission, margin=margin,
             trade_on_close=trade_on_close, hedging=hedging,
-            index=data.index,
+            exclusive_orders=exclusive_orders, index=data.index,
         )
         self._strategy = strategy
         self._results = None
