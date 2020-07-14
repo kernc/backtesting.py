@@ -7,7 +7,6 @@
         font-size: 2em;
         font-weight: bold;
         color: #555;
-        background: #f6f6f6;
         text-align: center;
         padding: .5em 0;
     }
