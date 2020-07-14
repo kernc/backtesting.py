@@ -282,7 +282,7 @@
                 </p>
                 <p>
                     Whenever the fast, 10-period simple moving average of closing prices crosses
-                    <b>above</b> the slower, 30-period moving average, we go <b>long</b>,
+                    <b>above</b> the slower, 20-period moving average, we go <b>long</b>,
                     buying as many stocks as we can afford.
                     When it crosses <b>below</b>, we close our long position and go <b>short</b>
                     (assuming the underlying instrument is actually a
@@ -303,7 +303,7 @@ from backtesting.test import SMA, GOOG
 
 class SmaCross(Strategy):
     n1 = 10
-    n2 = 30
+    n2 = 20
 
     def init(self):
         self.sma1 = self.I(SMA, self.data.Close, self.n1)
@@ -316,7 +316,8 @@ class SmaCross(Strategy):
             self.sell()
 
 
-bt = Backtest(GOOG, SmaCross, cash=10000, commission=.002)
+bt = Backtest(GOOG, SmaCross, cash=10000,
+              commission=.002, exclusive_orders=True)
 
 output = bt.run()
 bt.plot()</code></pre>
@@ -327,33 +328,34 @@ bt.plot()</code></pre>
                     <pre style="padding:1em"><samp>Start                     2004-08-19 00:00:00
 End                       2013-03-01 00:00:00
 Duration                   3116 days 00:00:00
-Exposure [%]                          93.9345
-Equity Final [$]                      52624.3
-Equity Peak [$]                       76908.3
-Return [%]                            426.243
-Buy & Hold Return [%]                 703.458
-Max. Drawdown [%]                    -48.1507
-Avg. Drawdown [%]                    -5.49471
-Max. Drawdown Duration      477 days 00:00:00
-Avg. Drawdown Duration       33 days 00:00:00
-# Trades                                   65
-Win Rate [%]                          46.1538
-Best Trade [%]                        54.0536
-Worst Trade [%]                      -18.8556
-Avg. Trade [%]                        3.04044
-Max. Trade Duration         183 days 00:00:00
-Avg. Trade Duration          46 days 00:00:00
-Expectancy [%]                        8.77469
-SQN                                  0.915532
-Sharpe Ratio                         0.231698
-Sortino Ratio                        0.709671
-Calmar Ratio                        0.0631443
-_strategy              SmaCross(n1=10, n2=30)</samp></pre>
+Exposure Time [%]                       94.27
+Equity Final [$]                     68935.12
+Equity Peak [$]                      68991.22
+Return [%]                             589.35
+Buy & Hold Return [%]                  703.46
+Max. Drawdown [%]                      -33.08
+Avg. Drawdown [%]                       -5.58
+Max. Drawdown Duration      688 days 00:00:00
+Avg. Drawdown Duration       41 days 00:00:00
+# Trades                                   93
+Win Rate [%]                            53.76
+Best Trade [%]                          57.12
+Worst Trade [%]                        -16.63
+Avg. Trade [%]                           1.96
+Max. Trade Duration         121 days 00:00:00
+Avg. Trade Duration          32 days 00:00:00
+Profit Factor                            2.13
+Expectancy [%]                           6.91
+SQN                                      1.78
+Sharpe Ratio                             0.18
+Sortino Ratio                            0.44
+Calmar Ratio                             0.06
+_strategy              SmaCross(n1=10, n2=20)</samp></pre>
                 </div>
             </div>
         </div>
         <div class="snippet snippet-plot has-text-centered" style="background: white">
-            <iframe src="example.html" id="iframe" loading="lazy" lazyload="on"
+            <iframe src="example.html" id="iframe" loading="lazy"
                     style="width:100%; margin-top:1em; height:566px; overflow:hidden;"
                     data-ga-on="wheel" data-ga-event-category="iframe" data-ga-event-action="wheel"></iframe>
         </div>
