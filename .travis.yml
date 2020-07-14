@@ -23,7 +23,7 @@ matrix:
         - pip install flake8 coverage
       script:
         - flake8
-        - BOKEH_BROWSER=none catchsegv coverage run setup.py test
+        - BOKEH_BROWSER=none catchsegv coverage run -m backtesting.test
       after_success:
         - bash <(curl -s https://codecov.io/bash)
 
@@ -45,4 +45,4 @@ install:
   - pip install -U --pre .[test]
 
 script:
-  - BOKEH_BROWSER=none time catchsegv python setup.py test
+  - BOKEH_BROWSER=none time catchsegv python -m backtesting.test
