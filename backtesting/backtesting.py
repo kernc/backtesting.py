@@ -1157,8 +1157,9 @@ class Backtest:
         if not kwargs:
             raise ValueError('Need some strategy parameters to optimize')
 
+        maximize_key = None
         if isinstance(maximize, str):
-
+            maximize_key = str(maximize)
             stats = self._results if self._results is not None else self.run()
             if maximize not in stats:
                 raise ValueError('`maximize`, if str, must match a key in pd.Series '
@@ -1202,6 +1203,7 @@ class Backtest:
                           stacklevel=2)
 
         heatmap = pd.Series(np.nan,
+                            name=maximize_key,
                             index=pd.MultiIndex.from_tuples([p.values() for p in param_combos],
                                                             names=next(iter(param_combos)).keys()))
 

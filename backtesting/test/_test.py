@@ -1,3 +1,4 @@
+import inspect
 import os
 import sys
 import time
@@ -400,7 +401,8 @@ class TestOptimize(TestCase):
         res = bt.optimize(**OPT_PARAMS)
         self.assertIsInstance(res, pd.Series)
 
-        res2 = bt.optimize(**OPT_PARAMS, maximize=lambda s: s['SQN'])
+        default_maximize = inspect.signature(Backtest.optimize).parameters['maximize'].default
+        res2 = bt.optimize(**OPT_PARAMS, maximize=lambda s: s[default_maximize])
         self.assertDictEqual(res.filter(regex='^[^_]').fillna(-1).to_dict(),
                              res2.filter(regex='^[^_]').fillna(-1).to_dict())
 
@@ -408,6 +410,7 @@ class TestOptimize(TestCase):
                                     constraint=lambda d: d.slow > 2 * d.fast)
         self.assertIsInstance(heatmap, pd.Series)
         self.assertEqual(len(heatmap), 4)
+        self.assertEqual(heatmap.name, default_maximize)
 
         with _tempfile() as f:
             bt.plot(filename=f, open_browser=False)
