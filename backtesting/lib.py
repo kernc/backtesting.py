@@ -22,7 +22,7 @@ import pandas as pd
 
 from .backtesting import Strategy
 from ._plotting import plot_heatmaps as _plot_heatmaps
-from ._util import _Array, _Indicator, _as_str
+from ._util import _Array, _as_str
 
 __pdoc__ = {}
 
@@ -39,6 +39,31 @@ e.g.
 
     df.resample('4H', label='right').agg(OHLCV_AGG)
 """
+
+TRADES_AGG = OrderedDict((
+    ('Size', 'sum'),
+    ('EntryBar', 'first'),
+    ('ExitBar', 'last'),
+    ('EntryPrice', 'mean'),
+    ('ExitPrice', 'mean'),
+    ('PnL', 'sum'),
+    ('ReturnPct', 'mean'),
+    ('EntryTime', 'first'),
+    ('ExitTime', 'last'),
+    ('Duration', 'sum'),
+))
+"""Dictionary of rules for aggregating resampled trades data,
+e.g.
+
+    stats['_trades'].resample('1D', on='ExitTime',
+                              label='right').agg(TRADES_AGG)
+"""
+
+_EQUITY_AGG = {
+    'Equity': 'mean',
+    'DrawdownPct': 'max',
+    'DrawdownDuration': 'max',
+}
 
 
 def barssince(condition: Sequence[bool], default=np.inf) -> int:
@@ -150,7 +175,7 @@ def resample_apply(rule: str,
     a time frame to resample `series` to.
 
     [Pandas offset string]: \
-        http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
+http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
 
     `func` is the indicator function to apply on the resampled series.
 
@@ -177,13 +202,13 @@ def resample_apply(rule: str,
                 self.sma = resample_apply(
                     'D', SMA, self.data.Close, 10, plot=False)
 
-    This short snippet is roughly equivalent to:
+    The above short snippet is roughly equivalent to:
 
         class System(Strategy):
             def init(self):
                 # Strategy exposes `self.data` as raw NumPy arrays.
                 # Let's convert closing prices back to pandas Series.
-                close = self.data.Close.to_series()
+                close = self.data.Close.s
 
                 # Resample to daily resolution. Aggregate groups
                 # using their last value (i.e. closing price at the end
@@ -213,9 +238,8 @@ def resample_apply(rule: str,
         assert isinstance(series, _Array), \
             'resample_apply() takes either a `pd.Series`, `pd.DataFrame`, ' \
             'or a `Strategy.data.*` array'
-        series = series.to_series()
+        series = series.s
 
-    series = series.copy()  # XXX: pandas 1.0.1 bug https://github.com/pandas-dev/pandas/issues/31710  # noqa: E501
     resampled = series.resample(rule, label='right').agg(agg).dropna()
     resampled.name = _as_str(series) + '[' + rule + ']'
 
@@ -280,36 +304,51 @@ class SignalStrategy(Strategy):
 
     __pdoc__['SignalStrategy.__init__'] = False
 
-    def set_signal(self, entry: Sequence[int], exit: Optional[Sequence[bool]] = None,
+    def set_signal(self, entry_size: Sequence[float],
+                   exit_portion: Sequence[float] = None,
+                   *,
                    plot: bool = True):
         """
-        Set entry/exit signal vectors (arrays). An long entry signal is considered
-        present wherever `entry` is greater than zero. A short entry signal
-        is considered present wherever `entry` is less than zero. If `exit`
-        is provided, a nonzero value closes the position, if any; otherwise
-        the position is held until a reverse signal in `entry`.
+        Set entry/exit signal vectors (arrays).
+
+        A long entry signal is considered present wherever `entry_size`
+        is greater than zero, and a short signal wherever `entry_size`
+        is less than zero, following `backtesting.backtesting.Order.size` semantics.
+
+        If `exit_portion` is provided, a nonzero value closes portion the position
+        (see `backtesting.backtesting.Trade.close()`) in the respective direction
+        (positive values close long trades, negative short).
 
         If `plot` is `True`, the signal entry/exit indicators are plotted when
         `backtesting.backtesting.Backtest.plot` is called.
         """
-        self.__entry_signal = _Indicator(pd.Series(entry, dtype=float).fillna(0),
-                                         name='entry', plot=plot, overlay=False)
-        if exit is not None:
-            self.__exit_signal = _Indicator(pd.Series(exit, dtype=float).fillna(0),
-                                            name='exit', plot=plot, overlay=False)
+        self.__entry_signal = self.I(
+            lambda: pd.Series(entry_size, dtype=float).replace(0, np.nan),
+            name='entry size', plot=plot, overlay=False, scatter=True, color='black')
+
+        if exit_portion is not None:
+            self.__exit_signal = self.I(
+                lambda: pd.Series(exit_portion, dtype=float).replace(0, np.nan),
+                name='exit portion', plot=plot, overlay=False, scatter=True, color='black')
 
     def next(self):
         super().next()
 
-        if self.position and self.__exit_signal[-1]:
-            self.position.close()
+        exit_portion = self.__exit_signal[-1]
+        if exit_portion > 0:
+            for trade in self.trades:
+                if trade.is_long:
+                    trade.close(exit_portion)
+        elif exit_portion < 0:
+            for trade in self.trades:
+                if trade.is_short:
+                    trade.close(-exit_portion)
 
-        signal = self.__entry_signal[-1]
-
-        if signal > 0:
-            self.buy()
-        elif signal < 0:
-            self.sell()
+        entry_size = self.__entry_signal[-1]
+        if entry_size > 0:
+            self.buy(size=entry_size)
+        elif entry_size < 0:
+            self.sell(size=-entry_size)
 
 
 class TrailingStrategy(Strategy):
@@ -352,12 +391,13 @@ class TrailingStrategy(Strategy):
 
     def next(self):
         super().next()
-
-        if self.__n_atr and self.position:
-            if self.position.is_long:
-                self.orders.set_sl(self.data.Close[-1] - self.__atr[-1] * self.__n_atr)
+        for trade in self.trades:
+            if trade.is_long:
+                trade.sl = max(trade.sl or -np.inf,
+                               self.data.Close[-1] - self.__atr[-1] * self.__n_atr)
             else:
-                self.orders.set_sl(self.data.Close[-1] + self.__atr[-1] * self.__n_atr)
+                trade.sl = min(trade.sl or np.inf,
+                               self.data.Close[-1] + self.__atr[-1] * self.__n_atr)
 
 
 # NOTE: Don't put anything below this __all__ list

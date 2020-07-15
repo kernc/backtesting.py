@@ -1,3 +1,4 @@
+import warnings
 from typing import Sequence
 from numbers import Number
 
@@ -33,9 +34,9 @@ def _as_list(value):
     return [value]
 
 
-def _data_period(df):
+def _data_period(index):
     """Return data index period as pd.Timedelta"""
-    values = df.index[-100:].to_series()
+    values = pd.Series(index[-100:])
     return values.diff().median()
 
 
@@ -44,12 +45,10 @@ class _Array(np.ndarray):
     ndarray extended to supply .name and other arbitrary properties
     in ._opts dict.
     """
-    def __new__(cls, array, *, name=None, write=False, **kwargs):
+    def __new__(cls, array, *, name=None, **kwargs):
         obj = np.asarray(array).view(cls)
         obj.name = name or array.name
         obj._opts = kwargs
-        if not write:
-            obj.setflags(write=False)
         return obj
 
     def __array_finalize__(self, obj):
@@ -70,7 +69,20 @@ class _Array(np.ndarray):
             return super().__float__()
 
     def to_series(self):
-        return pd.Series(self, index=self._opts['data'].index, name=self.name)
+        warnings.warn("`.to_series()` is deprecated. For pd.Series conversion, use accessor `.s`")
+        return self.s
+
+    @property
+    def s(self) -> pd.Series:
+        values = np.atleast_2d(self)
+        return pd.Series(values[0], index=self._opts['data'].index, name=self.name)
+
+    @property
+    def df(self) -> pd.DataFrame:
+        values = np.atleast_2d(np.asarray(self))
+        df = pd.DataFrame(values.T, index=self._opts['data'].index,
+                          columns=[self.name] * len(values))
+        return df
 
 
 class _Indicator(_Array):
@@ -84,15 +96,13 @@ class _Data:
     and the returned "series" are _not_ `pd.Series` but `np.ndarray`
     for performance reasons.
     """
-    def __init__(self, df):
+    def __init__(self, df: pd.DataFrame):
+        self.__df = df
         self.__i = len(df)
         self.__pip = None
         self.__cache = {}
-
-        self.__arrays = {col: _Array(arr, data=self)
-                         for col, arr in df.items()}
-        # Leave index as Series because pd.Timestamp nicer API to work with
-        self.__arrays['__index'] = df.index.copy()
+        self.__arrays = None
+        self._update()
 
     def __getitem__(self, item):
         return self.__get_array(item)
@@ -107,8 +117,26 @@ class _Data:
         self.__i = i
         self.__cache.clear()
 
+    def _update(self):
+        self.__arrays = {col: _Array(arr, data=self)
+                         for col, arr in self.__df.items()}
+        # Leave index as Series because pd.Timestamp nicer API to work with
+        self.__arrays['__index'] = self.__df.index.copy()
+
+    def __repr__(self):
+        i = min(self.__i, len(self.__df) - 1)
+        return '<Data i={} ({}) {}>'.format(i, self.__arrays['__index'][i],
+                                            ', '.join('{}={}'.format(k, v)
+                                                      for k, v in self.__df.iloc[i].items()))
+
     def __len__(self):
         return self.__i
+
+    @property
+    def df(self) -> pd.DataFrame:
+        return (self.__df.iloc[:self.__i]
+                if self.__i < len(self.__df)
+                else self.__df)
 
     @property
     def pip(self):
@@ -117,7 +145,7 @@ class _Data:
                                          for s in self.__arrays['Close'].astype(str)])
         return self.__pip
 
-    def __get_array(self, key):
+    def __get_array(self, key) -> _Array:
         arr = self.__cache.get(key)
         if arr is None:
             arr = self.__cache[key] = self.__arrays[key][:self.__i]
@@ -144,8 +172,8 @@ class _Data:
         return self.__get_array('Volume')
 
     @property
-    def index(self):
-        return self.__get_array('__index')
+    def index(self) -> pd.DatetimeIndex:
+        return self.__get_array('__index')  # type: ignore
 
     # Make pickling in Backtest.optimize() work with our catch-all __getattr__
     def __getstate__(self):

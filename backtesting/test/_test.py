@@ -60,8 +60,10 @@ class SmaCross(Strategy):
 
     def next(self):
         if crossover(self.sma1, self.sma2):
+            self.position.close()
             self.buy()
         elif crossover(self.sma2, self.sma1):
+            self.position.close()
             self.sell()
 
 
@@ -154,47 +156,55 @@ class TestBacktest(TestCase):
                 assert not np.isnan(self.sma[-1])
                 assert self.data.index[-1]
 
-                self.orders.is_long
-                self.orders.is_short
-                self.orders.entry
-                self.orders.sl
-                self.orders.tp
-
                 self.position
                 self.position.size
                 self.position.pl
                 self.position.pl_pct
-                self.position.open_price
-                self.position.open_time
                 self.position.is_long
 
                 if crossover(self.sma, self.data.Close):
-                    self.orders.cancel()
-                    self.sell()
-                    assert not self.orders.is_long
-                    assert self.orders.is_short
-                    assert self.orders.entry
-                    assert not self.orders.sl
-                    assert not self.orders.tp
+                    self.orders.cancel()  # cancels only non-contingent
                     price = self.data.Close[-1]
                     sl, tp = 1.05 * price, .9 * price
-                    self.sell(price, sl=sl, tp=tp)
-                    self.orders.set_entry(price)
-                    self.orders.set_sl(sl)
-                    self.orders.set_tp(tp)
-                    assert self.orders.entry == price
-                    assert self.orders.sl == sl
-                    assert self.orders.tp == tp
+
+                    n_orders = len(self.orders)
+                    self.sell(size=.21, limit=price, stop=price, sl=sl, tp=tp)
+                    assert len(self.orders) == n_orders + 1
+
+                    order = self.orders[-1]
+                    assert order.limit == price
+                    assert order.stop == price
+                    assert order.size == -.21
+                    assert order.sl == sl
+                    assert order.tp == tp
+                    assert not order.is_contingent
 
                 elif self.position:
-                    assert not self.orders.entry
                     assert not self.position.is_long
-                    assert not not self.position.is_short
-                    assert self.position.open_price
+                    assert self.position.is_short
                     assert self.position.pl
                     assert self.position.pl_pct
                     assert self.position.size < 0
-                    if self.data.index[-1] - self.position.open_time > FIVE_DAYS:
+
+                    trade = self.trades[0]
+                    if self.data.index[-1] - self.data.index[trade.entry_bar] > FIVE_DAYS:
+                        assert not trade.is_long
+                        assert trade.is_short
+                        assert trade.size < 0
+                        assert trade.entry_bar > 0
+                        assert trade.exit_bar is None
+                        assert trade.entry_price > 0
+                        assert trade.exit_price is None
+                        assert trade.pl / 1
+                        assert trade.pl_pct / 1
+                        assert trade.value > 0
+                        assert trade.sl
+                        assert trade.tp
+                        # Close multiple times
+                        self.position.close(.5)
+                        self.position.close(.5)
+                        self.position.close(.5)
+                        self.position.close()
                         self.position.close()
 
         bt = Backtest(GOOG, Assertive)
@@ -241,36 +251,42 @@ class TestBacktest(TestCase):
                 # NOTE: These values are also used on the website!
                 '# Trades': 65,
                 'Avg. Drawdown Duration': pd.Timedelta('41 days 00:00:00'),
-                'Avg. Drawdown [%]': -6.087158560194047,
+                'Avg. Drawdown [%]': -5.925851581948801,
                 'Avg. Trade Duration': pd.Timedelta('46 days 00:00:00'),
-                'Avg. Trade [%]': 3.0404430275631444,
-                'Best Trade [%]': 54.05363186670138,
+                'Avg. Trade [%]': 2.3537113951143773,
+                'Best Trade [%]': 53.59595229490424,
                 'Buy & Hold Return [%]': 703.4582419772772,
-                'Calmar Ratio': 0.0631443286380662,
+                'Calmar Ratio': 0.049055964204885415,
                 'Duration': pd.Timedelta('3116 days 00:00:00'),
                 'End': pd.Timestamp('2013-03-01 00:00:00'),
-                'Equity Final [$]': 52624.29346696951,
-                'Equity Peak [$]': 76908.27001642012,
-                'Expectancy [%]': 8.774692825628644,
-                'Exposure [%]': 93.93453145057767,
+                'Equity Final [$]': 51959.94999999997,
+                'Equity Peak [$]': 75787.44,
+                'Expectancy [%]': 8.791710931051735,
+                'Exposure Time [%]': 93.99441340782123,
                 'Max. Drawdown Duration': pd.Timedelta('584 days 00:00:00'),
-                'Max. Drawdown [%]': -48.15069053929621,
+                'Max. Drawdown [%]': -47.98012705007589,
                 'Max. Trade Duration': pd.Timedelta('183 days 00:00:00'),
-                'Profit Factor': 2.060450149412349,
-                'Return [%]': 426.2429346696951,
-                'SQN': 0.91553210127173,
-                'Sharpe Ratio': 0.23169782960690408,
-                'Sortino Ratio': 0.7096713270577958,
+                'Profit Factor': 2.0880175388920286,
+                'Return [%]': 419.59949999999964,
+                'SQN': 0.916892986080858,
+                'Sharpe Ratio': 0.17914126763602636,
+                'Sortino Ratio': 0.5588698138148217,
                 'Start': pd.Timestamp('2004-08-19 00:00:00'),
                 'Win Rate [%]': 46.15384615384615,
-                'Worst Trade [%]': -18.85561318387153,
+                'Worst Trade [%]': -18.39887353835481,
             }).sort_index()
         )
-        self.assertTrue(
-            stats._trade_data.columns.equals(
-                pd.Index(['Equity', 'Exit Entry', 'Exit Position',
-                          'Entry Price', 'Exit Price', 'P/L', 'Returns',
-                          'Drawdown', 'Drawdown Duration'])))
+
+        self.assertSequenceEqual(
+            sorted(stats['_equity_curve'].columns),
+            sorted(['Equity', 'DrawdownPct', 'DrawdownDuration']))
+
+        self.assertEqual(len(stats['_trades']), 65)
+
+        self.assertSequenceEqual(
+            sorted(stats['_trades'].columns),
+            sorted(['Size', 'EntryBar', 'ExitBar', 'EntryPrice', 'ExitPrice',
+                    'PnL', 'ReturnPct', 'EntryTime', 'ExitTime', 'Duration']))
 
     def test_compute_stats_bordercase(self):
 
@@ -308,11 +324,21 @@ class TestBacktest(TestCase):
                 stats = Backtest(GOOG.iloc[:100], strategy).run()
 
                 self.assertFalse(np.isnan(stats['Equity Final [$]']))
-                self.assertFalse(stats._trade_data['Equity'].isnull().any())
+                self.assertFalse(stats['_equity_curve']['Equity'].isnull().any())
                 self.assertEqual(stats['_strategy'].__class__, strategy)
 
 
 class TestStrategy(TestCase):
+    def _Backtest(self, strategy_coroutine, **kwargs):
+        class S(Strategy):
+            def init(self):
+                self.step = strategy_coroutine(self)
+
+            def next(self):
+                try_(self.step.__next__, None, StopIteration)
+
+        return Backtest(SHORT_DATA, S, **kwargs)
+
     def test_position(self):
         def coroutine(self):
             yield self.buy()
@@ -323,8 +349,6 @@ class TestStrategy(TestCase):
             assert self.position.size > 0
             assert self.position.pl
             assert self.position.pl_pct
-            assert self.position.open_price > 0
-            assert self.position.open_time
 
             yield self.position.close()
 
@@ -334,17 +358,31 @@ class TestStrategy(TestCase):
             assert not self.position.size
             assert not self.position.pl
             assert not self.position.pl_pct
-            assert not self.position.open_price
-            assert not self.position.open_time
 
-        class S(Strategy):
-            def init(self):
-                self.step = coroutine(self)
+        self._Backtest(coroutine).run()
 
-            def next(self):
-                try_(self.step.__next__, None, StopIteration)
+    def test_broker_hedging(self):
+        def coroutine(self):
+            yield self.buy(size=2)
 
-        Backtest(SHORT_DATA, S).run()
+            assert len(self.trades) == 1
+            yield self.sell(size=1)
+
+            assert len(self.trades) == 2
+
+        self._Backtest(coroutine, hedging=True).run()
+
+    def test_broker_exclusive_orders(self):
+        def coroutine(self):
+            yield self.buy(size=2)
+
+            assert len(self.trades) == 1
+            yield self.sell(size=3)
+
+            assert len(self.trades) == 1
+            assert self.trades[0].size == -3
+
+        self._Backtest(coroutine, exclusive_orders=True).run()
 
 
 class TestOptimize(TestCase):
@@ -363,8 +401,8 @@ class TestOptimize(TestCase):
         self.assertIsInstance(res, pd.Series)
 
         res2 = bt.optimize(**OPT_PARAMS, maximize=lambda s: s['SQN'])
-        self.assertSequenceEqual(res.filter(regex='^[^_]').to_dict(),
-                                 res2.filter(regex='^[^_]').to_dict())
+        self.assertDictEqual(res.filter(regex='^[^_]').fillna(-1).to_dict(),
+                             res2.filter(regex='^[^_]').fillna(-1).to_dict())
 
         res3, heatmap = bt.optimize(**OPT_PARAMS, return_heatmap=True,
                                     constraint=lambda d: d.slow > 2 * d.fast)
@@ -374,7 +412,6 @@ class TestOptimize(TestCase):
         with _tempfile() as f:
             bt.plot(filename=f, open_browser=False)
 
-    @unittest.skipIf(not hasattr(_Array, 'df'), 'v2 branch is not merged')
     def test_nowrite_df(self):
         # Test we don't write into passed data df by default.
         # Important for copy-on-write in Backtest.optimize()
@@ -441,9 +478,10 @@ class TestPlot(TestCase):
                           plot_pl=False,
                           plot_drawdown=True,
                           superimpose=False,
-                          omit_missing=False,
+                          resample='1W',
                           smooth_equity=False,
                           relative_equity=False,
+                          reverse_indicators=True,
                           show_legend=False).items():
                 with self.subTest(param=p[0]):
                     bt.plot(**dict([p]), filename=f, open_browser=False)
@@ -490,6 +528,50 @@ class TestPlot(TestCase):
             bt.plot(filename=f, plot_drawdown=True, smooth_equity=True)
             # Give browser time to open before tempfile is removed
             time.sleep(5)
+
+    def test_wellknown(self):
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                date = self.data.index[-1]
+                if date == pd.Timestamp('Thu 19 Oct 2006'):
+                    self.buy(stop=484, limit=466, size=100)
+                elif date == pd.Timestamp('Thu 30 Oct 2007'):
+                    self.position.close()
+                elif date == pd.Timestamp('Tue 11 Nov 2008'):
+                    self.sell(stop=self.data.Low,
+                              limit=324.90,  # High from 14 Nov
+                              size=200)
+
+        bt = Backtest(GOOG, S, margin=.1)
+        stats = bt.run()
+        trades = stats['_trades']
+
+        self.assertAlmostEqual(stats['Equity Peak [$]'], 46961)
+        self.assertEqual(stats['Equity Final [$]'], 0)
+        self.assertEqual(len(trades), 2)
+        assert trades[['EntryTime', 'ExitTime']].equals(
+            pd.DataFrame(dict(EntryTime=pd.to_datetime(['2006-11-01', '2008-11-14']),
+                              ExitTime=pd.to_datetime(['2007-10-31', '2009-09-21']))))
+        assert trades['PnL'].round().equals(pd.Series([23469., -34420.]))
+
+        with _tempfile() as f:
+            bt.plot(filename=f, plot_drawdown=True, smooth_equity=False)
+            # Give browser time to open before tempfile is removed
+            time.sleep(1)
+
+    def test_resample(self):
+        bt = Backtest(GOOG, SmaCross)
+        bt.run()
+        import backtesting._plotting
+        with _tempfile() as f,\
+                patch.object(backtesting._plotting, '_MAX_CANDLES', 10),\
+                self.assertWarns(UserWarning):
+            bt.plot(filename=f, resample=True)
+            # Give browser time to open before tempfile is removed
+            time.sleep(1)
 
     def test_indicator_color(self):
         class S(Strategy):
@@ -584,12 +666,12 @@ class TestLib(TestCase):
     def test_SignalStrategy(self):
         class S(SignalStrategy):
             def init(self):
-                sma = self.data.Close.to_series().rolling(10).mean()
+                sma = self.data.Close.s.rolling(10).mean()
                 self.set_signal(self.data.Close > sma,
                                 self.data.Close < sma)
 
         stats = Backtest(GOOG, S).run()
-        self.assertGreater(stats['# Trades'], 1000)
+        self.assertEqual(stats['# Trades'], 1180)
 
     def test_TrailingStrategy(self):
         class S(TrailingStrategy):
@@ -597,7 +679,7 @@ class TestLib(TestCase):
                 super().init()
                 self.set_atr_periods(40)
                 self.set_trailing_sl(3)
-                self.sma = self.I(lambda: self.data.Close.to_series().rolling(10).mean())
+                self.sma = self.I(lambda: self.data.Close.s.rolling(10).mean())
 
             def next(self):
                 super().next()
@@ -605,7 +687,7 @@ class TestLib(TestCase):
                     self.buy()
 
         stats = Backtest(GOOG, S).run()
-        self.assertGreater(stats['# Trades'], 6)
+        self.assertEqual(stats['# Trades'], 50)
 
 
 class TestUtil(TestCase):
@@ -626,6 +708,22 @@ class TestUtil(TestCase):
         self.assertEqual(_as_str(lambda x: x), 'λ')
         for s in ('Open', 'High', 'Low', 'Close', 'Volume'):
             self.assertEqual(_as_str(_Array([1], name=s)), s[0])
+
+    def test_pandas_accessors(self):
+        class S(Strategy):
+            def init(self):
+                close, index = self.data.Close, self.data.index
+                assert close.s.equals(pd.Series(close, index=index))
+                assert self.data.df['Close'].equals(pd.Series(close, index=index))
+                self.data.df['new_key'] = 2 * close
+
+            def next(self):
+                close, index = self.data.Close, self.data.index
+                assert close.s.equals(pd.Series(close, index=index))
+                assert self.data.df['Close'].equals(pd.Series(close, index=index))
+                assert self.data.df['new_key'].equals(pd.Series(self.data.new_key, index=index))
+
+        Backtest(GOOG.iloc[:20], S).run()
 
 
 @unittest.skipUnless(

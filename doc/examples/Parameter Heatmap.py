@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.3.0
+#       jupytext_version: 1.5.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -21,10 +21,9 @@
 # [basic _backtesting.py_ usage](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html).
 #
 # First, let's again import our helper moving average function.
-# In practice, one can use functions from any indicator library, such as
-# [TA-Lib](https://github.com/mrjbq7/ta-lib),
-# [Tulipy](https://tulipindicators.org),
-# PyAlgoTrade, ...
+# In practice, one should use functions from an indicator library, such as
+# [TA-Lib](https://github.com/mrjbq7/ta-lib) or
+# [Tulipy](https://tulipindicators.org).
 
 from backtesting.test import SMA
 
@@ -33,7 +32,7 @@ from backtesting.test import SMA
 # but we will use four moving averages in total:
 # two moving averages whose relationship determines a general trend
 # (we only trade long when the shorter MA is above the longer one, and vice versa),
-# and two moving averages whose cross-over with Close prices determine the signal to enter or exit the position.
+# and two moving averages whose cross-over with daily _close_ prices determine the signal to enter or exit the position.
 
 # +
 from backtesting import Strategy
@@ -121,7 +120,7 @@ heatmap
 
 heatmap.sort_values().iloc[-3:]
 
-# But people have this enormous faculty of vision, used to make judgements on much larger data sets much faster.
+# But we use vision to make judgements on larger data sets much faster.
 # Let's plot the whole heatmap by projecting it on two chosen dimensions.
 # Say we're mostly interested in how parameters `n1` and `n2`, on average, affect the outcome.
 
@@ -152,3 +151,9 @@ from backtesting.lib import plot_heatmaps
 
 
 plot_heatmaps(heatmap, agg='mean')
+# -
+
+# Learn more by exploring further
+# [examples](https://kernc.github.io/backtesting.py/doc/backtesting/index.html#tutorials)
+# or find more framework options in the
+# [full API reference](https://kernc.github.io/backtesting.py/doc/backtesting/index.html#header-submodules).

@@ -5,7 +5,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.3.0
+#       jupytext_version: 1.5.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -16,10 +16,10 @@
 # ============
 #
 # The best trading strategies relying on technical analysis take into account the price action on multiple time frames.
-# This tutorial will show how to do that with _backtesting.py_, offloading most of the work to
+# This tutorial will show how to do that with backtesting.py, offloading most of the work to
 # [pandas resampling](http://pandas.pydata.org/pandas-docs/stable/timeseries.html#resampling).
 # It is assumed you're already familiar with
-# [basic _backtesting.py_ usage](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html).
+# [basic usage](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html).
 #
 # We will put to the test this long-only, supposed
 # [400%-a-year trading strategy](http://jbmarwood.com/stock-trading-strategy-300/),
@@ -27,11 +27,10 @@
 # [relative strength index](https://en.wikipedia.org/wiki/Relative_strength_index)
 # (RSI) values and moving averages (MA).
 #
-# Let's introduce the two indicators we'll be using.
-# In practice, one can use functions from any indicator library, such as
-# [TA-Lib](https://github.com/mrjbq7/ta-lib),
+# In practice, one should use functions from an indicator library, such as
+# [TA-Lib](https://github.com/mrjbq7/ta-lib) or
 # [Tulipy](https://tulipindicators.org),
-# PyAlgoTrade, ...
+# but among us, let's introduce the two indicators we'll be using.
 
 # +
 import pandas as pd
@@ -138,5 +137,10 @@ backtest.plot()
 
 # Better. While the strategy doesn't perform as well as simple buy & hold, it does so with significantly lower exposure (time in market).
 #
-# In conclusion, to test strategies on multiple time frames, you need to pass in data in the lowest time frame, then resample it to higher time frames, apply the indicators, then resample back to the lower time frame, filling in the in-betweens.
+# In conclusion, to test strategies on multiple time frames, you need to pass in OHLC data in the lowest time frame, then resample it to higher time frames, apply the indicators, then resample back to the lower time frame, filling in the in-betweens.
 # Which is what the function [`backtesting.lib.resample_apply()`](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html#backtesting.lib.resample_apply) does for you.
+
+# Learn more by exploring further
+# [examples](https://kernc.github.io/backtesting.py/doc/backtesting/index.html#tutorials)
+# or find more framework options in the
+# [full API reference](https://kernc.github.io/backtesting.py/doc/backtesting/index.html#header-submodules).
