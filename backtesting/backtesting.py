@@ -948,7 +948,9 @@ class Backtest:
 
             df['Open'] = df['High'] = df['Low'] = df['Close']
 
-        DataFrame index can be either datetime index (timestamps)
+        The passed data frame can contain additional columns that
+        can be used by the strategy (e.g. sentiment info).
+        DataFrame index can be either a datetime index (timestamps)
         or a monotonic range index (i.e. a sequence of periods).
 
         `strategy` is a `backtesting.backtesting.Strategy`
