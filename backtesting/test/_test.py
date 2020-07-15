@@ -699,13 +699,15 @@ class TestUtil(TestCase):
             pass
 
         class Class:
-            pass
+            def __call__(self):
+                pass
 
         self.assertEqual(_as_str('4'), '4')
         self.assertEqual(_as_str(4), '4')
         self.assertEqual(_as_str(_Indicator([1, 2], name='x')), 'x')
         self.assertEqual(_as_str(func), 'func')
         self.assertEqual(_as_str(Class), 'Class')
+        self.assertEqual(_as_str(Class()), 'Class')
         self.assertEqual(_as_str(pd.Series([1, 2], name='x')), 'x')
         self.assertEqual(_as_str(pd.DataFrame()), 'df')
         self.assertEqual(_as_str(lambda x: x), 'λ')

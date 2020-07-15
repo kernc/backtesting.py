@@ -22,7 +22,7 @@ def _as_str(value):
     if name in ('Open', 'High', 'Low', 'Close', 'Volume'):
         return name[:1]
     if callable(value):
-        name = value.__name__.replace('<lambda>', 'λ')
+        name = getattr(value, '__name__', value.__class__.__name__).replace('<lambda>', 'λ')
     if len(name) > 10:
         name = name[:9] + '…'
     return name
