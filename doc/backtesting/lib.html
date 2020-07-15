@@ -15,7 +15,7 @@ composable strategy classes for reuse …" />
 <style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.18.1/highlight.min.js" integrity="sha256-eOgo0OtLL4cdq7RdwRUiGKLX9XsIJ7nGhWEKbohmVAQ=" crossorigin></script>
 <script>window.addEventListener('DOMContentLoaded', () => hljs.initHighlighting())</script>
-<style>.homelink{display:block;font-size:2em;font-weight:bold;color:#555;background:#f6f6f6;text-align:center;padding:.5em 0}.homelink:hover{color:inherit}.homelink img{display:block;max-width:40%;max-height:5em;margin:auto;margin-bottom:.3em}</style>
+<style>.homelink{display:block;font-size:2em;font-weight:bold;color:#555;text-align:center;padding:.5em 0}.homelink:hover{color:inherit}.homelink img{display:block;max-width:40%;max-height:5em;margin:auto;margin-bottom:.3em}</style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
 <link rel="canonical" href="https://kernc.github.io/backtesting.py/doc/backtesting/lib.html">
 <link rel="icon" href="https://kernc.github.io/backtesting.py/logo.png">
@@ -44,6 +44,14 @@ such as TA-Lib, Tulipy, PyAlgoTrade, NumPy, SciPy &hellip;</p>
 <div class="desc"><p>Dictionary of rules for aggregating resampled OHLCV data frames,
 e.g.</p>
 <pre><code>df.resample('4H', label='right').agg(OHLCV_AGG)
+</code></pre></div>
+</dd>
+<dt id="backtesting.lib.TRADES_AGG"><code class="name">var <span class="ident">TRADES_AGG</span></code></dt>
+<dd>
+<div class="desc"><p>Dictionary of rules for aggregating resampled trades data,
+e.g.</p>
+<pre><code>stats['_trades'].resample('1D', on='ExitTime',
+                          label='right').agg(TRADES_AGG)
 </code></pre></div>
 </dd>
 </dl>
@@ -141,12 +149,12 @@ but don't want to plot the resulting indicator, we can do:</p>
         self.sma = resample_apply(
             'D', SMA, self.data.Close, 10, plot=False)
 </code></pre>
-<p>This short snippet is roughly equivalent to:</p>
+<p>The above short snippet is roughly equivalent to:</p>
 <pre><code>class System(Strategy):
     def init(self):
         # Strategy exposes &lt;code&gt;self.data&lt;/code&gt; as raw NumPy arrays.
         # Let's convert closing prices back to pandas Series.
-        close = self.data.Close.to_series()
+        close = self.data.Close.s
 
         # Resample to daily resolution. Aggregate groups
         # using their last value (i.e. closing price at the end
@@ -198,14 +206,16 @@ overridden methods.</p></div>
 <h3>Methods</h3>
 <dl>
 <dt id="backtesting.lib.SignalStrategy.set_signal"><code class="name flex">
-<span>def <span class="ident">set_signal</span></span>(<span>self, entry, exit=None, plot=True)</span>
+<span>def <span class="ident">set_signal</span></span>(<span>self, entry_size, exit_portion=None, *, plot=True)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Set entry/exit signal vectors (arrays). An long entry signal is considered
-present wherever <code>entry</code> is greater than zero. A short entry signal
-is considered present wherever <code>entry</code> is less than zero. If <code>exit</code>
-is provided, a nonzero value closes the position, if any; otherwise
-the position is held until a reverse signal in <code>entry</code>.</p>
+<div class="desc"><p>Set entry/exit signal vectors (arrays).</p>
+<p>A long entry signal is considered present wherever <code>entry_size</code>
+is greater than zero, and a short signal wherever <code>entry_size</code>
+is less than zero, following <code><a title="backtesting.backtesting.Order.size" href="backtesting.html#backtesting.backtesting.Order.size">Order.size</a></code> semantics.</p>
+<p>If <code>exit_portion</code> is provided, a nonzero value closes portion the position
+(see <code><a title="backtesting.backtesting.Trade.close" href="backtesting.html#backtesting.backtesting.Trade.close">Trade.close()</a></code>) in the respective direction
+(positive values close long trades, negative short).</p>
 <p>If <code>plot</code> is <code>True</code>, the signal entry/exit indicators are plotted when
 <code><a title="backtesting.backtesting.Backtest.plot" href="backtesting.html#backtesting.backtesting.Backtest.plot">Backtest.plot()</a></code> is called.</p></div>
 </dd>
@@ -216,6 +226,7 @@ the position is held until a reverse signal in <code>entry</code>.</p>
 <ul class="hlist">
 <li><code><a title="backtesting.backtesting.Strategy.I" href="backtesting.html#backtesting.backtesting.Strategy.I">I</a></code></li>
 <li><code><a title="backtesting.backtesting.Strategy.buy" href="backtesting.html#backtesting.backtesting.Strategy.buy">buy</a></code></li>
+<li><code><a title="backtesting.backtesting.Strategy.closed_trades" href="backtesting.html#backtesting.backtesting.Strategy.closed_trades">closed_trades</a></code></li>
 <li><code><a title="backtesting.backtesting.Strategy.data" href="backtesting.html#backtesting.backtesting.Strategy.data">data</a></code></li>
 <li><code><a title="backtesting.backtesting.Strategy.equity" href="backtesting.html#backtesting.backtesting.Strategy.equity">equity</a></code></li>
 <li><code><a title="backtesting.backtesting.Strategy.init" href="backtesting.html#backtesting.backtesting.Strategy.init">init</a></code></li>
@@ -223,6 +234,7 @@ the position is held until a reverse signal in <code>entry</code>.</p>
 <li><code><a title="backtesting.backtesting.Strategy.orders" href="backtesting.html#backtesting.backtesting.Strategy.orders">orders</a></code></li>
 <li><code><a title="backtesting.backtesting.Strategy.position" href="backtesting.html#backtesting.backtesting.Strategy.position">position</a></code></li>
 <li><code><a title="backtesting.backtesting.Strategy.sell" href="backtesting.html#backtesting.backtesting.Strategy.sell">sell</a></code></li>
+<li><code><a title="backtesting.backtesting.Strategy.trades" href="backtesting.html#backtesting.backtesting.Strategy.trades">trades</a></code></li>
 </ul>
 </li>
 </ul>
@@ -265,6 +277,7 @@ average true bar ranges away from the current price.</p></div>
 <ul class="hlist">
 <li><code><a title="backtesting.backtesting.Strategy.I" href="backtesting.html#backtesting.backtesting.Strategy.I">I</a></code></li>
 <li><code><a title="backtesting.backtesting.Strategy.buy" href="backtesting.html#backtesting.backtesting.Strategy.buy">buy</a></code></li>
+<li><code><a title="backtesting.backtesting.Strategy.closed_trades" href="backtesting.html#backtesting.backtesting.Strategy.closed_trades">closed_trades</a></code></li>
 <li><code><a title="backtesting.backtesting.Strategy.data" href="backtesting.html#backtesting.backtesting.Strategy.data">data</a></code></li>
 <li><code><a title="backtesting.backtesting.Strategy.equity" href="backtesting.html#backtesting.backtesting.Strategy.equity">equity</a></code></li>
 <li><code><a title="backtesting.backtesting.Strategy.init" href="backtesting.html#backtesting.backtesting.Strategy.init">init</a></code></li>
@@ -272,6 +285,7 @@ average true bar ranges away from the current price.</p></div>
 <li><code><a title="backtesting.backtesting.Strategy.orders" href="backtesting.html#backtesting.backtesting.Strategy.orders">orders</a></code></li>
 <li><code><a title="backtesting.backtesting.Strategy.position" href="backtesting.html#backtesting.backtesting.Strategy.position">position</a></code></li>
 <li><code><a title="backtesting.backtesting.Strategy.sell" href="backtesting.html#backtesting.backtesting.Strategy.sell">sell</a></code></li>
+<li><code><a title="backtesting.backtesting.Strategy.trades" href="backtesting.html#backtesting.backtesting.Strategy.trades">trades</a></code></li>
 </ul>
 </li>
 </ul>
@@ -298,6 +312,7 @@ average true bar ranges away from the current price.</p></div>
 <li><h3><a href="#header-variables">Global variables</a></h3>
 <ul class="">
 <li><code><a title="backtesting.lib.OHLCV_AGG" href="#backtesting.lib.OHLCV_AGG">OHLCV_AGG</a></code></li>
+<li><code><a title="backtesting.lib.TRADES_AGG" href="#backtesting.lib.TRADES_AGG">TRADES_AGG</a></code></li>
 </ul>
 </li>
 <li><h3><a href="#header-functions">Functions</a></h3>
@@ -332,7 +347,7 @@ average true bar ranges away from the current price.</p></div>
 </main>
 <footer id="footer">
 <p>
-<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.1.8</a>
+<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.2.0</a>
 <span style="color:#ddd">&#21328;</span>
 </p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>

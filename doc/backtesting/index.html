@@ -14,7 +14,7 @@
 <style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.18.1/highlight.min.js" integrity="sha256-eOgo0OtLL4cdq7RdwRUiGKLX9XsIJ7nGhWEKbohmVAQ=" crossorigin></script>
 <script>window.addEventListener('DOMContentLoaded', () => hljs.initHighlighting())</script>
-<style>.homelink{display:block;font-size:2em;font-weight:bold;color:#555;background:#f6f6f6;text-align:center;padding:.5em 0}.homelink:hover{color:inherit}.homelink img{display:block;max-width:40%;max-height:5em;margin:auto;margin-bottom:.3em}</style>
+<style>.homelink{display:block;font-size:2em;font-weight:bold;color:#555;text-align:center;padding:.5em 0}.homelink:hover{color:inherit}.homelink img{display:block;max-width:40%;max-height:5em;margin:auto;margin-bottom:.3em}</style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
 <link rel="canonical" href="https://kernc.github.io/backtesting.py/doc/backtesting/">
 <link rel="icon" href="https://kernc.github.io/backtesting.py/logo.png">
@@ -27,6 +27,12 @@
 </header>
 <section id="section-intro">
 <h1 id="backtestingpy-documentation">Backtesting.py Documentation</h1>
+<div class="admonition warning">
+<p class="admonition-title">Warning:&ensp;v0.2.0 breaking changes</p>
+<p>Version 0.2.0 introduced some <strong>breaking API changes</strong>. For quick ways to
+migrate existing 0.1.x code, see the implementing
+<a href="https://github.com/kernc/backtesting.py/pull/47/">pull request</a>.</p>
+</div>
 <h2 id="manuals">Manuals</h2>
 <ul>
 <li><a href="../examples/Quick Start User Guide.html"><strong>Quick Start User Guide</strong></a></li>
@@ -37,12 +43,15 @@
 <li><a href="../examples/Multiple Time Frames.html">Multiple Time Frames</a></li>
 <li><a href="../examples/Parameter Heatmap.html">Parameter Heatmap</a></li>
 </ul>
-<p>These tutorials are also available as live notebooks:
+<p>These tutorials are also available to test as live Jupyter notebooks:
 <a href="https://mybinder.org/v2/gh/kernc/backtesting.py/master?urlpath=lab%2Ftree%2Fdoc%2Fexamples%2FQuick%20Start%20User%20Guide.ipynb"><img alt="Binder" src="https://mybinder.org/badge_logo.svg"></a></p>
 <h2 id="example-strategies">Example Strategies</h2>
 <ul>
 <li>(contributions welcome)</li>
 </ul>
+<h2 id="faq">FAQ</h2>
+<p>Potentially outdated answers to popular questions can be found on the
+<a href="https://github.com/kernc/backtesting.py/issues?q=label%3Aquestion">issue tracker</a>.</p>
 <h2 id="license">License</h2>
 <p>This software is licensed under the terms of <a href="https://www.gnu.org/licenses/agpl-3.0.html" rel="license">AGPL 3.0</a>,
 meaning you can use it for any reasonable purpose and remain in
@@ -56,8 +65,8 @@ itself find their way back to the community.</p>
 <dl>
 <dt><code class="name"><a title="backtesting.backtesting" href="backtesting.html">backtesting.backtesting</a></code></dt>
 <dd>
-<div class="desc"><p>Core backtesting data structures.
-Objects from this module can be imported from the top-level
+<div class="desc"><p>Core framework data structures.
+Objects from this module can also be imported from the top-level
 module directly, e.g …</p></div>
 </dd>
 <dt><code class="name"><a title="backtesting.lib" href="lib.html">backtesting.lib</a></code></dt>
@@ -91,6 +100,7 @@ composable strategy classes for reuse …</p></div>
 <li><a href="#manuals">Manuals</a></li>
 <li><a href="#tutorials">Tutorials</a></li>
 <li><a href="#example-strategies">Example Strategies</a></li>
+<li><a href="#faq">FAQ</a></li>
 <li><a href="#license">License</a></li>
 </ul>
 </li>
@@ -110,7 +120,7 @@ composable strategy classes for reuse …</p></div>
 </main>
 <footer id="footer">
 <p>
-<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.1.8</a>
+<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.2.0</a>
 <span style="color:#ddd">&#21328;</span>
 </p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
