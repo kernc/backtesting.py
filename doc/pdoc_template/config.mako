@@ -6,6 +6,10 @@
     sort_identifiers = True
     show_type_annotations = False
     show_source_code = False
+    search_query = '''
+        inurl:kernc.github.io/backtesting.py
+        inurl:github.com/kernc/backtesting.py
+    '''
 
 
     from pdoc.html_helpers import glimpse as _glimpse
