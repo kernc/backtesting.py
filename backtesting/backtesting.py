@@ -1152,7 +1152,7 @@ class Backtest:
             from exhaustive grid search to random search. See notes in the source.
 
         .. TODO::
-            Improve multiprocessing/parallel execution on Windos with start method 'spawn'.
+            Improve multiprocessing/parallel execution on Windows with start method 'spawn'.
         """
         if not kwargs:
             raise ValueError('Need some strategy parameters to optimize')
