@@ -960,7 +960,7 @@ class Backtest:
 
         `commission` is the commission ratio. E.g. if your broker's commission
         is 1% of trade value, set commission to `0.01`. Note, if you wish to
-        account for bid-ask spread, you cam approximate doing so by increasing
+        account for bid-ask spread, you can approximate doing so by increasing
         the commission, e.g. set it to `0.0002` for commission-less forex
         trading where the average spread is roughly 0.2‰ of asking price.
 
