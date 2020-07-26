@@ -26,6 +26,9 @@ cp -R doc/build/* gh-pages/doc/
 cd gh-pages
 sitemap
 git add *
-git diff --staged --quiet && echo "$0: No changes to commit." && exit 0
+if git diff --staged --quiet; then
+  echo "$0: No changes to commit."
+  exit 0
+fi
 git commit -a -m "CI: Update docs for $TRAVIS_TAG ($head)"
 git push
