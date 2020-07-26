@@ -155,6 +155,8 @@ you can have a look at some similar alternative Python backtesting frameworks:
 - [zvt](https://github.com/zvtvz/zvt) -
   a quant trading platform which includes data recorder, factor calculation,
   stock picking, backtesting, and unified visualization. Documentation in Chinese.
+- [AwesomeQuant](https://github.com/wilsonfreitas/awesome-quant#trading--backtesting) -
+  A somewhat curated list of libraries, packages, and resources for quants.
 
 #### Obsolete / Unmaintained
 
