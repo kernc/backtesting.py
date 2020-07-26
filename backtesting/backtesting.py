@@ -575,6 +575,18 @@ class Trade:
     # Extra properties
 
     @property
+    def entry_time(self):
+        """Datetime of when the trade was entered."""
+        return self.__broker._data.index[self.__entry_bar]
+
+    @property
+    def exit_time(self):
+        """Datetime of when the trade was exited."""
+        if self.__exit_bar is None:
+            return None
+        return self.__broker._data.index[self.__exit_bar]
+
+    @property
     def is_long(self):
         """True if the trade is long (trade size is positive)."""
         return self.size > 0
@@ -1307,9 +1319,9 @@ class Backtest:
             'ExitPrice': [t.exit_price for t in trades],
             'PnL': [t.pl for t in trades],
             'ReturnPct': [t.pl_pct for t in trades],
+            'EntryTime': [t.entry_time for t in trades],
+            'ExitTime': [t.exit_time for t in trades],
         })
-        trades_df['EntryTime'] = trades_df['EntryBar'].apply(index.__getitem__)
-        trades_df['ExitTime'] = trades_df['ExitBar'].apply(index.__getitem__)
         trades_df['Duration'] = trades_df['ExitTime'] - trades_df['EntryTime']
 
         pl = trades_df['PnL']

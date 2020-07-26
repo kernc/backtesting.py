@@ -193,7 +193,9 @@ class TestBacktest(TestCase):
                         assert trade.is_short
                         assert trade.size < 0
                         assert trade.entry_bar > 0
+                        assert isinstance(trade.entry_time, pd.Timestamp)
                         assert trade.exit_bar is None
+                        assert trade.exit_time is None
                         assert trade.entry_price > 0
                         assert trade.exit_price is None
                         assert trade.pl / 1
