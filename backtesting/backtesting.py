@@ -20,7 +20,7 @@ from copy import copy
 from functools import partial
 from itertools import repeat, product, chain
 from numbers import Number
-from typing import Callable, Union, List, Optional, Sequence, Tuple, Type
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
@@ -222,7 +222,7 @@ class Strategy(metaclass=ABCMeta):
         return self._broker.new_order(-size, limit, stop, sl, tp)
 
     @property
-    def equity(self):
+    def equity(self) -> float:
         """Current account equity (cash plus assets)."""
         return self._broker.equity
 
@@ -261,17 +261,17 @@ class Strategy(metaclass=ABCMeta):
         return self._broker.position
 
     @property
-    def orders(self) -> '_Orders[Order]':
+    def orders(self) -> 'Tuple[Order, ...]':
         """List of orders (see `Order`) waiting for execution."""
         return _Orders(self._broker.orders)
 
     @property
-    def trades(self) -> 'Tuple[Trade]':
+    def trades(self) -> 'Tuple[Trade, ...]':
         """List of active trades (see `Trade`)."""
         return tuple(self._broker.trades)
 
     @property
-    def closed_trades(self) -> 'Tuple[Trade]':
+    def closed_trades(self) -> 'Tuple[Trade, ...]':
         """List of settled trades (see `Trade`)."""
         return tuple(self._broker.closed_trades)
 
@@ -314,17 +314,17 @@ class Position:
         return self.size != 0
 
     @property
-    def size(self):
+    def size(self) -> float:
         """Position size in units of asset. Negative if position is short."""
         return sum(trade.size for trade in self.__broker.trades)
 
     @property
-    def pl(self):
+    def pl(self) -> float:
         """Profit (positive) or loss (negative) of the current position in cash units."""
         return sum(trade.pl for trade in self.__broker.trades)
 
     @property
-    def pl_pct(self):
+    def pl_pct(self) -> float:
         """Profit (positive) or loss (negative) of the current position in percent."""
         weights = np.abs([trade.size for trade in self.__broker.trades])
         weights = weights / weights.sum()
@@ -332,12 +332,12 @@ class Position:
         return (pl_pcts * weights).sum()
 
     @property
-    def is_long(self):
+    def is_long(self) -> bool:
         """True if the position is long (position size is positive)."""
         return self.size > 0
 
     @property
-    def is_short(self):
+    def is_short(self) -> bool:
         """True if the position is short (position size is negative)."""
         return self.size < 0
 
@@ -417,7 +417,7 @@ class Order:
     # Fields getters
 
     @property
-    def size(self):
+    def size(self) -> float:
         """
         Order size (negative for short orders).
 
@@ -428,7 +428,7 @@ class Order:
         return self.__size
 
     @property
-    def limit(self) -> float:
+    def limit(self) -> Optional[float]:
         """
         Order limit price for [limit orders], or None for [market orders],
         which are filled at next available price.
@@ -439,7 +439,7 @@ class Order:
         return self.__limit_price
 
     @property
-    def stop(self):
+    def stop(self) -> Optional[float]:
         """
         Order stop price for [stop-limit/stop-market][_] order,
         otherwise None if no stop was set, or the stop price has already been hit.
@@ -449,7 +449,7 @@ class Order:
         return self.__stop_price
 
     @property
-    def sl(self):
+    def sl(self) -> Optional[float]:
         """
         A stop-loss price at which, if set, a new contingent stop-market order
         will be placed upon the `Trade` following this order's execution.
@@ -458,7 +458,7 @@ class Order:
         return self.__sl_price
 
     @property
-    def tp(self):
+    def tp(self) -> Optional[float]:
         """
         A take-profit price at which, if set, a new contingent limit order
         will be placed upon the `Trade` following this order's execution.
@@ -508,9 +508,9 @@ class Trade:
         self.__broker = broker
         self.__size = size
         self.__entry_price = entry_price
-        self.__entry_bar = entry_bar
-        self.__exit_price = None
-        self.__exit_bar = None
+        self.__exit_price = None  # type: Optional[float]
+        self.__entry_bar = entry_bar  # type: int
+        self.__exit_bar = None  # type: Optional[int]
         self.__sl_order = None  # type: Optional[Order]
         self.__tp_order = None  # type: Optional[Order]
 
@@ -547,7 +547,7 @@ class Trade:
         return self.__entry_price
 
     @property
-    def exit_price(self) -> float:
+    def exit_price(self) -> Optional[float]:
         """Trade exit price (or None if the trade is still active)."""
         return self.__exit_price
 
@@ -557,7 +557,7 @@ class Trade:
         return self.__entry_bar
 
     @property
-    def exit_bar(self) -> int:
+    def exit_bar(self) -> Optional[int]:
         """
         Candlestick bar index of when the trade was exited
         (or None if the trade is still active).
@@ -575,12 +575,12 @@ class Trade:
     # Extra properties
 
     @property
-    def entry_time(self):
+    def entry_time(self) -> Union[pd.Timestamp, int]:
         """Datetime of when the trade was entered."""
         return self.__broker._data.index[self.__entry_bar]
 
     @property
-    def exit_time(self):
+    def exit_time(self) -> Optional[Union[pd.Timestamp, int]]:
         """Datetime of when the trade was exited."""
         if self.__exit_bar is None:
             return None
@@ -627,6 +627,10 @@ class Trade:
         """
         return self.__sl_order and self.__sl_order.stop
 
+    @sl.setter
+    def sl(self, price: float):
+        self.__set_contingent('sl', price)
+
     @property
     def tp(self):
         """
@@ -638,12 +642,8 @@ class Trade:
         """
         return self.__tp_order and self.__tp_order.limit
 
-    @sl.setter
-    def sl(self, price):
-        self.__set_contingent('sl', price)
-
     @tp.setter
-    def tp(self, price):
+    def tp(self, price: float):
         self.__set_contingent('tp', price)
 
     def __set_contingent(self, type, price):
@@ -684,7 +684,7 @@ class _Broker:
             self._cash, self.position.pl, len(self.trades))
 
     def new_order(self,
-                  size: float = None,
+                  size: float,
                   limit: float = None,
                   stop: float = None,
                   sl: float = None,
@@ -732,18 +732,18 @@ class _Broker:
         return order
 
     @property
-    def last_price(self):
+    def last_price(self) -> float:
         """Return price at the last (current) close.
         Used e.g. in `Orders._is_price_ok()` to see if the set price is reasonable.
         """
         return self._data.Close[-1]
 
     @property
-    def equity(self):
+    def equity(self) -> float:
         return self._cash + sum(trade.pl for trade in self.trades)
 
     @property
-    def margin_available(self):
+    def margin_available(self) -> float:
         # From https://github.com/QuantConnect/Lean/pull/3768
         margin_used = sum(trade.value / self._leverage for trade in self.trades)
         return max(0, self.equity - margin_used)
@@ -1235,7 +1235,7 @@ class Backtest:
         # in a copy-on-write manner, achieving better performance/RAM benefit.
         backtest_uuid = np.random.random()
         param_batches = list(_batch(param_combos))
-        Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)
+        Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)  # type: ignore
         try:
             # If multiprocessing start method is 'fork' (i.e. on POSIX), use
             # a pool of processes to compute results in parallel.
@@ -1264,7 +1264,7 @@ class Backtest:
         if pd.isnull(best_params):
             # No trade was made in any of the runs. Just make a random
             # run so we get some, if empty, results
-            self.run(**param_combos[0])
+            self.run(**param_combos[0])  # type: ignore
         else:
             # Re-run best strategy so that the next .plot() call will render it
             self.run(**dict(zip(heatmap.index.names, best_params)))
@@ -1280,7 +1280,7 @@ class Backtest:
                              for stats in (bt.run(**params)
                                            for params in param_batches[batch_index])]
 
-    _mp_backtests = {}
+    _mp_backtests = {}  # type: Dict[float, Tuple[Backtest, List, Callable]]
 
     @staticmethod
     def _compute_drawdown_duration_peaks(dd: pd.Series):
@@ -1341,7 +1341,7 @@ class Backtest:
 
         have_position = np.repeat(0, len(index))
         for t in trades:
-            have_position[t.entry_bar:t.exit_bar + 1] = 1
+            have_position[t.entry_bar:t.exit_bar + 1] = 1  # type: ignore
 
         s.loc['Exposure Time [%]'] = have_position.mean() * 100  # In "n bars" time, not index time
         s.loc['Equity Final [$]'] = equity[-1]

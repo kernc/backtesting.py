@@ -4,7 +4,7 @@ import sys
 import warnings
 from itertools import cycle, combinations
 from functools import partial
-from typing import List
+from typing import Callable, List, Union
 
 import numpy as np
 import pandas as pd
@@ -633,7 +633,7 @@ return this.labels[index] || "";
     return fig
 
 
-def plot_heatmaps(heatmap: pd.Series, agg: str, ncols: int,
+def plot_heatmaps(heatmap: pd.Series, agg: Union[Callable, str], ncols: int,
                   filename: str = '', plot_width: int = 1200, open_browser: bool = True):
     if not (isinstance(heatmap, pd.Series) and
             isinstance(heatmap.index, pd.MultiIndex)):

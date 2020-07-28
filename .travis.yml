@@ -20,9 +20,10 @@ matrix:
     - python: '3.8'
       name: 'Lint, Test w/ Coverage'
       before_script:
-        - pip install flake8 coverage
+        - pip install flake8 coverage mypy
       script:
         - flake8
+        - mypy backtesting
         - BOKEH_BROWSER=none catchsegv coverage run -m backtesting.test
       after_success:
         - bash <(curl -s https://codecov.io/bash)

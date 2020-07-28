@@ -1,5 +1,5 @@
 import warnings
-from typing import Sequence
+from typing import Dict, List, Optional, Sequence, Union
 from numbers import Number
 
 import numpy as np
@@ -13,7 +13,7 @@ def try_(lazy_func, default=None, exception=Exception):
         return default
 
 
-def _as_str(value):
+def _as_str(value) -> str:
     if isinstance(value, (Number, str)):
         return str(value)
     if isinstance(value, pd.DataFrame):
@@ -28,13 +28,13 @@ def _as_str(value):
     return name
 
 
-def _as_list(value):
+def _as_list(value) -> List:
     if isinstance(value, Sequence) and not isinstance(value, str):
         return list(value)
     return [value]
 
 
-def _data_period(index):
+def _data_period(index) -> Union[pd.Timedelta, Number]:
     """Return data index period as pd.Timedelta"""
     values = pd.Series(index[-100:])
     return values.diff().median()
@@ -99,9 +99,9 @@ class _Data:
     def __init__(self, df: pd.DataFrame):
         self.__df = df
         self.__i = len(df)
-        self.__pip = None
-        self.__cache = {}
-        self.__arrays = None
+        self.__pip = None   # type: Optional[float]
+        self.__cache = {}   # type: Dict[str, _Array]
+        self.__arrays = {}  # type: Dict[str, _Array]
         self._update()
 
     def __getitem__(self, item):
@@ -139,7 +139,7 @@ class _Data:
                 else self.__df)
 
     @property
-    def pip(self):
+    def pip(self) -> float:
         if self.__pip is None:
             self.__pip = 10**-np.median([len(s.partition('.')[-1])
                                          for s in self.__arrays['Close'].astype(str)])
@@ -152,28 +152,28 @@ class _Data:
         return arr
 
     @property
-    def Open(self):
+    def Open(self) -> _Array:
         return self.__get_array('Open')
 
     @property
-    def High(self):
+    def High(self) -> _Array:
         return self.__get_array('High')
 
     @property
-    def Low(self):
+    def Low(self) -> _Array:
         return self.__get_array('Low')
 
     @property
-    def Close(self):
+    def Close(self) -> _Array:
         return self.__get_array('Close')
 
     @property
-    def Volume(self):
+    def Volume(self) -> _Array:
         return self.__get_array('Volume')
 
     @property
     def index(self) -> pd.DatetimeIndex:
-        return self.__get_array('__index')  # type: ignore
+        return self.__get_array('__index')
 
     # Make pickling in Backtest.optimize() work with our catch-all __getattr__
     def __getstate__(self):

@@ -77,7 +77,7 @@ def barssince(condition: Sequence[bool], default=np.inf) -> int:
     return next(compress(range(len(condition)), reversed(condition)), default)
 
 
-def cross(series1, series2) -> bool:
+def cross(series1: Sequence, series2: Sequence) -> bool:
     """
     Return `True` if `series1` and `series2` just crossed (either
     direction).
@@ -89,7 +89,7 @@ def cross(series1, series2) -> bool:
     return crossover(series1, series2) or crossover(series2, series1)
 
 
-def crossover(series1, series2) -> bool:
+def crossover(series1: Sequence, series2: Sequence) -> bool:
     """
     Return `True` if `series1` just crossed over
     `series2`.
@@ -133,7 +133,7 @@ def plot_heatmaps(heatmap: pd.Series,
     return _plot_heatmaps(heatmap, agg, ncols, filename, plot_width, open_browser)
 
 
-def quantile(series, quantile=None):
+def quantile(series: Sequence, quantile: Union[None, float] = None):
     """
     If `quantile` is `None`, return the quantile _rank_ of the last
     value of `series` wrt former series values.
@@ -159,9 +159,9 @@ def quantile(series, quantile=None):
 
 def resample_apply(rule: str,
                    func: Optional[Callable[..., Sequence]],
-                   series,
+                   series: Union[pd.Series, pd.DataFrame, _Array],
                    *args,
-                   agg='last',
+                   agg: str = 'last',
                    **kwargs):
     """
     Apply `func` (such as an indicator) to `series`, resampled to
@@ -249,8 +249,8 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
     while frame and level <= 3:
         frame = frame.f_back
         level += 1
-        if isinstance(frame.f_locals.get('self'), Strategy):
-            strategy_I = frame.f_locals['self'].I
+        if isinstance(frame.f_locals.get('self'), Strategy):  # type: ignore
+            strategy_I = frame.f_locals['self'].I             # type: ignore
             break
     else:
         def strategy_I(func, *args, **kwargs):
@@ -271,7 +271,7 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
                                 method='ffill').reindex(series.index)
         return result
 
-    wrap_func.__name__ = func.__name__
+    wrap_func.__name__ = func.__name__  # type: ignore
 
     array = strategy_I(wrap_func, resampled, *args, **kwargs)
     return array
@@ -363,7 +363,7 @@ class TrailingStrategy(Strategy):
     Remember to call `super().init()` and `super().next()` in your
     overridden methods.
     """
-    __n_atr = 6
+    __n_atr = 6.
     __atr = None
 
     __pdoc__['SignalStrategy.__init__'] = False
