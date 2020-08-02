@@ -330,6 +330,26 @@ class TestBacktest(TestCase):
                 self.assertFalse(stats['_equity_curve']['Equity'].isnull().any())
                 self.assertEqual(stats['_strategy'].__class__, strategy)
 
+    def test_trade_enter_hit_sl_on_same_day(self):
+        the_day = pd.Timestamp("2012-10-17 00:00:00")
+
+        class S(Strategy):
+            def init(self): pass
+
+            def next(self):
+                if self.data.index[-1] == the_day:
+                    self.buy(sl=720)
+
+        self.assertEqual(Backtest(GOOG, S).run()._trades.iloc[0].ExitPrice, 720)
+
+        class S(S):
+            def next(self):
+                if self.data.index[-1] == the_day:
+                    self.buy(stop=758, sl=720)
+
+        with self.assertWarns(UserWarning):
+            self.assertEqual(Backtest(GOOG, S).run()._trades.iloc[0].ExitPrice, 705.58)
+
 
 class TestStrategy(TestCase):
     def _Backtest(self, strategy_coroutine, **kwargs):

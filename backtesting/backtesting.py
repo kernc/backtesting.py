@@ -769,6 +769,7 @@ class _Broker:
         data = self._data
         open, high, low = data.Open[-1], data.High[-1], data.Low[-1]
         prev_close = data.Close[-2]
+        reprocess_orders = False
 
         # Process orders
         for order in list(self.orders):  # type: Order
@@ -882,8 +883,28 @@ class _Broker:
             if need_size:
                 self._open_trade(adjusted_price, need_size, order.sl, order.tp, time_index)
 
+                # We need to reprocess the SL/TP orders newly added to the queue.
+                # This allows e.g. SL hitting in the same bar the order was open.
+                # See https://github.com/kernc/backtesting.py/issues/119
+                if order.sl or order.tp:
+                    if is_market_order:
+                        reprocess_orders = True
+                    elif (low <= (order.sl or -np.inf) <= high or
+                          low <= (order.tp or -np.inf) <= high):
+                        warnings.warn(
+                            "A SL/TP order would execute in the same bar as its contingent upon "
+                            "stop/limit order. Since we can't assert the precise intra-candle "
+                            "price movement, the affected SL/TP order will be executed on "
+                            "the next (matching) price/bar, making the result (of this trade) "
+                            "somewhat dubious. "
+                            "See https://github.com/kernc/backtesting.py/issues/119",
+                            UserWarning)
+
             # Order processed
             self.orders.remove(order)
+
+        if reprocess_orders:
+            self._process_orders()
 
     def _reduce_trade(self, trade: Trade, price: float, size: float, time_index: int):
         assert np.sign(trade.size) != np.sign(size)
