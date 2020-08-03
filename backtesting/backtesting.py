@@ -1010,6 +1010,10 @@ class Backtest:
         If `False`, the opposite-facing orders first close existing trades in
         a [FIFO] manner.
 
+        If `exclusive_orders` is `True`, each new order auto-closes the previous
+        trade/position, making at most a single trade (long or short) in effect
+        at each time.
+
         [FIFO]: https://www.investopedia.com/terms/n/nfa-compliance-rule-2-43b.asp
         """
 
