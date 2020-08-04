@@ -198,7 +198,7 @@ class Strategy(metaclass=ABCMeta):
             sl: float = None,
             tp: float = None):
         """
-        Place a new short order. For explanation of parameters, see `Order` and its properties.
+        Place a new long order. For explanation of parameters, see `Order` and its properties.
 
         See also `Strategy.sell()`.
         """
