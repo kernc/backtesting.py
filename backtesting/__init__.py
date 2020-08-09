@@ -15,6 +15,7 @@
 * [Library of Utilities and Composable Base Strategies](../examples/Strategies Library.html)
 * [Multiple Time Frames](../examples/Multiple Time Frames.html)
 * [Parameter Heatmap](../examples/Parameter Heatmap.html)
+* [**Trading with Machine Learning**](../examples/Trading with Machine Learning.html)
 
 These tutorials are also available to test as live Jupyter notebooks:
 [![Binder](https://mybinder.org/badge_logo.svg)][binder]
