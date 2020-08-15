@@ -350,6 +350,17 @@ class TestBacktest(TestCase):
         with self.assertWarns(UserWarning):
             self.assertEqual(Backtest(GOOG, S).run()._trades.iloc[0].ExitPrice, 705.58)
 
+    def test_stop_price_between_sl_tp(self):
+        class S(Strategy):
+            def init(self): pass
+
+            def next(self):
+                if self.data.index[-1] == pd.Timestamp("2004-09-09 00:00:00"):
+                    self.buy(stop=104, sl=103, tp=110)
+
+        with self.assertWarns(UserWarning):
+            self.assertEqual(Backtest(GOOG, S).run()._trades.iloc[0].EntryPrice, 104)
+
 
 class TestStrategy(TestCase):
     def _Backtest(self, strategy_coroutine, **kwargs):

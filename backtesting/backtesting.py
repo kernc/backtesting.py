@@ -703,14 +703,13 @@ class _Broker:
         is_long = size > 0
 
         if is_long:
-            # TODO: check stop as well
-            assert (sl or -np.inf) <= (limit or self.last_price) <= (tp or np.inf), \
-                "Long orders require: SL ({}) < LIMIT ({}) < TP ({})".format(
-                    sl, limit or self.last_price, tp)
+            if not (sl or -np.inf) <= (limit or stop or self.last_price) <= (tp or np.inf):
+                raise ValueError("Long orders require: SL ({}) < LIMIT ({}) < TP ({})".format(
+                    sl, limit or stop or self.last_price, tp))
         else:
-            assert (tp or -np.inf) <= (limit or self.last_price) <= (sl or np.inf), \
-                "Short orders require: TP ({}) < LIMIT ({}) < SL ({})".format(
-                    tp, limit or self.last_price, sl)
+            if not (tp or -np.inf) <= (limit or stop or self.last_price) <= (sl or np.inf):
+                raise ValueError("Short orders require: TP ({}) < LIMIT ({}) < SL ({})".format(
+                    tp, limit or stop or self.last_price, sl))
 
         order = Order(self, size, limit, stop, sl, tp, trade)
         # Put the new order in the order queue,
