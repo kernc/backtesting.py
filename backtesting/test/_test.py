@@ -211,7 +211,8 @@ class TestBacktest(TestCase):
                         self.position.close()
 
         bt = Backtest(GOOG, Assertive)
-        stats = bt.run()
+        with self.assertWarns(UserWarning):
+            stats = bt.run()
         self.assertEqual(stats['# Trades'], 144)
 
     def test_broker_params(self):
