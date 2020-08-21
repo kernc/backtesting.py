@@ -8,4 +8,5 @@ https://kernc.github.io/backtesting.py/doc/examples/Multiple Time Frames.html
 https://kernc.github.io/backtesting.py/doc/examples/Parameter Heatmap.html
 https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html
 https://kernc.github.io/backtesting.py/doc/examples/Strategies Library.html
+https://kernc.github.io/backtesting.py/doc/examples/Trading with Machine Learning.html
 https://kernc.github.io/backtesting.py/example.html
