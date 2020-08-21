@@ -591,7 +591,7 @@ class Trade:
     @property
     def is_long(self):
         """True if the trade is long (trade size is positive)."""
-        return self.size > 0
+        return self.__size > 0
 
     @property
     def is_short(self):
@@ -608,7 +608,7 @@ class Trade:
     def pl_pct(self):
         """Trade profit (positive) or loss (negative) in percent."""
         price = self.__exit_price or self.__broker.last_price
-        return np.sign(self.__size) * (price / self.__entry_price - 1)
+        return copysign(1, self.__size) * (price / self.__entry_price - 1)
 
     @property
     def value(self):
@@ -840,14 +840,14 @@ class _Broker:
 
             # Adjust price to include commission (or bid-ask spread).
             # In long positions, the adjusted price is a fraction higher, and vice versa.
-            adjusted_price = price * (1 + (np.sign(order.size) * self._commission))
+            adjusted_price = price * (1 + copysign(self._commission, order.size))
 
             # If order size was specified proportionally,
             # precompute true size in units, accounting for margin and spread/commissions
             size = order.size
             if -1 < size < 1:
-                size = np.sign(size) * int((self.margin_available * self._leverage * abs(size))
-                                           // adjusted_price)
+                size = copysign(int((self.margin_available * self._leverage * abs(size))
+                                    // adjusted_price), size)
                 # Not enough cash/margin even for a single unit
                 if not size:
                     self.orders.remove(order)
@@ -862,7 +862,7 @@ class _Broker:
                 for trade in list(self.trades):
                     if trade.is_long == order.is_long:
                         continue
-                    assert np.sign(trade.size) + np.sign(order.size) == 0
+                    assert trade.size * order.size < 0
 
                     # Order size greater than this opposite-directed existing trade,
                     # so it will be closed completely
@@ -909,7 +909,7 @@ class _Broker:
             self._process_orders()
 
     def _reduce_trade(self, trade: Trade, price: float, size: float, time_index: int):
-        assert np.sign(trade.size) != np.sign(size)
+        assert trade.size * size < 0
         assert abs(trade.size) >= abs(size)
 
         size_left = trade.size + size
