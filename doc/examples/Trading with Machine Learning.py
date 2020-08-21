@@ -124,7 +124,7 @@ def get_clean_Xy(df):
 # Let's see how our data performs modeled using a simple
 # [k-nearest neighbors](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm)
 # (kNN) algorithm from the state of the art
-# [scikit-learn](scikit-learn.org)
+# [scikit-learn](https://scikit-learn.org)
 # Python machine learning package.
 # To avoid (or at least demonstrate)
 # [overfitting](https://scikit-learn.org/stable/auto_examples/model_selection/plot_underfitting_overfitting.html),
@@ -227,7 +227,7 @@ bt.plot()
 # Despite our lousy win rate, the strategy seems profitable. Let's see how it performs under
 # [walk-forward optimization](https://en.wikipedia.org/wiki/Walk_forward_optimization),
 # akin to k-fold or leave-one-out
-# [cross-validation](https://en.wikipedia.org/wiki/Cross-validation_(statistics)):
+# [cross-validation](https://en.wikipedia.org/wiki/Cross-validation_%28statistics%29):
 
 # +
 # %%time
