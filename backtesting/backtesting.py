@@ -19,6 +19,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import copy
 from functools import partial
 from itertools import repeat, product, chain
+from math import copysign
 from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
@@ -379,6 +380,7 @@ class Order:
                  tp_price: float = None,
                  parent_trade: 'Trade' = None):
         self.__broker = broker
+        assert size != 0
         self.__size = size
         self.__limit_price = limit_price
         self.__stop_price = stop_price
@@ -530,9 +532,9 @@ class Trade:
     def close(self, portion: float = 1.):
         """Place new `Order` to close `portion` of the trade at next market price."""
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
-        # TODO: check this insert
-        self.__broker.orders.insert(0, Order(self.__broker, -round(self.size * portion),
-                                             parent_trade=self))
+        size = copysign(max(1, round(abs(self.__size) * portion)), -self.__size)
+        order = Order(self.__broker, size, parent_trade=self)
+        self.__broker.orders.insert(0, order)
 
     # Fields getters
 
@@ -819,17 +821,18 @@ class _Broker:
             # If order is a SL/TP order, it should close an existing trade it was contingent upon
             if order.parent_trade:
                 trade = order.parent_trade
+                _prev_size = trade.size
                 # If this trade isn't already closed (e.g. on multiple `trade.close(.5)` calls)
                 if trade in self.trades:
                     self._reduce_trade(trade, price, order.size, time_index)
-                    assert order.size != -trade.size or trade not in self.trades
+                    assert order.size != -_prev_size or trade not in self.trades
                 if order in (trade._sl_order,
                              trade._tp_order):
                     assert order.size == -trade.size
                     assert order not in self.orders  # Removed when trade was closed
                 else:
                     # It's a trade.close() order, now done
-                    assert abs(trade.size) >= abs(order.size) >= 1
+                    assert abs(_prev_size) >= abs(order.size) >= 1
                     self.orders.remove(order)
                 continue
 

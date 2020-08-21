@@ -361,6 +361,21 @@ class TestBacktest(TestCase):
         with self.assertWarns(UserWarning):
             self.assertEqual(Backtest(GOOG, S).run()._trades.iloc[0].EntryPrice, 104)
 
+    def test_position_close_portion(self):
+        class SmaCross(Strategy):
+            def init(self):
+                self.sma1 = self.I(SMA, self.data.Close, 10)
+                self.sma2 = self.I(SMA, self.data.Close, 20)
+
+            def next(self):
+                if not self.position and crossover(self.sma1, self.sma2):
+                    self.buy(size=10)
+                if self.position and crossover(self.sma2, self.sma1):
+                    self.position.close(portion=.5)
+
+        bt = Backtest(GOOG, SmaCross, commission=.002)
+        bt.run()
+
 
 class TestStrategy(TestCase):
     def _Backtest(self, strategy_coroutine, **kwargs):
