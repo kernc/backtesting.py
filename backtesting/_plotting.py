@@ -200,6 +200,7 @@ def plot(*, results: pd.Series,
 
     fig_ohlc = new_bokeh_figure(
         x_range=Range1d(index[0], index[-1],
+                        min_interval=10,
                         bounds=(index[0] - pad,
                                 index[-1] + pad)) if index.size > 1 else None)
     figs_above_ohlc, figs_below_ohlc = [], []
