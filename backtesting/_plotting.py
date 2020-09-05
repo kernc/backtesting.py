@@ -609,6 +609,7 @@ return this.labels[index] || "";
             f.legend.spacing = 0
             f.legend.margin = 0
             f.legend.label_text_font_size = '8pt'
+            f.legend.click_policy = "hide"
         f.min_border_left = 0
         f.min_border_top = 3
         f.min_border_bottom = 6
