@@ -822,9 +822,12 @@ class _Broker:
             if order.parent_trade:
                 trade = order.parent_trade
                 _prev_size = trade.size
+                # If order.size is "greater" than trade.size, this order is a trade.close()
+                # order and part of the trade was already closed beforehand
+                size = copysign(min(abs(_prev_size), abs(order.size)), order.size)
                 # If this trade isn't already closed (e.g. on multiple `trade.close(.5)` calls)
                 if trade in self.trades:
-                    self._reduce_trade(trade, price, order.size, time_index)
+                    self._reduce_trade(trade, price, size, time_index)
                     assert order.size != -_prev_size or trade not in self.trades
                 if order in (trade._sl_order,
                              trade._tp_order):
@@ -832,7 +835,7 @@ class _Broker:
                     assert order not in self.orders  # Removed when trade was closed
                 else:
                     # It's a trade.close() order, now done
-                    assert abs(_prev_size) >= abs(order.size) >= 1
+                    assert abs(_prev_size) >= abs(size) >= 1
                     self.orders.remove(order)
                 continue
 
@@ -913,6 +916,7 @@ class _Broker:
         assert abs(trade.size) >= abs(size)
 
         size_left = trade.size + size
+        assert size_left * trade.size >= 0
         if not size_left:
             close_trade = trade
         else:

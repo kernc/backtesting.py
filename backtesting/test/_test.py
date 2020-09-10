@@ -434,6 +434,17 @@ class TestStrategy(TestCase):
 
         self._Backtest(coroutine, exclusive_orders=True).run()
 
+    def test_trade_multiple_close(self):
+        def coroutine(self):
+            yield self.buy()
+
+            assert self.trades
+            self.trades[-1].close(1)
+            self.trades[-1].close(.1)
+            yield
+
+        self._Backtest(coroutine).run()
+
 
 class TestOptimize(TestCase):
     def test_optimize(self):
