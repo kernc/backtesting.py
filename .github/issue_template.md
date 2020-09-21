@@ -12,4 +12,6 @@
 
 ### Additional info
 
-- Backtesting version:
+<!-- screenshots, code snippets, ... -->
+
+- Backtesting version: 0.?.?   <!-- From backtesting.__version__ -->
