@@ -277,6 +277,39 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
     return array
 
 
+def random_ohlc_data(example_data: pd.DataFrame, random_state: int = None) -> pd.DataFrame:
+    """
+    OHLC data generator. The generated OHLC data has basic
+    [descriptive statistics](https://en.wikipedia.org/wiki/Descriptive_statistics)
+    similar to the provided `example_data`.
+
+    Such random data can be effectively used for stress testing trading
+    strategy robustness, Monte Carlo simulations, significance testing, etc.
+
+    >>> from backtesting.test import EURUSD
+    >>> ohlc_generator = random_ohlc_data(EURUSD)
+    >>> next(ohlc_generator)  # returns new random data
+    ...
+    >>> next(ohlc_generator)  # returns new random data
+    ...
+    """
+    def shuffle(x):
+        return x.sample(frac=1, random_state=random_state)
+
+    if len(example_data.columns & {'Open', 'High', 'Low', 'Close'}) != 4:
+        raise ValueError("`data` must be a pandas.DataFrame with columns "
+                         "'Open', 'High', 'Low', 'Close'")
+    while True:
+        df = shuffle(example_data)
+        df.index = example_data.index
+        padding = df.Close - df.Open.shift(-1)
+        gaps = shuffle(example_data.Open.shift(-1) - example_data.Close)
+        deltas = (padding + gaps).shift(1).fillna(0).cumsum()
+        for key in ('Open', 'High', 'Low', 'Close'):
+            df[key] += deltas
+        yield df
+
+
 class SignalStrategy(Strategy):
     """
     A simple helper strategy that operates on position entry/exit signals.

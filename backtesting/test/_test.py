@@ -24,7 +24,8 @@ from backtesting.lib import (
     SignalStrategy,
     TrailingStrategy,
     resample_apply,
-    plot_heatmaps
+    plot_heatmaps,
+    random_ohlc_data,
 )
 from backtesting.test import GOOG, EURUSD, SMA
 from backtesting._util import _Indicator, _as_str, _Array, try_
@@ -725,6 +726,13 @@ class TestLib(TestCase):
             # Preview
             plot_heatmaps(heatmap, filename=f)
             time.sleep(5)
+
+    def test_random_ohlc_data(self):
+        generator = random_ohlc_data(GOOG)
+        new_data = next(generator)
+        self.assertEqual(list(new_data.index), list(GOOG.index))
+        self.assertEqual(new_data.shape, GOOG.shape)
+        self.assertEqual(list(new_data.columns), list(GOOG.columns))
 
     def test_SignalStrategy(self):
         class S(SignalStrategy):
