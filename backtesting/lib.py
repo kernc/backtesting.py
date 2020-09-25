@@ -161,7 +161,7 @@ def resample_apply(rule: str,
                    func: Optional[Callable[..., Sequence]],
                    series: Union[pd.Series, pd.DataFrame, _Array],
                    *args,
-                   agg: str = 'last',
+                   agg: Union[str, dict] = None,
                    **kwargs):
     """
     Apply `func` (such as an indicator) to `series`, resampled to
@@ -185,8 +185,12 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
     has a datetime index.
 
     `agg` is the aggregation function to use on resampled groups of data.
-    Default value is `"last"`, which may be suitable for closing prices,
-    but you might prefer another (e.g. 'max' for peaks, or similar).
+    Valid values are anything accepted by `pandas/resample/.agg()`.
+    Default value for dataframe input is `OHLCV_AGG` dictionary.
+    Default value for series input is the appropriate entry from `OHLCV_AGG`
+    if series has a matching name, or otherwise the value `"last"`,
+    which is suitable for closing prices,
+    but you might prefer another (e.g. `"max"` for peaks, or similar).
 
     Finally, any `*args` and `**kwargs` that are not already eaten by
     implicit `backtesting.backtesting.Strategy.I` call
@@ -239,6 +243,12 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
             'resample_apply() takes either a `pd.Series`, `pd.DataFrame`, ' \
             'or a `Strategy.data.*` array'
         series = series.s
+
+    if agg is None:
+        agg = OHLCV_AGG.get(getattr(series, 'name', None), 'last')
+        if isinstance(series, pd.DataFrame):
+            agg = {column: OHLCV_AGG.get(column, 'last')
+                   for column in series.columns}
 
     resampled = series.resample(rule, label='right').agg(agg).dropna()
     resampled.name = _as_str(series) + '[' + rule + ']'
