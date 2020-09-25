@@ -134,7 +134,8 @@ class Strategy(metaclass=ABCMeta):
         if isinstance(value, pd.DataFrame):
             value = value.values.T
 
-        value = try_(lambda: np.asarray(value, order='C'), None)
+        if value is not None:
+            value = try_(lambda: np.asarray(value, order='C'), None)
         is_arraylike = value is not None
 
         # Optionally flip the array if the user returned e.g. `df.values`
@@ -144,7 +145,7 @@ class Strategy(metaclass=ABCMeta):
         if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data.Close):
             raise ValueError(
                 'Indicators must return (optionally a tuple of) numpy.arrays of same '
-                'length as `data`(data shape: {}; indicator "{}" shape: {}, value: {})'
+                'length as `data` (data shape: {}; indicator "{}" shape: {}, returned value: {})'
                 .format(self._data.Close.shape, name, getattr(value, 'shape', ''), value))
 
         if plot and overlay is None and np.issubdtype(value.dtype, np.number):
