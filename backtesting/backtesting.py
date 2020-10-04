@@ -1380,7 +1380,7 @@ class Backtest:
         s.loc['Equity Peak [$]'] = equity.max()
         s.loc['Return [%]'] = (equity[-1] - equity[0]) / equity[0] * 100
         c = data.Close.values
-        s.loc['Buy & Hold Return [%]'] = abs(c[-1] - c[0]) / c[0] * 100  # long OR short
+        s.loc['Buy & Hold Return [%]'] = (c[-1] - c[0]) / c[0] * 100  # long-only return
         s.loc['Max. Drawdown [%]'] = max_dd = -np.nan_to_num(dd.max()) * 100
         s.loc['Avg. Drawdown [%]'] = -dd_peaks.mean() * 100
         s.loc['Max. Drawdown Duration'] = _round_timedelta(dd_dur.max())
