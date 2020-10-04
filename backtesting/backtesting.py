@@ -24,6 +24,11 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
+from skopt import gp_minimize
+from skopt.plots import plot_objective
+from skopt.space import Integer
+from skopt import forest_minimize
+from skopt.utils import use_named_args
 
 try:
     from tqdm.auto import tqdm as _tqdm
@@ -51,6 +56,7 @@ class Strategy(metaclass=ABCMeta):
     `backtesting.backtesting.Strategy.next` to define
     your own strategy.
     """
+
     def __init__(self, broker, data, params):
         self._indicators = []
         self._broker = broker  # type: _Broker
@@ -280,6 +286,7 @@ class _Orders(tuple):
     """
     TODO: remove this class. Only for deprecation.
     """
+
     def cancel(self):
         """Cancel all non-contingent (i.e. SL/TP) orders."""
         for order in self:
@@ -307,6 +314,7 @@ class Position:
         if self.position:
             ...  # we have a position, either long or short
     """
+
     def __init__(self, broker: '_Broker'):
         self.__broker = broker
 
@@ -371,6 +379,7 @@ class Order:
     [filled]: https://www.investopedia.com/terms/f/fill.asp
     [Good 'Til Canceled]: https://www.investopedia.com/terms/g/gtc.asp
     """
+
     def __init__(self, broker: '_Broker',
                  size: float,
                  limit_price: float = None,
@@ -400,7 +409,7 @@ class Order:
                                                  ('sl', self.__sl_price),
                                                  ('tp', self.__tp_price),
                                                  ('contingent', self.is_contingent),
-                                             ) if value is not None))
+        ) if value is not None))
 
     def cancel(self):
         """Cancel the order."""
@@ -504,6 +513,7 @@ class Trade:
     When an `Order` is filled, it results in an active `Trade`.
     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
     """
+
     def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar):
         self.__broker = broker
         self.__size = size
@@ -939,6 +949,7 @@ class Backtest:
     instance, or `backtesting.backtesting.Backtest.optimize` to
     optimize it.
     """
+
     def __init__(self,
                  data: pd.DataFrame,
                  strategy: Type[Strategy],
@@ -1127,6 +1138,7 @@ class Backtest:
     def optimize(self,
                  maximize: Union[str, Callable[[pd.Series], float]] = 'SQN',
                  constraint: Callable[[dict], bool] = None,
+                 max_tries: Union[int, float] = 100,
                  return_heatmap: bool = False,
                  **kwargs) -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
         """
@@ -1207,6 +1219,7 @@ class Backtest:
                                         map(AttrDict,
                                             product(*(zip(repeat(k), _tuple(v))
                                                       for k, v in kwargs.items()))))))
+
         if not param_combos:
             raise ValueError('No admissible parameter combinations to test')
 
@@ -1224,54 +1237,74 @@ class Backtest:
         # returning NaNs in stats on runs with no trades to differentiate those
         # from non-tested parameter combos in heatmap.
 
-        def _batch(seq):
-            n = np.clip(len(seq) // (os.cpu_count() or 1), 5, 300)
-            for i in range(0, len(seq), n):
-                yield seq[i:i + n]
+        dimensions = [Integer(name='x', low=min(kwargs.get('n1')), high=max(kwargs.get('n1'))),
+                      Integer(name='y', low=min(kwargs.get('n2')), high=max(kwargs.get('n2')))]
 
-        # Save necessary objects into "global" state; pass into concurrent executor
-        # (and thus pickle) nothing but two numbers; receive nothing but numbers.
-        # With start method "fork", children processes will inherit parent address space
-        # in a copy-on-write manner, achieving better performance/RAM benefit.
-        backtest_uuid = np.random.random()
-        param_batches = list(_batch(param_combos))
-        Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)  # type: ignore
-        try:
-            # If multiprocessing start method is 'fork' (i.e. on POSIX), use
-            # a pool of processes to compute results in parallel.
-            # Otherwise (i.e. on Windos), sequential computation will be "faster".
-            if mp.get_start_method(allow_none=False) == 'fork':
-                with ProcessPoolExecutor() as executor:
-                    futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
-                               for i in range(len(param_batches))]
-                    for future in _tqdm(as_completed(futures), total=len(futures)):
-                        batch_index, values = future.result()
-                        for value, params in zip(values, param_batches[batch_index]):
-                            heatmap[tuple(params.values())] = value
-            else:
-                if os.name == 'posix':
-                    warnings.warn("For multiprocessing support in `Backtest.optimize()` "
-                                  "set multiprocessing start method to 'fork'.")
-                for batch_index in _tqdm(range(len(param_batches))):
-                    _, values = Backtest._mp_task(backtest_uuid, batch_index)
-                    for value, params in zip(values, param_batches[batch_index]):
-                        heatmap[tuple(params.values())] = value
-        finally:
-            del Backtest._mp_backtests[backtest_uuid]
+        @use_named_args(dimensions=dimensions)
+        def convert(x, y):
+            res = self.run(**dict(zip(['n1', 'n2'], [x, y])))
+            return -res[maximize_key]
 
-        best_params = heatmap.idxmax()
+        res = forest_minimize(func=convert,
+                              dimensions=dimensions,
+                              n_calls=max_tries, base_estimator="ET",
+                              random_state=4)
 
-        if pd.isnull(best_params):
-            # No trade was made in any of the runs. Just make a random
-            # run so we get some, if empty, results
-            self.run(**param_combos[0])  # type: ignore
-        else:
-            # Re-run best strategy so that the next .plot() call will render it
-            self.run(**dict(zip(heatmap.index.names, best_params)))
+        # Print the best-found results.
+        print("Best fitness:", res.fun)
+        print("Best parameters:", res.x)
 
-        if return_heatmap:
-            return self._results, heatmap
-        return self._results
+        # def _batch(seq):
+        #     n = np.clip(len(seq) // (os.cpu_count() or 1), 5, 300)
+        #     for i in range(0, len(seq), n):
+        #         yield seq[i:i + n]
+
+        # # Save necessary objects into "global" state; pass into concurrent executor
+        # # (and thus pickle) nothing but two numbers; receive nothing but numbers.
+        # # With start method "fork", children processes will inherit parent address space
+        # # in a copy-on-write manner, achieving better performance/RAM benefit.
+        # backtest_uuid = np.random.random()
+        # param_batches = list(_batch(param_combos))
+        # Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)  # type: ignore
+        # try:
+        #     # If multiprocessing start method is 'fork' (i.e. on POSIX), use
+        #     # a pool of processes to compute results in parallel.
+        #     # Otherwise (i.e. on Windos), sequential computation will be "faster".
+        #     if mp.get_start_method(allow_none=False) == 'fork':
+        #         with ProcessPoolExecutor() as executor:
+        #             futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
+        #                        for i in range(len(param_batches))]
+        #             for future in _tqdm(as_completed(futures), total=len(futures)):
+        #                 batch_index, values = future.result()
+        #                 for value, params in zip(values, param_batches[batch_index]):
+        #                     heatmap[tuple(params.values())] = value
+        #     else:
+        #         if os.name == 'posix':
+        #             warnings.warn("For multiprocessing support in `Backtest.optimize()` "
+        #                           "set multiprocessing start method to 'fork'.")
+        #         for batch_index in _tqdm(range(len(param_batches))):
+        #             _, values = Backtest._mp_task(backtest_uuid, batch_index)
+        #             for value, params in zip(values, param_batches[batch_index]):
+        #                 heatmap[tuple(params.values())] = value
+        # finally:
+        #     del Backtest._mp_backtests[backtest_uuid]
+
+        # best_params = heatmap.idxmax()
+
+        # if pd.isnull(best_params):
+        #     # No trade was made in any of the runs. Just make a random
+        #     # run so we get some, if empty, results
+        #     self.run(**param_combos[0])  # type: ignore
+        # else:
+        #     # Re-run best strategy so that the next .plot() call will render it
+        #     self.run(**dict(zip(heatmap.index.names, best_params)))
+
+        self.run(**dict(zip(['n1', 'n2'], res.x)))
+        return_result = pd.Series([res.fun, res.x, self._results], index=[
+                                  "best_fitness", "best_parameters", "stats_best"])
+        # if return_heatmap:
+        #     return self._results, heatmap
+        return return_result
 
     @staticmethod
     def _mp_task(backtest_uuid, batch_index):

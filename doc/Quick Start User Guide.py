@@ -23,11 +23,11 @@
 #
 # ## Data
 #
-# _You bring your own data._ Backtesting ingests _all kinds of 
+# _You bring your own data._ Backtesting ingests _all kinds of
 # [OHLC](https://en.wikipedia.org/wiki/Open-high-low-close_chart)
 # data_ (stocks, forex, futures, crypto, ...) as a
 # [pandas.DataFrame](https://pandas.pydata.org/pandas-docs/stable/10min.html)
-# with columns `'Open'`, `'High'`, `'Low'`, `'Close'` and (optionally) `'Volume'`. Such data is widely obtainable (see: 
+# with columns `'Open'`, `'High'`, `'Low'`, `'Close'` and (optionally) `'Volume'`. Such data is widely obtainable (see:
 # [pandas-datareader](https://pandas-datareader.readthedocs.io/en/latest/),
 # [Quandl](https://www.quandl.com/tools/python),
 # [findatapy](https://github.com/cuemacro/findatapy)).
@@ -37,7 +37,17 @@
 
 # +
 # Example OHLC daily data for Google Inc.
+from backtesting import Backtest
+from backtesting.lib import crossover
+from backtesting import Strategy
+import pandas as pd
 from backtesting.test import GOOG
+
+from skopt import gp_minimize
+from skopt.plots import plot_objective
+from skopt.space import Integer
+from skopt import forest_minimize
+from skopt.utils import use_named_args
 
 GOOG.tail()
 # -
@@ -52,7 +62,6 @@ GOOG.tail()
 # but for this example, we can define a simple helper moving average function ourselves:
 
 # +
-import pandas as pd
 
 
 def SMA(values, n):
@@ -65,7 +74,7 @@ def SMA(values, n):
 
 # -
 
-# A new strategy needs to extend 
+# A new strategy needs to extend
 # [`Strategy`](https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Strategy)
 # class and override its two abstract methods:
 # [`init()`](https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Strategy.init) and
@@ -82,8 +91,6 @@ def SMA(values, n):
 # If you find yourself wishing to trade within candlesticks (e.g. daytrading), you instead need to begin with more fine-grained (e.g. hourly) data.
 
 # +
-from backtesting import Strategy
-from backtesting.lib import crossover
 
 
 class SmaCross(Strategy):
@@ -91,12 +98,12 @@ class SmaCross(Strategy):
     # for later optimization
     n1 = 10
     n2 = 20
-    
+
     def init(self):
         # Precompute the two moving averages
         self.sma1 = self.I(SMA, self.data.Close, self.n1)
         self.sma2 = self.I(SMA, self.data.Close, self.n2)
-    
+
     def next(self):
         # If sma1 crosses above sma2, close any existing
         # short trades, and buy the asset
@@ -116,7 +123,7 @@ class SmaCross(Strategy):
 # In `init()` as well as in `next()`, the data the strategy is simulated on is available as an instance variable
 # [`self.data`](https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Strategy.data).
 #
-# In `init()`, we declare and **compute indicators indirectly by wrapping them in 
+# In `init()`, we declare and **compute indicators indirectly by wrapping them in
 # [`self.I()`](https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Strategy.I)**.
 # The wrapper is passed a function (our `SMA` function) along with any arguments to call it with (our _close_ values and the MA lag). Indicators wrapped in this way will be automatically plotted, and their legend strings will be intelligently inferred.
 #
@@ -153,7 +160,6 @@ class SmaCross(Strategy):
 # instance is initialized with OHLC data and a strategy _class_ (see API reference for additional options), and we begin with 10,000 units of cash and set broker's commission to realistic 0.2%.
 
 # +
-from backtesting import Backtest
 
 bt = Backtest(GOOG, SmaCross, cash=10000, commission=.002)
 stats = bt.run()
@@ -179,11 +185,13 @@ bt.plot()
 # +
 # %%time
 
-stats = bt.optimize(n1=range(5, 30, 5),
-                    n2=range(10, 70, 5),
-                    maximize='Equity Final [$]',
-                    constraint=lambda param: param.n1 < param.n2)
-stats
+results = bt.optimize(n1=range(5, 30, 5),
+                      n2=range(35, 70, 5),
+                      maximize='Equity Final [$]',
+                      max_tries=20,
+                      constraint=lambda param: param.n1 < param.n2)
+
+stats = results.stats_best
 # -
 
 # We can look into `stats['_strategy']` to access the Strategy _instance_ and its optimal parameter values (10 and 15).
@@ -207,7 +215,8 @@ stats.tail()
 
 # The columns should be self-explanatory.
 
-stats['_equity_curve']  # Contains equity/drawdown curves. DrawdownDuration is only defined at ends of DD periods.
+# Contains equity/drawdown curves. DrawdownDuration is only defined at ends of DD periods.
+stats['_equity_curve']
 
 stats['_trades']  # Contains individual trade data
 
