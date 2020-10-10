@@ -17,3 +17,5 @@ doc/build/*
 .idea/*
 **/.ipynb_checkpoints
 *~*
+
+.vscode/

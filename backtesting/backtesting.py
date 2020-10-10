@@ -24,7 +24,6 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
-from skopt import gp_minimize
 from skopt.plots import plot_objective
 from skopt.space import Integer
 from skopt import forest_minimize
@@ -1214,45 +1213,41 @@ class Backtest:
             def __getattr__(self, item):
                 return self[item]
 
-        param_combos = tuple(map(dict,  # back to dict so it pickles
-                                 filter(constraint,  # constraints applied on our fancy dict
-                                        map(AttrDict,
-                                            product(*(zip(repeat(k), _tuple(v))
-                                                      for k, v in kwargs.items()))))))
+        # param_combos = tuple(map(dict,  # back to dict so it pickles
+        #                          filter(constraint,  # constraints applied on our fancy dict
+        #                                 map(AttrDict,
+        #                                     product(*(zip(repeat(k), _tuple(v))
+        #                                               for k, v in kwargs.items()))))))
 
-        if not param_combos:
-            raise ValueError('No admissible parameter combinations to test')
+        # if not param_combos:
+        #     raise ValueError('No admissible parameter combinations to test')
 
-        if len(param_combos) > 300:
-            warnings.warn('Searching for best of {} configurations.'.format(len(param_combos)),
-                          stacklevel=2)
+        # if len(param_combos) > 300:
+        #     warnings.warn('Searching for best of {} configurations.'.format(len(param_combos)),
+        #                   stacklevel=2)
 
-        heatmap = pd.Series(np.nan,
-                            name=maximize_key,
-                            index=pd.MultiIndex.from_tuples([p.values() for p in param_combos],
-                                                            names=next(iter(param_combos)).keys()))
+        # heatmap = pd.Series(np.nan,
+        #                     name=maximize_key,
+        #                     index=pd.MultiIndex.from_tuples([p.values() for p in param_combos],
+        #                                                     names=next(iter(param_combos)).keys()))
 
         # TODO: add parameter `max_tries:Union[int, float]=None` which switches
         # exhaustive grid search to random search. This might need to avoid
         # returning NaNs in stats on runs with no trades to differentiate those
         # from non-tested parameter combos in heatmap.
 
-        dimensions = [Integer(name='x', low=min(kwargs.get('n1')), high=max(kwargs.get('n1'))),
-                      Integer(name='y', low=min(kwargs.get('n2')), high=max(kwargs.get('n2')))]
+        dimensions = [Integer(name='n1', low=min(kwargs.get('n1')), high=max(kwargs.get('n1'))),
+                      Integer(name='n2', low=min(kwargs.get('n2')), high=max(kwargs.get('n2')))]
 
         @use_named_args(dimensions=dimensions)
-        def convert(x, y):
-            res = self.run(**dict(zip(['n1', 'n2'], [x, y])))
+        def convert(n1, n2):
+            res = self.run(**dict(zip(['n1', 'n2'], [n1, n2])))
             return -res[maximize_key]
 
         res = forest_minimize(func=convert,
                               dimensions=dimensions,
                               n_calls=max_tries, base_estimator="ET",
                               random_state=4)
-
-        # Print the best-found results.
-        print("Best fitness:", res.fun)
-        print("Best parameters:", res.x)
 
         # def _batch(seq):
         #     n = np.clip(len(seq) // (os.cpu_count() or 1), 5, 300)
@@ -1300,8 +1295,8 @@ class Backtest:
         #     self.run(**dict(zip(heatmap.index.names, best_params)))
 
         self.run(**dict(zip(['n1', 'n2'], res.x)))
-        return_result = pd.Series([res.fun, res.x, self._results], index=[
-                                  "best_fitness", "best_parameters", "stats_best"])
+        return_result = pd.Series([res.fun, res.x, res, self._results], index=[
+                                  "best_fitness", "best_parameters", "full_results", "stats_best"])
         # if return_heatmap:
         #     return self._results, heatmap
         return return_result
