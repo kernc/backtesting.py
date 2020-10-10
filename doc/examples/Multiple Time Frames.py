@@ -15,11 +15,11 @@
 # Multiple Time Frames
 # ============
 #
-# The best trading strategies relying on technical analysis take into account the price action on multiple time frames.
-# This tutorial will show how to do that with backtesting.py, offloading most of the work to
+# Best trading strategies that rely on technical analysis might take into account price action on multiple time frames.
+# This tutorial will show how to do that with _backtesting.py_, offloading most of the work to
 # [pandas resampling](http://pandas.pydata.org/pandas-docs/stable/timeseries.html#resampling).
 # It is assumed you're already familiar with
-# [basic usage](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html).
+# [basic framework usage](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html).
 #
 # We will put to the test this long-only, supposed
 # [400%-a-year trading strategy](http://jbmarwood.com/stock-trading-strategy-300/),

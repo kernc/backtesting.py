@@ -24,7 +24,8 @@ from backtesting.lib import (
     SignalStrategy,
     TrailingStrategy,
     resample_apply,
-    plot_heatmaps
+    plot_heatmaps,
+    random_ohlc_data,
 )
 from backtesting.test import GOOG, EURUSD, SMA
 from backtesting._util import _Indicator, _as_str, _Array, try_
@@ -211,7 +212,8 @@ class TestBacktest(TestCase):
                         self.position.close()
 
         bt = Backtest(GOOG, Assertive)
-        stats = bt.run()
+        with self.assertWarns(UserWarning):
+            stats = bt.run()
         self.assertEqual(stats['# Trades'], 144)
 
     def test_broker_params(self):
@@ -330,6 +332,52 @@ class TestBacktest(TestCase):
                 self.assertFalse(stats['_equity_curve']['Equity'].isnull().any())
                 self.assertEqual(stats['_strategy'].__class__, strategy)
 
+    def test_trade_enter_hit_sl_on_same_day(self):
+        the_day = pd.Timestamp("2012-10-17 00:00:00")
+
+        class S(Strategy):
+            def init(self): pass
+
+            def next(self):
+                if self.data.index[-1] == the_day:
+                    self.buy(sl=720)
+
+        self.assertEqual(Backtest(GOOG, S).run()._trades.iloc[0].ExitPrice, 720)
+
+        class S(S):
+            def next(self):
+                if self.data.index[-1] == the_day:
+                    self.buy(stop=758, sl=720)
+
+        with self.assertWarns(UserWarning):
+            self.assertEqual(Backtest(GOOG, S).run()._trades.iloc[0].ExitPrice, 705.58)
+
+    def test_stop_price_between_sl_tp(self):
+        class S(Strategy):
+            def init(self): pass
+
+            def next(self):
+                if self.data.index[-1] == pd.Timestamp("2004-09-09 00:00:00"):
+                    self.buy(stop=104, sl=103, tp=110)
+
+        with self.assertWarns(UserWarning):
+            self.assertEqual(Backtest(GOOG, S).run()._trades.iloc[0].EntryPrice, 104)
+
+    def test_position_close_portion(self):
+        class SmaCross(Strategy):
+            def init(self):
+                self.sma1 = self.I(SMA, self.data.Close, 10)
+                self.sma2 = self.I(SMA, self.data.Close, 20)
+
+            def next(self):
+                if not self.position and crossover(self.sma1, self.sma2):
+                    self.buy(size=10)
+                if self.position and crossover(self.sma2, self.sma1):
+                    self.position.close(portion=.5)
+
+        bt = Backtest(GOOG, SmaCross, commission=.002)
+        bt.run()
+
 
 class TestStrategy(TestCase):
     def _Backtest(self, strategy_coroutine, **kwargs):
@@ -386,6 +434,17 @@ class TestStrategy(TestCase):
             assert self.trades[0].size == -3
 
         self._Backtest(coroutine, exclusive_orders=True).run()
+
+    def test_trade_multiple_close(self):
+        def coroutine(self):
+            yield self.buy()
+
+            assert self.trades
+            self.trades[-1].close(1)
+            self.trades[-1].close(.1)
+            yield
+
+        self._Backtest(coroutine).run()
 
 
 class TestOptimize(TestCase):
@@ -667,6 +726,13 @@ class TestLib(TestCase):
             # Preview
             plot_heatmaps(heatmap, filename=f)
             time.sleep(5)
+
+    def test_random_ohlc_data(self):
+        generator = random_ohlc_data(GOOG)
+        new_data = next(generator)
+        self.assertEqual(list(new_data.index), list(GOOG.index))
+        self.assertEqual(new_data.shape, GOOG.shape)
+        self.assertEqual(list(new_data.columns), list(GOOG.columns))
 
     def test_SignalStrategy(self):
         class S(SignalStrategy):

@@ -15,6 +15,7 @@ from bokeh.colors.named import (
 )
 from bokeh.plotting import figure as _figure
 from bokeh.models import (
+    CrosshairTool,
     CustomJS,
     ColumnDataSource,
     NumeralTickFormatter,
@@ -192,7 +193,7 @@ def plot(*, results: pd.Series,
         x_axis_type='linear',
         plot_width=plot_width,
         plot_height=400,
-        tools="xpan,xwheel_zoom,box_zoom,undo,redo,reset,crosshair,save",
+        tools="xpan,xwheel_zoom,box_zoom,undo,redo,reset,save",
         active_drag='xpan',
         active_scroll='xwheel_zoom')
 
@@ -200,6 +201,7 @@ def plot(*, results: pd.Series,
 
     fig_ohlc = new_bokeh_figure(
         x_range=Range1d(index[0], index[-1],
+                        min_interval=10,
                         bounds=(index[0] - pad,
                                 index[-1] + pad)) if index.size > 1 else None)
     figs_above_ohlc, figs_below_ohlc = [], []
@@ -234,7 +236,7 @@ this.labels = this.labels || formatter.doFormat(ticks
 return this.labels[index] || "";
         ''')
 
-    NBSP = '&nbsp;' * 4
+    NBSP = '\N{NBSP}' * 4
     ohlc_extreme_values = df[['High', 'Low']].copy(deep=False)
     ohlc_tooltips = [
         ('x, y', NBSP.join(('$index',
@@ -599,6 +601,8 @@ return this.labels[index] || "";
                                                   code=_AUTOSCALE_JS_CALLBACK))
 
     plots = figs_above_ohlc + [fig_ohlc] + figs_below_ohlc
+    linked_crosshair = CrosshairTool(dimensions='both')
+
     for f in plots:
         if f.legend:
             f.legend.location = 'top_left' if show_legend else None
@@ -608,12 +612,14 @@ return this.labels[index] || "";
             f.legend.spacing = 0
             f.legend.margin = 0
             f.legend.label_text_font_size = '8pt'
+            f.legend.click_policy = "hide"
         f.min_border_left = 0
         f.min_border_top = 3
         f.min_border_bottom = 6
         f.min_border_right = 10
         f.outline_line_color = '#666666'
 
+        f.add_tools(linked_crosshair)
         wheelzoom_tool = next(wz for wz in f.tools if isinstance(wz, WheelZoomTool))
         wheelzoom_tool.maintain_focus = False
 

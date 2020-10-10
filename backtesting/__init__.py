@@ -15,6 +15,7 @@
 * [Library of Utilities and Composable Base Strategies](../examples/Strategies Library.html)
 * [Multiple Time Frames](../examples/Multiple Time Frames.html)
 * [Parameter Heatmap](../examples/Parameter Heatmap.html)
+* [**Trading with Machine Learning**](../examples/Trading with Machine Learning.html)
 
 These tutorials are also available to test as live Jupyter notebooks:
 [![Binder](https://mybinder.org/badge_logo.svg)][binder]
@@ -29,8 +30,8 @@ urlpath=lab%2Ftree%2Fdoc%2Fexamples%2FQuick%20Start%20User%20Guide.ipynb
 
 ## FAQ
 
-Potentially outdated answers to popular questions can be found on the
-[issue tracker](https://github.com/kernc/backtesting.py/issues?q=label%3Aquestion).
+Potentially outdated answers to frequent and popular questions can be found on the
+[issue tracker](https://github.com/kernc/backtesting.py/issues?q=label%3Aquestion+-label%3Ainvalid).
 
 ## License
 

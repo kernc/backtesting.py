@@ -15,7 +15,7 @@
 # Library of Composable Base Strategies
 # ======================
 #
-# This tutorial will show how to reuse composable base trading strategies that are part of _Backtesting.py_ software distribution.
+# This tutorial will show how to reuse composable base trading strategies that are part of _backtesting.py_ software distribution.
 # It is, henceforth, assumed you're already familiar with
 # [basic package usage](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html).
 #
