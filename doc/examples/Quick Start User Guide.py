@@ -43,12 +43,6 @@ from backtesting import Strategy
 import pandas as pd
 from backtesting.test import GOOG
 
-from skopt import gp_minimize
-from skopt.plots import plot_objective
-from skopt.space import Integer
-from skopt import forest_minimize
-from skopt.utils import use_named_args
-
 GOOG.tail()
 # -
 
@@ -185,13 +179,11 @@ bt.plot()
 # +
 # %%time
 
-results = bt.optimize(n1=range(5, 30, 5),
-                      n2=range(35, 70, 5),
-                      maximize='Equity Final [$]',
-                      max_tries=20,
-                      constraint=lambda param: param.n1 < param.n2)
-
-stats = results.stats_best
+stats = bt.optimize(n1=range(5, 30, 5),
+                    n2=range(10, 70, 5),
+                    maximize='Equity Final [$]',
+                    constraint=lambda param: param.n1 < param.n2)
+stats
 # -
 
 # We can look into `stats['_strategy']` to access the Strategy _instance_ and its optimal parameter values (10 and 15).

@@ -19,11 +19,13 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import copy
 from functools import partial
 from itertools import repeat, product, chain
+from math import copysign
 from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
+
 from skopt.plots import plot_objective
 from skopt.space import Integer
 from skopt import forest_minimize
@@ -138,7 +140,8 @@ class Strategy(metaclass=ABCMeta):
         if isinstance(value, pd.DataFrame):
             value = value.values.T
 
-        value = try_(lambda: np.asarray(value, order='C'), None)
+        if value is not None:
+            value = try_(lambda: np.asarray(value, order='C'), None)
         is_arraylike = value is not None
 
         # Optionally flip the array if the user returned e.g. `df.values`
@@ -148,7 +151,7 @@ class Strategy(metaclass=ABCMeta):
         if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data.Close):
             raise ValueError(
                 'Indicators must return (optionally a tuple of) numpy.arrays of same '
-                'length as `data`(data shape: {}; indicator "{}" shape: {}, value: {})'
+                'length as `data` (data shape: {}; indicator "{}" shape: {}, returned value: {})'
                 .format(self._data.Close.shape, name, getattr(value, 'shape', ''), value))
 
         if plot and overlay is None and np.issubdtype(value.dtype, np.number):
@@ -203,7 +206,7 @@ class Strategy(metaclass=ABCMeta):
             sl: float = None,
             tp: float = None):
         """
-        Place a new short order. For explanation of parameters, see `Order` and its properties.
+        Place a new long order. For explanation of parameters, see `Order` and its properties.
 
         See also `Strategy.sell()`.
         """
@@ -387,6 +390,7 @@ class Order:
                  tp_price: float = None,
                  parent_trade: 'Trade' = None):
         self.__broker = broker
+        assert size != 0
         self.__size = size
         self.__limit_price = limit_price
         self.__stop_price = stop_price
@@ -539,9 +543,9 @@ class Trade:
     def close(self, portion: float = 1.):
         """Place new `Order` to close `portion` of the trade at next market price."""
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
-        # TODO: check this insert
-        self.__broker.orders.insert(0, Order(self.__broker, -round(self.size * portion),
-                                             parent_trade=self))
+        size = copysign(max(1, round(abs(self.__size) * portion)), -self.__size)
+        order = Order(self.__broker, size, parent_trade=self)
+        self.__broker.orders.insert(0, order)
 
     # Fields getters
 
@@ -598,7 +602,7 @@ class Trade:
     @property
     def is_long(self):
         """True if the trade is long (trade size is positive)."""
-        return self.size > 0
+        return self.__size > 0
 
     @property
     def is_short(self):
@@ -615,7 +619,7 @@ class Trade:
     def pl_pct(self):
         """Trade profit (positive) or loss (negative) in percent."""
         price = self.__exit_price or self.__broker.last_price
-        return np.sign(self.__size) * (price / self.__entry_price - 1)
+        return copysign(1, self.__size) * (price / self.__entry_price - 1)
 
     @property
     def value(self):
@@ -712,14 +716,13 @@ class _Broker:
         is_long = size > 0
 
         if is_long:
-            # TODO: check stop as well
-            assert (sl or -np.inf) <= (limit or self.last_price) <= (tp or np.inf), \
-                "Long orders require: SL ({}) < LIMIT ({}) < TP ({})".format(
-                    sl, limit or self.last_price, tp)
+            if not (sl or -np.inf) <= (limit or stop or self.last_price) <= (tp or np.inf):
+                raise ValueError("Long orders require: SL ({}) < LIMIT ({}) < TP ({})".format(
+                    sl, limit or stop or self.last_price, tp))
         else:
-            assert (tp or -np.inf) <= (limit or self.last_price) <= (sl or np.inf), \
-                "Short orders require: TP ({}) < LIMIT ({}) < SL ({})".format(
-                    tp, limit or self.last_price, sl)
+            if not (tp or -np.inf) <= (limit or stop or self.last_price) <= (sl or np.inf):
+                raise ValueError("Short orders require: TP ({}) < LIMIT ({}) < SL ({})".format(
+                    tp, limit or stop or self.last_price, sl))
 
         order = Order(self, size, limit, stop, sl, tp, trade)
         # Put the new order in the order queue,
@@ -778,6 +781,7 @@ class _Broker:
         data = self._data
         open, high, low = data.Open[-1], data.High[-1], data.Low[-1]
         prev_close = data.Close[-2]
+        reprocess_orders = False
 
         # Process orders
         for order in list(self.orders):  # type: Order
@@ -828,17 +832,21 @@ class _Broker:
             # If order is a SL/TP order, it should close an existing trade it was contingent upon
             if order.parent_trade:
                 trade = order.parent_trade
+                _prev_size = trade.size
+                # If order.size is "greater" than trade.size, this order is a trade.close()
+                # order and part of the trade was already closed beforehand
+                size = copysign(min(abs(_prev_size), abs(order.size)), order.size)
                 # If this trade isn't already closed (e.g. on multiple `trade.close(.5)` calls)
                 if trade in self.trades:
-                    self._reduce_trade(trade, price, order.size, time_index)
-                    assert order.size != -trade.size or trade not in self.trades
+                    self._reduce_trade(trade, price, size, time_index)
+                    assert order.size != -_prev_size or trade not in self.trades
                 if order in (trade._sl_order,
                              trade._tp_order):
                     assert order.size == -trade.size
                     assert order not in self.orders  # Removed when trade was closed
                 else:
                     # It's a trade.close() order, now done
-                    assert abs(trade.size) >= abs(order.size) >= 1
+                    assert abs(_prev_size) >= abs(size) >= 1
                     self.orders.remove(order)
                 continue
 
@@ -846,14 +854,14 @@ class _Broker:
 
             # Adjust price to include commission (or bid-ask spread).
             # In long positions, the adjusted price is a fraction higher, and vice versa.
-            adjusted_price = price * (1 + (np.sign(order.size) * self._commission))
+            adjusted_price = price * (1 + copysign(self._commission, order.size))
 
             # If order size was specified proportionally,
             # precompute true size in units, accounting for margin and spread/commissions
             size = order.size
             if -1 < size < 1:
-                size = np.sign(size) * int((self.margin_available * self._leverage * abs(size))
-                                           // adjusted_price)
+                size = copysign(int((self.margin_available * self._leverage * abs(size))
+                                    // adjusted_price), size)
                 # Not enough cash/margin even for a single unit
                 if not size:
                     self.orders.remove(order)
@@ -868,7 +876,7 @@ class _Broker:
                 for trade in list(self.trades):
                     if trade.is_long == order.is_long:
                         continue
-                    assert np.sign(trade.size) + np.sign(order.size) == 0
+                    assert trade.size * order.size < 0
 
                     # Order size greater than this opposite-directed existing trade,
                     # so it will be closed completely
@@ -891,14 +899,35 @@ class _Broker:
             if need_size:
                 self._open_trade(adjusted_price, need_size, order.sl, order.tp, time_index)
 
+                # We need to reprocess the SL/TP orders newly added to the queue.
+                # This allows e.g. SL hitting in the same bar the order was open.
+                # See https://github.com/kernc/backtesting.py/issues/119
+                if order.sl or order.tp:
+                    if is_market_order:
+                        reprocess_orders = True
+                    elif (low <= (order.sl or -np.inf) <= high or
+                          low <= (order.tp or -np.inf) <= high):
+                        warnings.warn(
+                            "A SL/TP order would execute in the same bar as its contingent upon "
+                            "stop/limit order. Since we can't assert the precise intra-candle "
+                            "price movement, the affected SL/TP order will be executed on "
+                            "the next (matching) price/bar, making the result (of this trade) "
+                            "somewhat dubious. "
+                            "See https://github.com/kernc/backtesting.py/issues/119",
+                            UserWarning)
+
             # Order processed
             self.orders.remove(order)
 
+        if reprocess_orders:
+            self._process_orders()
+
     def _reduce_trade(self, trade: Trade, price: float, size: float, time_index: int):
-        assert np.sign(trade.size) != np.sign(size)
+        assert trade.size * size < 0
         assert abs(trade.size) >= abs(size)
 
         size_left = trade.size + size
+        assert size_left * trade.size >= 0
         if not size_left:
             close_trade = trade
         else:
@@ -998,6 +1027,10 @@ class Backtest:
         If `hedging` is `True`, allow trades in both directions simultaneously.
         If `False`, the opposite-facing orders first close existing trades in
         a [FIFO] manner.
+
+        If `exclusive_orders` is `True`, each new order auto-closes the previous
+        trade/position, making at most a single trade (long or short) in effect
+        at each time.
 
         [FIFO]: https://www.investopedia.com/terms/n/nfa-compliance-rule-2-43b.asp
         """
@@ -1137,7 +1170,6 @@ class Backtest:
     def optimize(self,
                  maximize: Union[str, Callable[[pd.Series], float]] = 'SQN',
                  constraint: Callable[[dict], bool] = None,
-                 max_tries: Union[int, float] = 100,
                  return_heatmap: bool = False,
                  **kwargs) -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
         """
@@ -1213,93 +1245,76 @@ class Backtest:
             def __getattr__(self, item):
                 return self[item]
 
-        # param_combos = tuple(map(dict,  # back to dict so it pickles
-        #                          filter(constraint,  # constraints applied on our fancy dict
-        #                                 map(AttrDict,
-        #                                     product(*(zip(repeat(k), _tuple(v))
-        #                                               for k, v in kwargs.items()))))))
+        param_combos = tuple(map(dict,  # back to dict so it pickles
+                                 filter(constraint,  # constraints applied on our fancy dict
+                                        map(AttrDict,
+                                            product(*(zip(repeat(k), _tuple(v))
+                                                      for k, v in kwargs.items()))))))
+        if not param_combos:
+            raise ValueError('No admissible parameter combinations to test')
 
-        # if not param_combos:
-        #     raise ValueError('No admissible parameter combinations to test')
+        if len(param_combos) > 300:
+            warnings.warn('Searching for best of {} configurations.'.format(len(param_combos)),
+                          stacklevel=2)
 
-        # if len(param_combos) > 300:
-        #     warnings.warn('Searching for best of {} configurations.'.format(len(param_combos)),
-        #                   stacklevel=2)
-
-        # heatmap = pd.Series(np.nan,
-        #                     name=maximize_key,
-        #                     index=pd.MultiIndex.from_tuples([p.values() for p in param_combos],
-        #                                                     names=next(iter(param_combos)).keys()))
+        heatmap = pd.Series(np.nan,
+                            name=maximize_key,
+                            index=pd.MultiIndex.from_tuples([p.values() for p in param_combos],
+                                                            names=next(iter(param_combos)).keys()))
 
         # TODO: add parameter `max_tries:Union[int, float]=None` which switches
         # exhaustive grid search to random search. This might need to avoid
         # returning NaNs in stats on runs with no trades to differentiate those
         # from non-tested parameter combos in heatmap.
 
-        dimensions = [Integer(name='n1', low=min(kwargs.get('n1')), high=max(kwargs.get('n1'))),
-                      Integer(name='n2', low=min(kwargs.get('n2')), high=max(kwargs.get('n2')))]
+        def _batch(seq):
+            n = np.clip(len(seq) // (os.cpu_count() or 1), 5, 300)
+            for i in range(0, len(seq), n):
+                yield seq[i:i + n]
 
-        @use_named_args(dimensions=dimensions)
-        def convert(n1, n2):
-            res = self.run(**dict(zip(['n1', 'n2'], [n1, n2])))
-            return -res[maximize_key]
+        # Save necessary objects into "global" state; pass into concurrent executor
+        # (and thus pickle) nothing but two numbers; receive nothing but numbers.
+        # With start method "fork", children processes will inherit parent address space
+        # in a copy-on-write manner, achieving better performance/RAM benefit.
+        backtest_uuid = np.random.random()
+        param_batches = list(_batch(param_combos))
+        Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)  # type: ignore
+        try:
+            # If multiprocessing start method is 'fork' (i.e. on POSIX), use
+            # a pool of processes to compute results in parallel.
+            # Otherwise (i.e. on Windos), sequential computation will be "faster".
+            if mp.get_start_method(allow_none=False) == 'fork':
+                with ProcessPoolExecutor() as executor:
+                    futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
+                               for i in range(len(param_batches))]
+                    for future in _tqdm(as_completed(futures), total=len(futures)):
+                        batch_index, values = future.result()
+                        for value, params in zip(values, param_batches[batch_index]):
+                            heatmap[tuple(params.values())] = value
+            else:
+                if os.name == 'posix':
+                    warnings.warn("For multiprocessing support in `Backtest.optimize()` "
+                                  "set multiprocessing start method to 'fork'.")
+                for batch_index in _tqdm(range(len(param_batches))):
+                    _, values = Backtest._mp_task(backtest_uuid, batch_index)
+                    for value, params in zip(values, param_batches[batch_index]):
+                        heatmap[tuple(params.values())] = value
+        finally:
+            del Backtest._mp_backtests[backtest_uuid]
 
-        res = forest_minimize(func=convert,
-                              dimensions=dimensions,
-                              n_calls=max_tries, base_estimator="ET",
-                              random_state=4)
+        best_params = heatmap.idxmax()
 
-        # def _batch(seq):
-        #     n = np.clip(len(seq) // (os.cpu_count() or 1), 5, 300)
-        #     for i in range(0, len(seq), n):
-        #         yield seq[i:i + n]
+        if pd.isnull(best_params):
+            # No trade was made in any of the runs. Just make a random
+            # run so we get some, if empty, results
+            self.run(**param_combos[0])  # type: ignore
+        else:
+            # Re-run best strategy so that the next .plot() call will render it
+            self.run(**dict(zip(heatmap.index.names, best_params)))
 
-        # # Save necessary objects into "global" state; pass into concurrent executor
-        # # (and thus pickle) nothing but two numbers; receive nothing but numbers.
-        # # With start method "fork", children processes will inherit parent address space
-        # # in a copy-on-write manner, achieving better performance/RAM benefit.
-        # backtest_uuid = np.random.random()
-        # param_batches = list(_batch(param_combos))
-        # Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)  # type: ignore
-        # try:
-        #     # If multiprocessing start method is 'fork' (i.e. on POSIX), use
-        #     # a pool of processes to compute results in parallel.
-        #     # Otherwise (i.e. on Windos), sequential computation will be "faster".
-        #     if mp.get_start_method(allow_none=False) == 'fork':
-        #         with ProcessPoolExecutor() as executor:
-        #             futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
-        #                        for i in range(len(param_batches))]
-        #             for future in _tqdm(as_completed(futures), total=len(futures)):
-        #                 batch_index, values = future.result()
-        #                 for value, params in zip(values, param_batches[batch_index]):
-        #                     heatmap[tuple(params.values())] = value
-        #     else:
-        #         if os.name == 'posix':
-        #             warnings.warn("For multiprocessing support in `Backtest.optimize()` "
-        #                           "set multiprocessing start method to 'fork'.")
-        #         for batch_index in _tqdm(range(len(param_batches))):
-        #             _, values = Backtest._mp_task(backtest_uuid, batch_index)
-        #             for value, params in zip(values, param_batches[batch_index]):
-        #                 heatmap[tuple(params.values())] = value
-        # finally:
-        #     del Backtest._mp_backtests[backtest_uuid]
-
-        # best_params = heatmap.idxmax()
-
-        # if pd.isnull(best_params):
-        #     # No trade was made in any of the runs. Just make a random
-        #     # run so we get some, if empty, results
-        #     self.run(**param_combos[0])  # type: ignore
-        # else:
-        #     # Re-run best strategy so that the next .plot() call will render it
-        #     self.run(**dict(zip(heatmap.index.names, best_params)))
-
-        self.run(**dict(zip(['n1', 'n2'], res.x)))
-        return_result = pd.Series([res.fun, res.x, res, self._results], index=[
-                                  "best_fitness", "best_parameters", "full_results", "stats_best"])
-        # if return_heatmap:
-        #     return self._results, heatmap
-        return return_result
+        if return_heatmap:
+            return self._results, heatmap
+        return self._results
 
     @staticmethod
     def _mp_task(backtest_uuid, batch_index):
@@ -1376,7 +1391,7 @@ class Backtest:
         s.loc['Equity Peak [$]'] = equity.max()
         s.loc['Return [%]'] = (equity[-1] - equity[0]) / equity[0] * 100
         c = data.Close.values
-        s.loc['Buy & Hold Return [%]'] = abs(c[-1] - c[0]) / c[0] * 100  # long OR short
+        s.loc['Buy & Hold Return [%]'] = (c[-1] - c[0]) / c[0] * 100  # long-only return
         s.loc['Max. Drawdown [%]'] = max_dd = -np.nan_to_num(dd.max()) * 100
         s.loc['Avg. Drawdown [%]'] = -dd_peaks.mean() * 100
         s.loc['Max. Drawdown Duration'] = _round_timedelta(dd_dur.max())
@@ -1510,3 +1525,68 @@ class Backtest:
             reverse_indicators=reverse_indicators,
             show_legend=show_legend,
             open_browser=open_browser)
+
+    def optimize_skopt(self,
+                       maximize: Union[str, Callable[[pd.Series], float]] = 'SQN',
+                       max_tries: Union[int, float] = 100,
+                       **kwargs) -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
+        """
+        Optimize strategy parameters to an optimal combination using
+        scikit-optimize. Returns result `pd.Series` of
+        the best run.
+
+        `maximize` is a string key from the
+        `backtesting.backtesting.Backtest.run`-returned results series,
+        or a function that accepts this series object and returns a number;
+        the higher the better. By default, the method maximizes
+        Van Tharp's [System Quality Number](https://google.com/search?q=System+Quality+Number).
+
+        Additional keyword arguments represent strategy arguments with
+        list-like collections of possible values. For example, the following
+        code finds and returns the "best" of the 7 admissible (of the
+        9 possible) parameter combinations:
+
+            backtest.optimize(sma1=[5, 10, 15], sma2=[10, 20, 40],
+                              constraint=lambda p: p.sma1 < p.sma2)
+
+        .. TODO::
+            Improve multiprocessing with joblib.parallel .
+        """
+
+        if not kwargs:
+            raise ValueError('Need some strategy parameters to optimize')
+
+        maximize_key = None
+        if isinstance(maximize, str):
+            maximize_key = str(maximize)
+            stats = self._results if self._results is not None else self.run()
+            if maximize not in stats:
+                raise ValueError('`maximize`, if str, must match a key in pd.Series '
+                                 'result of backtest.run()')
+
+            def maximize(stats: pd.Series, _key=maximize):
+                return stats[_key]
+
+        elif not callable(maximize):
+            raise TypeError('`maximize` must be str (a field of backtest.run() result '
+                            'Series) or a function that accepts result Series '
+                            'and returns a number; the higher the better')
+
+        dimensions = [Integer(name='n1', low=min(kwargs.get('n1')), high=max(kwargs.get('n1'))),
+                      Integer(name='n2', low=min(kwargs.get('n2')), high=max(kwargs.get('n2')))]
+
+        @use_named_args(dimensions=dimensions)
+        def convert(n1, n2):
+            res = self.run(**dict(zip(['n1', 'n2'], [n1, n2])))
+            return -res[maximize_key]
+
+        res = forest_minimize(func=convert,
+                              dimensions=dimensions,
+                              n_calls=max_tries, base_estimator="ET",
+                              random_state=4)
+
+        self.run(**dict(zip(['n1', 'n2'], res.x)))
+        return_result = pd.Series([res.fun, res.x, res, self._results], index=[
+                                  "best_fitness", "best_parameters", "full_results", "stats_best"])
+
+        return return_result
