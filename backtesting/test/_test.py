@@ -507,6 +507,7 @@ class TestOptimize(TestCase):
     def test_optimize_invalid_param(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
         self.assertRaises(AttributeError, bt.optimize, foo=range(3))
+        self.assertRaises(ValueError, bt.optimize, fast=[])
 
     def test_optimize_no_trades(self):
         bt = Backtest(GOOG, SmaCross)

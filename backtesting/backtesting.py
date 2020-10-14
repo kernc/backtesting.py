@@ -1235,6 +1235,11 @@ class Backtest:
         def _tuple(x):
             return x if isinstance(x, Sequence) and not isinstance(x, str) else (x,)
 
+        for k, v in kwargs.items():
+            if len(_tuple(v)) == 0:
+                raise ValueError("Optimization variable '{0}' is passed no "
+                                 "optimization values: {0}={1}".format(k, v))
+
         class AttrDict(dict):
             def __getattr__(self, item):
                 return self[item]
