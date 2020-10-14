@@ -9,7 +9,9 @@ omit =
 
 [report]
 exclude_lines =
-    return
-    raise
-    except
-    warnings.warn
+    ^\s*continue\b
+    ^\s*return\b
+    ^\s*raise\b
+    ^\s*except\b
+    ^\s*warnings\.warn\(
+    ^\s*warn\(
