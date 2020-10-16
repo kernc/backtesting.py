@@ -274,7 +274,7 @@ class TestBacktest(TestCase):
                 'Profit Factor': 2.0880175388920286,
                 'Return (Ann.) [%]': 21.32802699608929,
                 'Return [%]': 419.59949999999964,
-                'Risk (Ann.) [%]': 36.53825234483751,
+                'Volatility (Ann.) [%]': 36.53825234483751,
                 'SQN': 0.916892986080858,
                 'Sharpe Ratio': 0.5837177650097084,
                 'Sortino Ratio': 1.0923863161583591,
