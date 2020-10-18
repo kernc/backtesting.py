@@ -257,7 +257,7 @@ return this.labels[index] || "";
         fig.yaxis.minor_tick_line_color = None
         return fig
 
-    def set_tooltips(fig, tooltips=(), vline=True, renderers=(), show_arrow=True):
+    def set_tooltips(fig, tooltips=(), vline=True, renderers=()):
         tooltips = list(tooltips)
         renderers = list(renderers)
 
@@ -269,7 +269,7 @@ return this.labels[index] || "";
             tooltips = [("#", "@index")] + tooltips
         fig.add_tools(HoverTool(
             point_policy='follow_mouse',
-            renderers=renderers, formatters=formatters, show_arrow=show_arrow,
+            renderers=renderers, formatters=formatters,
             tooltips=tooltips, mode='vline' if vline else 'mouse'))
 
     def _plot_equity_section():

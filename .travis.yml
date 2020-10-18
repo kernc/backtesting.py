@@ -1,6 +1,6 @@
+os: linux
 language: python
-dist: xenial
-sudo: false
+dist: bionic
 cache:
   pip: true
 branches:
@@ -9,7 +9,7 @@ branches:
   # Tags
   - /^(\d+\.)+\d+(\.\S+)?$/
 
-matrix:
+jobs:
   fast_finish: true
   include:
     - python: '3.5'

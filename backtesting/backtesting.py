@@ -1068,6 +1068,11 @@ class Backtest:
             raise ValueError('Some OHLC values are missing (NaN). '
                              'Please strip those lines with `df.dropna()` or '
                              'fill them in with `df.interpolate()` or whatever.')
+        if np.any(data['Close'] > cash):
+            warnings.warn('Some prices are larger than initial cash value. Note that fractional '
+                          'trading is not supported. If you want to trade Bitcoin, '
+                          'increase initial cash, or trade μBTC or satoshis instead (GH-134).',
+                          stacklevel=2)
         if not data.index.is_monotonic_increasing:
             warnings.warn('Data index is not sorted in ascending order. Sorting.',
                           stacklevel=2)
@@ -1240,6 +1245,11 @@ class Backtest:
 
         def _tuple(x):
             return x if isinstance(x, Sequence) and not isinstance(x, str) else (x,)
+
+        for k, v in kwargs.items():
+            if len(_tuple(v)) == 0:
+                raise ValueError("Optimization variable '{0}' is passed no "
+                                 "optimization values: {0}={1}".format(k, v))
 
         class AttrDict(dict):
             def __getattr__(self, item):
