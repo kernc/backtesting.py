@@ -27,7 +27,7 @@ import numpy as np
 import pandas as pd
 
 from skopt.plots import plot_objective
-from skopt.space import Integer
+from skopt.space import Integer, Real, Categorical
 from skopt import forest_minimize
 from skopt.utils import use_named_args
 
@@ -1354,13 +1354,27 @@ class Backtest:
             .. TODO::
                 Improve multiprocessing with joblib.parallel .
             """
+            dimensions = []
+            for key, value in kwargs.items():
+                args_array = np.array(value)
 
-            dimensions = [Integer(name='n1', low=min(kwargs.get('n1')), high=max(kwargs.get('n1'))),
-                          Integer(name='n2', low=min(kwargs.get('n2')), high=max(kwargs.get('n2')))]
+                if args_array.dtype.kind == 'i':
+                    dimensions.append(Integer(name=key, low=min(value), high=max(value)))
+                elif args_array.dtype.kind == 'f':
+                    dimensions.append(Real(name=key, low=min(value), high=max(value)))
+                else:
+                    dimensions.append(Categorical(args_array.tolist(), name=key))
 
-            @use_named_args(dimensions=dimensions)
-            def convert(n1, n2):
-                res = self.run(**dict(zip(['n1', 'n2'], [n1, n2])))
+            # @ use_named_args(dimensions=dimensions)
+            # def convert(n1, n2):
+            #     res = self.run(**dict(zip(['n1', 'n2'], [n1, n2])))
+            #     return -res[maximize_key]
+            @ use_named_args(dimensions=dimensions)
+            def convert(**params):
+                index = []
+                for item in params:
+                    index.append("'" + item + "'")
+                res = self.run(**dict(zip(index, params)))
                 return -res[maximize_key]
 
             res = forest_minimize(func=convert,
@@ -1387,7 +1401,7 @@ class Backtest:
         output = switch_method(method)
         return output
 
-    @staticmethod
+    @ staticmethod
     def _mp_task(backtest_uuid, batch_index):
         bt, param_batches, maximize_func = Backtest._mp_backtests[backtest_uuid]
         return batch_index, [maximize_func(stats) if stats['# Trades'] else np.nan
@@ -1396,7 +1410,7 @@ class Backtest:
 
     _mp_backtests = {}  # type: Dict[float, Tuple[Backtest, List, Callable]]
 
-    @staticmethod
+    @ staticmethod
     def _compute_drawdown_duration_peaks(dd: pd.Series):
         iloc = np.unique(np.r_[(dd == 0).values.nonzero()[0], len(dd) - 1])
         iloc = pd.Series(iloc, index=dd.index[iloc])
