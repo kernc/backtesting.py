@@ -21,7 +21,7 @@ from functools import partial
 from itertools import repeat, product, chain
 from math import copysign
 from numbers import Number
-from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union, Literal, get_args
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
@@ -1174,10 +1174,11 @@ class Backtest:
 
     def optimize(self,
                  maximize: Union[str, Callable[[pd.Series], float]] = 'SQN',
-                 method: Literal['auto', 'full', 'random', 'skopt'] = 'auto',
-                 max_tries: Union[int, float] = 20,
+                 method: str = 'grid',
+                 max_tries: Union[int, float] = 100,
                  constraint: Callable[[dict], bool] = None,
                  return_heatmap: bool = False,
+                 return_optimization: bool = False,
                  **kwargs) -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
         """
         Optimize strategy parameters to an optimal combination using
@@ -1246,7 +1247,7 @@ class Backtest:
                             "of strategy parameters and returns a bool whether "
                             "the combination of parameters is admissible or not")
 
-        def _auto() -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
+        def _optimize_grid() -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
 
             def _tuple(x):
                 return x if isinstance(x, Sequence) and not isinstance(x, str) else (x,)
@@ -1337,19 +1338,14 @@ class Backtest:
             scikit-optimize. Returns result `pd.Series` of
             the best run.
 
-            `maximize` is a string key from the
-            `backtesting.backtesting.Backtest.run`-returned results series,
-            or a function that accepts this series object and returns a number;
-            the higher the better. By default, the method maximizes
-            Van Tharp's [System Quality Number](https://google.com/search?q=System+Quality+Number).
+            skopt.forest_minimize(), a tree based regression model  is used
+            to model the expensive to evaluate function (Backtest.run()). The
+            model is improved by sequentially evaluating the expensive function
+            at the next best point. Thereby finding the minimum of func with as
+            few evaluations as possible: 
+            (https://scikit-optimize.github.io/stable/modules/generated/skopt.forest_minimize.html).
 
-            Additional keyword arguments represent strategy arguments with
-            list-like collections of possible values. For example, the following
-            code finds and returns the "best" of the 7 admissible (of the
-            9 possible) parameter combinations:
-
-                backtest.optimize(sma1=[5, 10, 15], sma2=[10, 20, 40],
-                                constraint=lambda p: p.sma1 < p.sma2)
+            The default value for base_estimator is used (ET), and n_calls = max_tries 
 
             .. TODO::
                 Improve multiprocessing with joblib.parallel .
@@ -1358,23 +1354,16 @@ class Backtest:
             for key, value in kwargs.items():
                 args_array = np.array(value)
 
-                if args_array.dtype.kind == 'i':
-                    dimensions.append(Integer(name=key, low=min(value), high=max(value)))
+                if args_array.dtype.kind in 'ium':
+                    dimensions.append(Integer(low=min(value), high=max(value), name=key))
                 elif args_array.dtype.kind == 'f':
-                    dimensions.append(Real(name=key, low=min(value), high=max(value)))
+                    dimensions.append(Real(low=min(value), high=max(value), name=key))
                 else:
                     dimensions.append(Categorical(args_array.tolist(), name=key))
 
-            # @ use_named_args(dimensions=dimensions)
-            # def convert(n1, n2):
-            #     res = self.run(**dict(zip(['n1', 'n2'], [n1, n2])))
-            #     return -res[maximize_key]
-            @ use_named_args(dimensions=dimensions)
+            @use_named_args(dimensions=dimensions)
             def convert(**params):
-                index = []
-                for item in params:
-                    index.append("'" + item + "'")
-                res = self.run(**dict(zip(index, params)))
+                res = self.run(**params)
                 return -res[maximize_key]
 
             res = forest_minimize(func=convert,
@@ -1382,23 +1371,17 @@ class Backtest:
                                   n_calls=max_tries, base_estimator="ET",
                                   random_state=4)
 
-            self.run(**dict(zip(['n1', 'n2'], res.x)))
-            return_result = pd.Series([res.fun, res.x, res, self._results], index=[
-                "best_fitness", "best_parameters", "full_results", "stats_best"])
+            self.run(**dict(zip(list(kwargs.keys()), res.x)))
 
-            if return_heatmap:
-                return return_result["stats_best"], return_result["full_results"]
-            return return_result["stats_best"]
+            if return_optimization:
+                return self._results, res
+            return self._results
 
-        def switch_method(x):
-            return {
-                'auto': _auto(),
-                'full': 0,
-                'random': 0,
-                'skopt': _optimize_skopt(),
-            }[x]
+        if method == 'grid':
+            output = _optimize_grid()
+        else:
+            output = _optimize_skopt()
 
-        output = switch_method(method)
         return output
 
     @ staticmethod

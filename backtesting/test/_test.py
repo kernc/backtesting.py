@@ -476,6 +476,14 @@ class TestOptimize(TestCase):
         with _tempfile() as f:
             bt.plot(filename=f, open_browser=False)
 
+    def test_optimize_skopt(self):
+        bt = Backtest(GOOG.iloc[:100], SmaCross)
+        OPT_PARAMS = dict(fast=range(2, 5), slow=[8, 9, 10])
+
+        res4, skopt_results = bt.optimize(**OPT_PARAMS, method='skopt', return_optimization=True)
+        self.assertIsInstance(res4, pd.Series)
+        self.assertIsInstance(skopt_results.fun, Number)
+
     def test_nowrite_df(self):
         # Test we don't write into passed data df by default.
         # Important for copy-on-write in Backtest.optimize()
