@@ -171,6 +171,8 @@ def plot(*, results: pd.Series,
     trades = results['_trades']
 
     plot_volume = plot_volume and not df.Volume.isnull().all()
+    plot_equity = plot_equity and not trades.empty
+    plot_pl = plot_pl and not trades.empty
     is_datetime_index = df.index.is_all_dates
 
     from .lib import OHLCV_AGG
