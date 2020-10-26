@@ -93,7 +93,7 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
     if isinstance(resample_rule, str):
         freq = resample_rule
     else:
-        if len(df) < _MAX_CANDLES:
+        if len(df) <= _MAX_CANDLES:
             return df, indicators, equity_data, trades
 
         from_index = dict(day=-2, hour=-6, minute=1, second=0, millisecond=0,
