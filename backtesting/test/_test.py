@@ -729,7 +729,7 @@ class TestLib(TestCase):
             time.sleep(5)
 
     def test_random_ohlc_data(self):
-        generator = random_ohlc_data(GOOG)
+        generator = random_ohlc_data(GOOG, frac=1)
         new_data = next(generator)
         self.assertEqual(list(new_data.index), list(GOOG.index))
         self.assertEqual(new_data.shape, GOOG.shape)
