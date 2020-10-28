@@ -14,9 +14,9 @@ jobs:
         python-version: [3.6, 3.7, 3.9]
         include:
           - python-version: 3.8
-            do_coverage: true
+            test-type: lint
           - python-version: 3.8
-            do_docs: true
+            test-type: docs
 
     steps:
       - name: Set up Python ${{ matrix.python-version }}
@@ -39,15 +39,15 @@ jobs:
           pip install -U --pre .[test]
 
       - name: Install lint dependencies
-        if: matrix.do_coverage
+        if: matrix.test-type == 'lint'
         run: pip install -U flake8 coverage mypy
 
       - name: Install docs dependencies
-        if: matrix.do_docs
+        if: matrix.test-type == 'docs'
         run: pip install -e .[doc,test]  # -e provides _version.py for pdoc
 
       - name: Test w/ Coverage, Lint
-        if: matrix.do_coverage
+        if: matrix.test-type == 'lint'
         env: { BOKEH_BROWSER: none }
         run: |
           flake8
@@ -56,10 +56,10 @@ jobs:
           bash <(curl -s https://codecov.io/bash)
 
       - name: Test
-        if: '! matrix.do_coverage && ! matrix.do_docs'
+        if: '! matrix.test-type'
         env: { BOKEH_BROWSER: none }
         run: time catchsegv python -m backtesting.test
 
       - name: Test docs
-        if: matrix.do_docs
+        if: matrix.test-type == 'docs'
         run: time catchsegv doc/build.sh
