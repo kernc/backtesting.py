@@ -44,7 +44,7 @@ jobs:
 
       - name: Install docs dependencies
         if: matrix.do_docs
-        run: pip install .[doc,test]
+        run: pip install -e .[doc,test]  # -e provides _version.py for pdoc
 
       - name: Test w/ Coverage, Lint
         if: matrix.do_coverage
