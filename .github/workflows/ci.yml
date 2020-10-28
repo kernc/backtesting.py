@@ -56,7 +56,7 @@ jobs:
           bash <(curl -s https://codecov.io/bash)
 
       - name: Test
-        if: ! matrix.do_coverage && ! matrix.do_test
+        if: '! matrix.do_coverage && ! matrix.do_test'
         env: { BOKEH_BROWSER: none }
         run: time catchsegv python -m backtesting.test
 
