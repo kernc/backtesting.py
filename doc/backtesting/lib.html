@@ -25,7 +25,7 @@ body.gsc-overflow-hidden #sidebar {overflow: visible;}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css">
 <link rel="canonical" href="https://kernc.github.io/backtesting.py/doc/backtesting/lib.html">
 <link rel="icon" href="https://kernc.github.io/backtesting.py/logo.png">
-<script data-ad-client="ca-pub-2900001379782823" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script></head>
+<script async src='https://www.googletagmanager.com/gtag/js?id=G-C4YF12M4PY'></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-C4YF12M4PY');</script><script data-ad-client="ca-pub-2900001379782823" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script></head>
 <body>
 <main>
 <article id="content">
@@ -123,8 +123,27 @@ divide your percentile amount with 100 to obtain quantiles.</p>
 0.13
 </code></pre></div>
 </dd>
+<dt id="backtesting.lib.random_ohlc_data"><code class="name flex">
+<span>def <span class="ident">random_ohlc_data</span></span>(<span>example_data, *, frac=1.0, random_state=None)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>OHLC data generator. The generated OHLC data has basic
+<a href="https://en.wikipedia.org/wiki/Descriptive_statistics">descriptive statistics</a>
+similar to the provided <code>example_data</code>.</p>
+<p><code>frac</code> is a fraction of data to sample (with replacement). Values greater
+than 1 result in oversampling.</p>
+<p>Such random data can be effectively used for stress testing trading
+strategy robustness, Monte Carlo simulations, significance testing, etc.</p>
+<pre><code class="language-python-repl">&gt;&gt;&gt; from backtesting.test import EURUSD
+&gt;&gt;&gt; ohlc_generator = random_ohlc_data(EURUSD)
+&gt;&gt;&gt; next(ohlc_generator)  # returns new random data
+...
+&gt;&gt;&gt; next(ohlc_generator)  # returns new random data
+...
+</code></pre></div>
+</dd>
 <dt id="backtesting.lib.resample_apply"><code class="name flex">
-<span>def <span class="ident">resample_apply</span></span>(<span>rule, func, series, *args, agg='last', **kwargs)</span>
+<span>def <span class="ident">resample_apply</span></span>(<span>rule, func, series, *args, agg=None, **kwargs)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Apply <code>func</code> (such as an indicator) to <code>series</code>, resampled to
@@ -141,8 +160,12 @@ a time frame to resample <code>series</code> to.</p>
 resampling limitations, this only works when input series
 has a datetime index.</p>
 <p><code>agg</code> is the aggregation function to use on resampled groups of data.
-Default value is <code>"last"</code>, which may be suitable for closing prices,
-but you might prefer another (e.g. 'max' for peaks, or similar).</p>
+Valid values are anything accepted by <code>pandas/resample/.agg()</code>.
+Default value for dataframe input is <code><a title="backtesting.lib.OHLCV_AGG" href="#backtesting.lib.OHLCV_AGG">OHLCV_AGG</a></code> dictionary.
+Default value for series input is the appropriate entry from <code><a title="backtesting.lib.OHLCV_AGG" href="#backtesting.lib.OHLCV_AGG">OHLCV_AGG</a></code>
+if series has a matching name, or otherwise the value <code>"last"</code>,
+which is suitable for closing prices,
+but you might prefer another (e.g. <code>"max"</code> for peaks, or similar).</p>
 <p>Finally, any <code>*args</code> and <code>**kwargs</code> that are not already eaten by
 implicit <code><a title="backtesting.backtesting.Strategy.I" href="backtesting.html#backtesting.backtesting.Strategy.I">Strategy.I()</a></code> call
 are passed to <code>func</code>.</p>
@@ -332,6 +355,7 @@ data-gaCategoryParameter="backtesting.lib">
 <li><code><a title="backtesting.lib.crossover" href="#backtesting.lib.crossover">crossover</a></code></li>
 <li><code><a title="backtesting.lib.plot_heatmaps" href="#backtesting.lib.plot_heatmaps">plot_heatmaps</a></code></li>
 <li><code><a title="backtesting.lib.quantile" href="#backtesting.lib.quantile">quantile</a></code></li>
+<li><code><a title="backtesting.lib.random_ohlc_data" href="#backtesting.lib.random_ohlc_data">random_ohlc_data</a></code></li>
 <li><code><a title="backtesting.lib.resample_apply" href="#backtesting.lib.resample_apply">resample_apply</a></code></li>
 </ul>
 </li>
@@ -357,7 +381,7 @@ data-gaCategoryParameter="backtesting.lib">
 </main>
 <footer id="footer">
 <p>
-<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.2.3</a>
+<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.2.4</a>
 <span style="color:#ddd">&#21328;</span>
 </p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
