@@ -32,6 +32,9 @@ jobs:
 
       - name: Checkout repo
         uses: actions/checkout@v2
+        with:
+          fetch-depth: 3
+      - run: git fetch --depth=1 origin +refs/tags/*:refs/tags/*
 
       - name: Install dependencies
         run: |
