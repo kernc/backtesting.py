@@ -1,6 +1,6 @@
 name: CI
 on:
-  push: { branches: [master], tags: ['[0-9]+.[0-9]+.*'] }
+  push: { branches: [master] }
   pull_request: { branches: [master] }
   schedule: [ cron: '2 2 * * 6' ]  # Every Saturday, 02:02
 
@@ -63,9 +63,3 @@ jobs:
       - name: Test docs
         if: matrix.do_docs
         run: time catchsegv doc/build.sh
-
-      - name: Deploy docs
-        if: matrix.do_docs && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-        env:
-          GH_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-        run: .github/deploy-gh-pages.sh
