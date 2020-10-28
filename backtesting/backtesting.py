@@ -1344,7 +1344,7 @@ class Backtest:
 
         equity = pd.Series(broker._equity).bfill().fillna(broker._cash).values
         dd = 1 - equity / np.maximum.accumulate(equity)
-        dd_dur, dd_peaks = self._compute_drawdown_duration_peaks(pd.Series(dd, index=data.index))
+        dd_dur, dd_peaks = self._compute_drawdown_duration_peaks(pd.Series(dd, index=index))
 
         equity_df = pd.DataFrame({
             'Equity': equity,
@@ -1391,7 +1391,36 @@ class Backtest:
         s.loc['Return [%]'] = (equity[-1] - equity[0]) / equity[0] * 100
         c = data.Close.values
         s.loc['Buy & Hold Return [%]'] = (c[-1] - c[0]) / c[0] * 100  # long-only return
-        s.loc['Max. Drawdown [%]'] = max_dd = -np.nan_to_num(dd.max()) * 100
+
+        def geometric_mean(x):
+            return np.exp(np.log(1 + x).sum() / (len(x) or np.nan)) - 1
+
+        day_returns = gmean_day_return = annual_trading_days = np.array(np.nan)
+        if index.is_all_dates:
+            day_returns = equity_df['Equity'].resample('D').last().dropna().pct_change()
+            gmean_day_return = geometric_mean(day_returns)
+            annual_trading_days = (
+                365 if index.dayofweek.to_series().between(5, 6).mean() > 2/7 * .6 else
+                252)
+
+        # Annualized return and risk metrics are computed based on the (mostly correct)
+        # assumption that the returns are compounded. See: https://dx.doi.org/10.2139/ssrn.3054517
+        # Our annualized return matches `empyrical.annual_return(day_returns)` whereas
+        # our risk doesn't; they use the simpler approach below.
+        annualized_return = (1 + gmean_day_return)**annual_trading_days - 1
+        s.loc['Return (Ann.) [%]'] = annualized_return * 100
+        s.loc['Volatility (Ann.) [%]'] = np.sqrt((day_returns.var(ddof=1) + (1 + gmean_day_return)**2)**annual_trading_days - (1 + gmean_day_return)**(2*annual_trading_days)) * 100  # noqa: E501
+        # s.loc['Return (Ann.) [%]'] = gmean_day_return * annual_trading_days * 100
+        # s.loc['Risk (Ann.) [%]'] = day_returns.std(ddof=1) * np.sqrt(annual_trading_days) * 100
+
+        # Our Sharpe mismatches `empyrical.sharpe_ratio()` because they use arithmetic mean return
+        # and simple standard deviation
+        s.loc['Sharpe Ratio'] = np.clip(s.loc['Return (Ann.) [%]'] / (s.loc['Volatility (Ann.) [%]'] or np.nan), 0, np.inf)  # noqa: E501
+        # Our Sortino mismatches `empyrical.sortino_ratio()` because they use arithmetic mean return
+        s.loc['Sortino Ratio'] = np.clip(annualized_return / (np.sqrt(np.mean(day_returns.clip(-np.inf, 0)**2)) * np.sqrt(annual_trading_days)), 0, np.inf)  # noqa: E501
+        max_dd = -np.nan_to_num(dd.max())
+        s.loc['Calmar Ratio'] = np.clip(annualized_return / (-max_dd or np.nan), 0, np.inf)
+        s.loc['Max. Drawdown [%]'] = max_dd * 100
         s.loc['Avg. Drawdown [%]'] = -dd_peaks.mean() * 100
         s.loc['Max. Drawdown Duration'] = _round_timedelta(dd_dur.max())
         s.loc['Avg. Drawdown Duration'] = _round_timedelta(dd_dur.mean())
@@ -1399,7 +1428,7 @@ class Backtest:
         s.loc['Win Rate [%]'] = win_rate = np.nan if not n_trades else (pl > 0).sum() / n_trades * 100  # noqa: E501
         s.loc['Best Trade [%]'] = returns.max() * 100
         s.loc['Worst Trade [%]'] = returns.min() * 100
-        mean_return = np.exp(np.log(1 + returns).sum() / (len(returns) or np.nan)) - 1
+        mean_return = geometric_mean(returns)
         s.loc['Avg. Trade [%]'] = mean_return * 100
         s.loc['Max. Trade Duration'] = _round_timedelta(durations.max())
         s.loc['Avg. Trade Duration'] = _round_timedelta(durations.mean())
@@ -1407,9 +1436,6 @@ class Backtest:
         s.loc['Expectancy [%]'] = ((returns[returns > 0].mean() * win_rate -
                                     returns[returns < 0].mean() * (100 - win_rate)))
         s.loc['SQN'] = np.sqrt(n_trades) * pl.mean() / (pl.std() or np.nan)
-        s.loc['Sharpe Ratio'] = mean_return / (returns.std() or np.nan)
-        s.loc['Sortino Ratio'] = mean_return / (returns[returns < 0].std() or np.nan)
-        s.loc['Calmar Ratio'] = mean_return / ((-max_dd / 100) or np.nan)
 
         s.loc['_strategy'] = strategy
         s.loc['_equity_curve'] = equity_df
