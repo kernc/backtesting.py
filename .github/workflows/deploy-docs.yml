@@ -25,7 +25,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -U pip setuptools
+          pip install -U pip setuptools wheel
           pip install -U .[doc,test]
 
       - name: Build docs

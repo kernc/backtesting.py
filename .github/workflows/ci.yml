@@ -35,7 +35,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install -U pip setuptools
+          pip install -U pip setuptools wheel
           pip install -U --pre .[test]
 
       - name: Install lint dependencies
