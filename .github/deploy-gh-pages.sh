@@ -31,4 +31,7 @@ if git diff --staged --quiet; then
   exit 0
 fi
 git commit -a -m "CI: Update docs for ${GITHUB_REF#refs/tags/} ($head)"
-git push
+
+
+
+git push --dry-run

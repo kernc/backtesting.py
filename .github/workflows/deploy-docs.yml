@@ -2,6 +2,7 @@ name: Deploy docs
 on:
   push:
     tags: ['[0-9]+.[0-9]+.*']
+  pull_request: { branches: [master] }
 
 jobs:
   deploy:
