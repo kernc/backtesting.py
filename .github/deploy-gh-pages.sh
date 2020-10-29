@@ -1,6 +1,8 @@
 #!/bin/bash
 set -eu
 
+set -x
+
 if [ ! -d doc/build ]; then
     echo 'Error: invalid directory. Deploy from repo root.'
     exit 1
