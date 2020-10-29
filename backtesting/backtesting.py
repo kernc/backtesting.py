@@ -28,6 +28,7 @@ import pandas as pd
 
 try:
     from tqdm.auto import tqdm as _tqdm
+
     _tqdm = partial(_tqdm, leave=False)
 except ImportError:
     def _tqdm(seq, **_):
@@ -52,10 +53,11 @@ class Strategy(metaclass=ABCMeta):
     `backtesting.backtesting.Strategy.next` to define
     your own strategy.
     """
+
     def __init__(self, broker, data, params):
         self._indicators = []
-        self._broker = broker  # type: _Broker
-        self._data = data   # type: _Data
+        self._broker: _Broker = broker
+        self._data: _Data = data
         self._params = self._check_params(params)
 
     def __repr__(self):
@@ -146,7 +148,7 @@ class Strategy(metaclass=ABCMeta):
             raise ValueError(
                 'Indicators must return (optionally a tuple of) numpy.arrays of same '
                 'length as `data` (data shape: {}; indicator "{}" shape: {}, returned value: {})'
-                .format(self._data.Close.shape, name, getattr(value, 'shape', ''), value))
+                    .format(self._data.Close.shape, name, getattr(value, 'shape', ''), value))
 
         if plot and overlay is None and np.issubdtype(value.dtype, np.number):
             x = value / self._data.Close
@@ -282,6 +284,7 @@ class _Orders(tuple):
     """
     TODO: remove this class. Only for deprecation.
     """
+
     def cancel(self):
         """Cancel all non-contingent (i.e. SL/TP) orders."""
         for order in self:
@@ -309,6 +312,7 @@ class Position:
         if self.position:
             ...  # we have a position, either long or short
     """
+
     def __init__(self, broker: '_Broker'):
         self.__broker = broker
 
@@ -373,6 +377,7 @@ class Order:
     [filled]: https://www.investopedia.com/terms/f/fill.asp
     [Good 'Til Canceled]: https://www.investopedia.com/terms/g/gtc.asp
     """
+
     def __init__(self, broker: '_Broker',
                  size: float,
                  limit_price: float = None,
@@ -507,15 +512,16 @@ class Trade:
     When an `Order` is filled, it results in an active `Trade`.
     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
     """
+
     def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar):
         self.__broker = broker
         self.__size = size
         self.__entry_price = entry_price
-        self.__exit_price = None  # type: Optional[float]
-        self.__entry_bar = entry_bar  # type: int
-        self.__exit_bar = None  # type: Optional[int]
-        self.__sl_order = None  # type: Optional[Order]
-        self.__tp_order = None  # type: Optional[Order]
+        self.__exit_price: Optional[float] = None
+        self.__entry_bar: int = entry_bar
+        self.__exit_bar: Optional[int] = None
+        self.__sl_order: Optional[Order] = None
+        self.__tp_order: Optional[Order] = None
 
     def __repr__(self):
         return '<Trade size={} time={}-{} price={}-{} pl={:.0f}>'.format(
@@ -653,7 +659,7 @@ class Trade:
         assert type in ('sl', 'tp')
         assert price is None or 0 < price < np.inf
         attr = '_{}__{}_order'.format(self.__class__.__qualname__, type)
-        order = getattr(self, attr)  # type: Order
+        order: Order = getattr(self, attr)
         if order:
             order.cancel()
         if price:
@@ -668,7 +674,7 @@ class _Broker:
         assert 0 < cash, "cash shosuld be >0, is {}".format(cash)
         assert 0 <= commission < .1, "commission should be between 0-10%, is {}".format(commission)
         assert 0 < margin <= 1, "margin should be between 0 and 1, is {}".format(margin)
-        self._data = data  # type: _Data
+        self._data: _Data = data
         self._cash = cash
         self._commission = commission
         self._leverage = 1 / margin
@@ -677,10 +683,10 @@ class _Broker:
         self._exclusive_orders = exclusive_orders
 
         self._equity = np.tile(np.nan, len(index))
-        self.orders = []  # type: List[Order]
-        self.trades = []  # type: List[Trade]
+        self.orders: List[Order] = []
+        self.trades: List[Trade] = []
         self.position = Position(self)
-        self.closed_trades = []  # type: List[Trade]
+        self.closed_trades: List[Trade] = []
 
     def __repr__(self):
         return '<Broker: {:.0f}{:+.1f} ({} trades)>'.format(
@@ -774,7 +780,8 @@ class _Broker:
         reprocess_orders = False
 
         # Process orders
-        for order in list(self.orders):  # type: Order
+        order: Order
+        for order in list(self.orders):
 
             # Related SL/TP order was already removed
             if order not in self.orders:
@@ -967,6 +974,7 @@ class Backtest:
     instance, or `backtesting.backtesting.Backtest.optimize` to
     optimize it.
     """
+
     def __init__(self,
                  data: pd.DataFrame,
                  strategy: Type[Strategy],
@@ -1036,10 +1044,10 @@ class Backtest:
 
         # Convert index to datetime index
         if (not data.index.is_all_dates and
-            not isinstance(data.index, pd.RangeIndex) and
-            # Numeric index with most large numbers
-            (data.index.is_numeric() and
-             (data.index > pd.Timestamp('1975').timestamp()).mean() > .8)):
+                not isinstance(data.index, pd.RangeIndex) and
+                # Numeric index with most large numbers
+                (data.index.is_numeric() and
+                 (data.index > pd.Timestamp('1975').timestamp()).mean() > .8)):
             try:
                 data.index = pd.to_datetime(data.index, infer_datetime_format=True)
             except ValueError:
@@ -1071,7 +1079,7 @@ class Backtest:
                           'but `pd.DateTimeIndex` is advised.',
                           stacklevel=2)
 
-        self._data = data   # type: pd.DataFrame
+        self._data = data  # type: pd.DataFrame
         self._broker = partial(
             _Broker, cash=cash, commission=commission, margin=margin,
             trade_on_close=trade_on_close, hedging=hedging,
@@ -1118,8 +1126,8 @@ class Backtest:
             dtype: object
         """
         data = _Data(self._data.copy(deep=False))
-        broker = self._broker(data=data)  # type: _Broker
-        strategy = self._strategy(broker, data, kwargs)  # type: Strategy
+        broker: _Broker = self._broker(data=data)
+        strategy: Strategy = self._strategy(broker, data, kwargs)
 
         strategy.init()
         data._update()  # Strategy.init might have changed/added to data.df
@@ -1400,16 +1408,16 @@ class Backtest:
             day_returns = equity_df['Equity'].resample('D').last().dropna().pct_change()
             gmean_day_return = geometric_mean(day_returns)
             annual_trading_days = (
-                365 if index.dayofweek.to_series().between(5, 6).mean() > 2/7 * .6 else
+                365 if index.dayofweek.to_series().between(5, 6).mean() > 2 / 7 * .6 else
                 252)
 
         # Annualized return and risk metrics are computed based on the (mostly correct)
         # assumption that the returns are compounded. See: https://dx.doi.org/10.2139/ssrn.3054517
         # Our annualized return matches `empyrical.annual_return(day_returns)` whereas
         # our risk doesn't; they use the simpler approach below.
-        annualized_return = (1 + gmean_day_return)**annual_trading_days - 1
+        annualized_return = (1 + gmean_day_return) ** annual_trading_days - 1
         s.loc['Return (Ann.) [%]'] = annualized_return * 100
-        s.loc['Volatility (Ann.) [%]'] = np.sqrt((day_returns.var(ddof=1) + (1 + gmean_day_return)**2)**annual_trading_days - (1 + gmean_day_return)**(2*annual_trading_days)) * 100  # noqa: E501
+        s.loc['Volatility (Ann.) [%]'] = np.sqrt((day_returns.var(ddof=1) + (1 + gmean_day_return) ** 2) ** annual_trading_days - (1 + gmean_day_return) ** (2 * annual_trading_days)) * 100  # noqa: E501
         # s.loc['Return (Ann.) [%]'] = gmean_day_return * annual_trading_days * 100
         # s.loc['Risk (Ann.) [%]'] = day_returns.std(ddof=1) * np.sqrt(annual_trading_days) * 100
 
@@ -1417,7 +1425,7 @@ class Backtest:
         # and simple standard deviation
         s.loc['Sharpe Ratio'] = np.clip(s.loc['Return (Ann.) [%]'] / (s.loc['Volatility (Ann.) [%]'] or np.nan), 0, np.inf)  # noqa: E501
         # Our Sortino mismatches `empyrical.sortino_ratio()` because they use arithmetic mean return
-        s.loc['Sortino Ratio'] = np.clip(annualized_return / (np.sqrt(np.mean(day_returns.clip(-np.inf, 0)**2)) * np.sqrt(annual_trading_days)), 0, np.inf)  # noqa: E501
+        s.loc['Sortino Ratio'] = np.clip(annualized_return / (np.sqrt(np.mean(day_returns.clip(-np.inf, 0) ** 2)) * np.sqrt(annual_trading_days)), 0, np.inf)  # noqa: E501
         max_dd = -np.nan_to_num(dd.max())
         s.loc['Calmar Ratio'] = np.clip(annualized_return / (-max_dd or np.nan), 0, np.inf)
         s.loc['Max. Drawdown [%]'] = max_dd * 100
