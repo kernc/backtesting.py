@@ -50,6 +50,8 @@ if __name__ == '__main__':
             ],
             'dev': [
                 'flake8',
+                'coverage',
+                'mypy',
             ],
         },
         test_suite="backtesting.test",

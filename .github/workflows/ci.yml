@@ -44,7 +44,7 @@ jobs:
 
       - name: Install lint dependencies
         if: matrix.test-type == 'lint'
-        run: pip install -U flake8 coverage mypy
+        run: pip install -U .[dev]
 
       - name: Install docs dependencies
         if: matrix.test-type == 'docs'
