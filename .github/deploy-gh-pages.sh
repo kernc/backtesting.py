@@ -1,8 +1,6 @@
 #!/bin/bash
 set -eu
 
-set -x
-
 if [ ! -d doc/build ]; then
     echo 'Error: invalid directory. Deploy from repo root.'
     exit 1
@@ -39,7 +37,4 @@ if ! git config user.name; then
 fi
 
 git commit -a -m "CI: Update docs for ${GITHUB_REF#refs/tags/} ($head)"
-
-
-
-git push --dry-run
+git push
