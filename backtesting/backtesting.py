@@ -4,11 +4,6 @@ Objects from this module can also be imported from the top-level
 module directly, e.g.
 
     from backtesting import Backtest, Strategy
-
-.. warning:: v0.2.0 breaking changes
-   Version 0.2.0 introduced some **breaking API changes**. For quick ways to
-   migrate existing 0.1.x code, see the implementing
-   [pull request](https://github.com/kernc/backtesting.py/pull/47/).
 """
 import multiprocessing as mp
 import os
