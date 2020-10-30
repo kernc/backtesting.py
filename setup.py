@@ -1,8 +1,8 @@
 import os
 import sys
 
-if sys.version_info < (3, 4):
-    sys.exit('ERROR: Backtesting.py requires Python 3.4+')
+if sys.version_info < (3, 6):
+    sys.exit('ERROR: Backtesting.py requires Python 3.6+')
 
 
 if __name__ == '__main__':
@@ -31,7 +31,6 @@ if __name__ == '__main__':
             'write_to': os.path.join('backtesting', '_version.py'),
         },
         install_requires=[
-            'typing ; python_version < "3.5"',
             'numpy',
             'pandas >= 0.25.0, != 0.25.0',
             'bokeh >= 1.4.0',
@@ -51,10 +50,12 @@ if __name__ == '__main__':
             ],
             'dev': [
                 'flake8',
+                'coverage',
+                'mypy',
             ],
         },
         test_suite="backtesting.test",
-        python_requires='>=3.4',
+        python_requires='>=3.6',
         author='Zach Lûster',
         classifiers=[
             'Intended Audience :: Financial and Insurance Industry',
