@@ -1191,7 +1191,12 @@ class Backtest:
         the higher the better. By default, the method maximizes
         Van Tharp's [System Quality Number](https://google.com/search?q=System+Quality+Number).
 
-        `method` get_args(method).
+        `method` is the optimization method. Currently two methods are sported: 1) "grid" which
+         searches for the optimum value over a regularly-spaced grid of trial points, and 2) "skopt"
+         which finds optimum strategy parameters using scikit-optimize. skopt.forest_minimize(), a 
+         tree based regression model  is used to model the expensive to evaluate function (Backtest.run()). 
+         (https://scikit-optimize.github.io/stable/modules/generated/skopt.forest_minimize.html).The 
+         default value for base_estimator is used (ET), and n_calls = max_tries 
 
         `constraint` is a function that accepts a dict-like object of
         parameters (with values) and returns `True` when the combination
@@ -1248,6 +1253,8 @@ class Backtest:
                             "the combination of parameters is admissible or not")
 
         def _optimize_grid() -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
+            if return_optimization is True:
+                raise ValueError("optimization results not available for method 'grid'")
 
             def _tuple(x):
                 return x if isinstance(x, Sequence) and not isinstance(x, str) else (x,)
@@ -1333,23 +1340,7 @@ class Backtest:
             return self._results
 
         def _optimize_skopt() -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
-            """
-            Optimize strategy parameters to an optimal combination using
-            scikit-optimize. Returns result `pd.Series` of
-            the best run.
 
-            skopt.forest_minimize(), a tree based regression model  is used
-            to model the expensive to evaluate function (Backtest.run()). The
-            model is improved by sequentially evaluating the expensive function
-            at the next best point. Thereby finding the minimum of func with as
-            few evaluations as possible: 
-            (https://scikit-optimize.github.io/stable/modules/generated/skopt.forest_minimize.html).
-
-            The default value for base_estimator is used (ET), and n_calls = max_tries 
-
-            .. TODO::
-                Improve multiprocessing with joblib.parallel .
-            """
             dimensions = []
             for key, value in kwargs.items():
                 args_array = np.array(value)
@@ -1373,9 +1364,19 @@ class Backtest:
 
             self.run(**dict(zip(list(kwargs.keys()), res.x)))
 
-            if return_optimization:
+            heatmap_df = pd.DataFrame(res.x_iters, columns=list(kwargs.keys()))
+            heatmap = pd.Series(res.func_vals,
+                                name=maximize_key,
+                                index=pd.MultiIndex.from_frame(heatmap_df))
+
+            if return_optimization and return_heatmap:
+                return self._results, res, heatmap
+            elif return_optimization:
                 return self._results, res
-            return self._results
+            elif return_heatmap:
+                return self._results, heatmap
+            else:
+                return self._results
 
         if method == 'grid':
             output = _optimize_grid()

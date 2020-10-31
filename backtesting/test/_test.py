@@ -1,5 +1,6 @@
 import inspect
 import os
+from pickle import TRUE
 import sys
 import time
 import unittest
@@ -458,6 +459,7 @@ class TestOptimize(TestCase):
         self.assertRaises(TypeError, bt.optimize, maximize=15, **OPT_PARAMS)
         self.assertRaises(TypeError, bt.optimize, constraint=15, **OPT_PARAMS)
         self.assertRaises(ValueError, bt.optimize, constraint=lambda d: False, **OPT_PARAMS)
+        self.assertRaises(ValueError, bt.optimize, return_optimization=True, **OPT_PARAMS)
 
         res = bt.optimize(**OPT_PARAMS)
         self.assertIsInstance(res, pd.Series)
@@ -480,9 +482,11 @@ class TestOptimize(TestCase):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
         OPT_PARAMS = dict(fast=range(2, 5), slow=[8, 9, 10])
 
-        res4, skopt_results = bt.optimize(**OPT_PARAMS, method='skopt', return_optimization=True)
-        self.assertIsInstance(res4, pd.Series)
-        self.assertIsInstance(skopt_results.fun, Number)
+        res, skopt_results, heatmap = bt.optimize(
+            **OPT_PARAMS, method='skopt', return_optimization=True, return_heatmap=True)
+        self.assertIsInstance(res, pd.Series)
+        self.assertIsInstance(skopt_results.fun, (int, float))
+        self.assertIsInstance(heatmap, pd.Series)
 
     def test_nowrite_df(self):
         # Test we don't write into passed data df by default.
