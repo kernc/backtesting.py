@@ -145,7 +145,7 @@ class Strategy(metaclass=ABCMeta):
         if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data.Close):
             raise ValueError(
                 'Indicators must return (optionally a tuple of) numpy.arrays of same '
-                f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}"' \
+                f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}"'
                 f'shape: {getattr(value, "shape" , "")}, returned value: {value})')
 
         if plot and overlay is None and np.issubdtype(value.dtype, np.number):
@@ -424,8 +424,8 @@ class Order:
         """
         Order size (negative for short orders).
 
-        If size is a value between 0 and 1, it is interpreted as a fraction of current
-        available liquidity (cash plus `Position.pl` minus used margin).
+        If size is a value between 0 and 1, it is interpreted as a fraction 
+        of current available liquidity (cash plus `Position.pl` minus used margin).
         A value greater than or equal to 1 indicates an absolute number of units.
         """
         return self.__size
@@ -705,12 +705,12 @@ class _Broker:
 
         if is_long:
             if not (sl or -np.inf) <= (limit or stop or self.last_price) <= (tp or np.inf):
-                raise ValueError(f"Long orders require:" 
-                                 f"SL ({sl}) < LIMIT ({limit or stop or self.last_price}) < TP ({tp})")
+                raise ValueError(f"Long orders require: "
+                      f"SL ({sl}) < LIMIT ({limit or stop or self.last_price}) < TP ({tp})")
         else:
             if not (tp or -np.inf) <= (limit or stop or self.last_price) <= (sl or np.inf):
-                raise ValueError(f"Short orders require: " 
-                                 f"TP ({tp}) < LIMIT ({limit or stop or self.last_price}) < SL ({sl})")
+                raise ValueError(f"Short orders require: "
+                      f"TP ({tp}) < LIMIT ({limit or stop or self.last_price}) < SL ({sl})")
 
         order = Order(self, size, limit, stop, sl, tp, trade)
         # Put the new order in the order queue,
