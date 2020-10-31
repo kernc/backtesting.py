@@ -72,8 +72,8 @@ class Strategy(metaclass=ABCMeta):
         for k, v in params.items():
             if not hasattr(self, k):
                 raise AttributeError(
-                    f"Strategy '{self.__class__.__name__}' is missing parameter '{k}'. Strategy class "
-                    "should define parameters as class variables before they "
+                    f"Strategy '{self.__class__.__name__}' is missing parameter '{k}'."
+                    "Strategy class should define parameters as class variables before they "
                     "can be optimized or run with.")
             setattr(self, k, v)
         return params
@@ -145,7 +145,8 @@ class Strategy(metaclass=ABCMeta):
         if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data.Close):
             raise ValueError(
                 'Indicators must return (optionally a tuple of) numpy.arrays of same '
-                f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}" shape: {getattr(value, "shape" , "")}, returned value: {value})')
+                f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}"'
+                f'shape: {getattr(value, "shape" , "")}, returned value: {value})')
 
         if plot and overlay is None and np.issubdtype(value.dtype, np.number):
             x = value / self._data.Close
@@ -292,7 +293,8 @@ class _Orders(tuple):
         removed_attrs = ('entry', 'set_entry', 'is_long', 'is_short',
                          'sl', 'tp', 'set_sl', 'set_tp')
         if item in removed_attrs:
-            raise AttributeError(f'Strategy.orders.{"/.".join(removed_attrs)} were removed in Backtesting 0.2.0. '
+            raise AttributeError(f'Strategy.orders.{"/.".join(removed_attrs)} were removed in'
+                                 'Backtesting 0.2.0. '
                                  'Use `Order` API instead. See docs.')
         raise AttributeError(f"'tuple' object has no attribute {item!r}")
 
@@ -516,7 +518,8 @@ class Trade:
         self.__tp_order = None  # type: Optional[Order]
 
     def __repr__(self):
-        return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}>'
+        return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' 
+               f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}>'
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
@@ -702,10 +705,12 @@ class _Broker:
 
         if is_long:
             if not (sl or -np.inf) <= (limit or stop or self.last_price) <= (tp or np.inf):
-                raise ValueError(f"Long orders require: SL ({sl}) < LIMIT ({limit or stop or self.last_price}) < TP ({tp})")
+                raise ValueError(f"Long orders require:' f
+                                 "SL ({sl}) < LIMIT ({limit or stop or self.last_price}) < TP ({tp})")
         else:
             if not (tp or -np.inf) <= (limit or stop or self.last_price) <= (sl or np.inf):
-                raise ValueError(f"Short orders require: TP ({tp}) < LIMIT ({limit or stop or self.last_price}) < SL ({sl})")
+                raise ValueError(f"Short orders require: " 
+                                 f"TP ({tp}) < LIMIT ({limit or stop or self.last_price}) < SL ({sl})")
 
         order = Order(self, size, limit, stop, sl, tp, trade)
         # Put the new order in the order queue,
