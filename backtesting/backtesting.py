@@ -145,7 +145,7 @@ class Strategy(metaclass=ABCMeta):
         if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data.Close):
             raise ValueError(
                 'Indicators must return (optionally a tuple of) numpy.arrays of same '
-                f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}"'
+                f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}"' \
                 f'shape: {getattr(value, "shape" , "")}, returned value: {value})')
 
         if plot and overlay is None and np.issubdtype(value.dtype, np.number):
@@ -518,7 +518,7 @@ class Trade:
         self.__tp_order = None  # type: Optional[Order]
 
     def __repr__(self):
-        return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' 
+        return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
                f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}>'
 
     def _replace(self, **kwargs):
