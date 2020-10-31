@@ -26,7 +26,6 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 import numpy as np
 import pandas as pd
 
-from skopt.plots import plot_objective
 from skopt.space import Integer, Real, Categorical
 from skopt import forest_minimize
 from skopt.utils import use_named_args
@@ -1192,11 +1191,11 @@ class Backtest:
         Van Tharp's [System Quality Number](https://google.com/search?q=System+Quality+Number).
 
         `method` is the optimization method. Currently two methods are supported: 1) "grid" which
-         searches for the optimum value over a regularly-spaced grid of trial points, and 2) "skopt"
-         which finds optimum strategy parameters using scikit-optimize. skopt.forest_minimize(), a 
-         tree based regression model  is used to model the expensive to evaluate function (Backtest.run()). 
-         (https://scikit-optimize.github.io/stable/modules/generated/skopt.forest_minimize.html).The 
-         default value for base_estimator is used (ET), and n_calls = max_tries 
+        searches for the optimum value over a regularly-spaced grid of trial points, and 2) "skopt"
+        which finds optimum strategy parameters using scikit-optimize. skopt.forest_minimize(), a
+        tree based regression model  is used to model the expensive to evaluate function.
+        (https://scikit-optimize.github.io/stable/modules/generated/skopt.forest_minimize.html).The
+        default value for base_estimator is used (ET), and n_calls = max_tries.
 
         `constraint` is a function that accepts a dict-like object of
         parameters (with values) and returns `True` when the combination
@@ -1282,8 +1281,9 @@ class Backtest:
 
             heatmap = pd.Series(np.nan,
                                 name=maximize_key,
-                                index=pd.MultiIndex.from_tuples([p.values() for p in param_combos],
-                                                                names=next(iter(param_combos)).keys()))
+                                index=pd.MultiIndex.from_tuples(
+                                    [p.values() for p in param_combos],
+                                    names=next(iter(param_combos)).keys()))
 
             # TODO: add parameter `max_tries:Union[int, float]=None` which switches
             # exhaustive grid search to random search. This might need to avoid
