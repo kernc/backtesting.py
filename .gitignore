@@ -19,3 +19,5 @@ doc/build/*
 *~*
 
 .vscode/
+.venv/
+.eggs/
