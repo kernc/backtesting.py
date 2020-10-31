@@ -705,7 +705,7 @@ class _Broker:
 
         if is_long:
             if not (sl or -np.inf) <= (limit or stop or self.last_price) <= (tp or np.inf):
-                raise ValueError(f"Long orders require:' 
+                raise ValueError(f"Long orders require:" 
                                  f"SL ({sl}) < LIMIT ({limit or stop or self.last_price}) < TP ({tp})")
         else:
             if not (tp or -np.inf) <= (limit or stop or self.last_price) <= (sl or np.inf):
