@@ -424,7 +424,7 @@ class Order:
         """
         Order size (negative for short orders).
 
-        If size is a value between 0 and 1, it is interpreted as a fraction 
+        If size is a value between 0 and 1, it is interpreted as a fraction
         of current available liquidity (cash plus `Position.pl` minus used margin).
         A value greater than or equal to 1 indicates an absolute number of units.
         """
