@@ -424,7 +424,8 @@ return this.labels[index] || "";
                               millisecond='S').get(time_resolution))
         if not resample_rule:
             warnings.warn(
-                f"'Can't superimpose OHLC data with rule '{resample_rule}' (index datetime resolution: '{time_resolution}'). "
+                f"'Can't superimpose OHLC data with rule '{resample_rule}'"
+                f"(index datetime resolution: '{time_resolution}'). "
                 "Skipping.",
                 stacklevel=4)
             return
