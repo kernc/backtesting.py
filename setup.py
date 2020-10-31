@@ -47,6 +47,7 @@ if __name__ == '__main__':
                 'seaborn',
                 'matplotlib',
                 'scikit-learn',
+                'scikit-optimize',
             ],
             'dev': [
                 'flake8',
