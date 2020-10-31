@@ -1191,7 +1191,7 @@ class Backtest:
         the higher the better. By default, the method maximizes
         Van Tharp's [System Quality Number](https://google.com/search?q=System+Quality+Number).
 
-        `method` is the optimization method. Currently two methods are sported: 1) "grid" which
+        `method` is the optimization method. Currently two methods are supported: 1) "grid" which
          searches for the optimum value over a regularly-spaced grid of trial points, and 2) "skopt"
          which finds optimum strategy parameters using scikit-optimize. skopt.forest_minimize(), a 
          tree based regression model  is used to model the expensive to evaluate function (Backtest.run()). 
