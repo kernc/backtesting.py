@@ -20,4 +20,7 @@ doc/build/*
 
 .vscode/
 .venv/
+<<<<<<< HEAD
 .eggs/
+=======
+>>>>>>> f913a91c56fb75c8c5d14aca4753f200a4c97754
