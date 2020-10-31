@@ -1,0 +1,69 @@
+name: CI
+on:
+  push: { branches: [master] }
+  pull_request: { branches: [master] }
+  schedule: [ cron: '2 2 * * 6' ]  # Every Saturday, 02:02
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-18.04
+
+    strategy:
+      matrix:
+        python-version: [3.6, 3.7]
+        include:
+          - python-version: 3.8
+            test-type: lint
+          - python-version: 3.8
+            test-type: docs
+
+    steps:
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v2
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - uses: actions/cache@v2
+        name: Set up caches
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-py${{ matrix.python-version }}
+
+      - name: Checkout repo
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 3
+      - name: Fetch tags
+        run: git fetch --depth=1 origin +refs/tags/*:refs/tags/*
+
+      - name: Install dependencies
+        run: |
+          pip install -U pip setuptools wheel
+          pip install -U --pre .[test]
+
+      - name: Install lint dependencies
+        if: matrix.test-type == 'lint'
+        run: pip install -U .[dev]
+
+      - name: Install docs dependencies
+        if: matrix.test-type == 'docs'
+        run: pip install -e .[doc,test]  # -e provides _version.py for pdoc
+
+      - name: Test w/ Coverage, Lint
+        if: matrix.test-type == 'lint'
+        env: { BOKEH_BROWSER: none }
+        run: |
+          flake8
+          mypy backtesting
+          time catchsegv coverage run -m backtesting.test
+          bash <(curl -s https://codecov.io/bash)
+
+      - name: Test
+        if: '! matrix.test-type'
+        env: { BOKEH_BROWSER: none }
+        run: time catchsegv python -m backtesting.test
+
+      - name: Test docs
+        if: matrix.test-type == 'docs'
+        run: time catchsegv doc/build.sh

@@ -60,7 +60,7 @@ e.g.
 """
 
 _EQUITY_AGG = {
-    'Equity': 'mean',
+    'Equity': 'last',
     'DrawdownPct': 'max',
     'DrawdownDuration': 'max',
 }
@@ -287,11 +287,15 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
     return array
 
 
-def random_ohlc_data(example_data: pd.DataFrame, random_state: int = None) -> pd.DataFrame:
+def random_ohlc_data(example_data: pd.DataFrame, *,
+                     frac=1., random_state: int = None) -> pd.DataFrame:
     """
     OHLC data generator. The generated OHLC data has basic
     [descriptive statistics](https://en.wikipedia.org/wiki/Descriptive_statistics)
     similar to the provided `example_data`.
+
+    `frac` is a fraction of data to sample (with replacement). Values greater
+    than 1 result in oversampling.
 
     Such random data can be effectively used for stress testing trading
     strategy robustness, Monte Carlo simulations, significance testing, etc.
@@ -304,7 +308,7 @@ def random_ohlc_data(example_data: pd.DataFrame, random_state: int = None) -> pd
     ...
     """
     def shuffle(x):
-        return x.sample(frac=1, random_state=random_state)
+        return x.sample(frac=frac, replace=frac > 1, random_state=random_state)
 
     if len(example_data.columns & {'Open', 'High', 'Low', 'Close'}) != 4:
         raise ValueError("`data` must be a pandas.DataFrame with columns "

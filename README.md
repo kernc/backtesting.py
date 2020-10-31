@@ -2,7 +2,7 @@
 
 Backtesting.py
 ==============
-[![Build Status](https://img.shields.io/travis/kernc/backtesting.py.svg?style=for-the-badge)](https://travis-ci.org/kernc/backtesting.py)
+[![Build Status](https://img.shields.io/github/workflow/status/kernc/backtesting.py/CI/master?style=for-the-badge)](https://github.com/kernc/backtesting.py/actions)
 [![Code Coverage](https://img.shields.io/codecov/c/gh/kernc/backtesting.py.svg?style=for-the-badge)](https://codecov.io/gh/kernc/backtesting.py)
 [![Backtesting on PyPI](https://img.shields.io/pypi/v/backtesting.svg?color=blue&style=for-the-badge)](https://pypi.org/project/backtesting)
 

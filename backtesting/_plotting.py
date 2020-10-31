@@ -93,7 +93,7 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
     if isinstance(resample_rule, str):
         freq = resample_rule
     else:
-        if len(df) < _MAX_CANDLES:
+        if resample_rule is False or len(df) <= _MAX_CANDLES:
             return df, indicators, equity_data, trades
 
         from_index = dict(day=-2, hour=-6, minute=1, second=0, millisecond=0,
@@ -171,6 +171,8 @@ def plot(*, results: pd.Series,
     trades = results['_trades']
 
     plot_volume = plot_volume and not df.Volume.isnull().all()
+    plot_equity = plot_equity and not trades.empty
+    plot_pl = plot_pl and not trades.empty
     is_datetime_index = df.index.is_all_dates
 
     from .lib import OHLCV_AGG

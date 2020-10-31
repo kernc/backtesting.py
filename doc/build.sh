@@ -58,6 +58,9 @@ if [ "$IS_RELEASE" ]; then
     ANALYTICS="<script>window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;ga('create','UA-43663477-4','auto');ga('require','cleanUrlTracker',{indexFilename:'index.html',trailingSlash:'add'});ga('require','outboundLinkTracker',{events:['click','auxclick','contextmenu']});ga('require', 'maxScrollTracker');ga('require', 'pageVisibilityTracker');ga('send', 'pageview');setTimeout(function(){ga('send','event','pageview','view')},15000);</script><script async src='https://www.google-analytics.com/analytics.js'></script><script async src='https://cdnjs.cloudflare.com/ajax/libs/autotrack/2.4.1/autotrack.js'></script>"
     find "$BUILDROOT" -name '*.html' -print0 |
         xargs -0 -- sed -i "s#</body>#$ANALYTICS</body>#i"
+    ANALYTICS="<script async src='https://www.googletagmanager.com/gtag/js?id=G-C4YF12M4PY'></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-C4YF12M4PY');</script>"
+    find "$BUILDROOT" -name '*.html' -print0 |
+        xargs -0 -- sed -i "s#</head>#$ANALYTICS</head>#i"
     ANALYTICS='<script data-ad-client="ca-pub-2900001379782823" async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js"></script>'
     find "$BUILDROOT" -name '*.html' -print0 |
         xargs -0 -- sed -i "s#</head>#$ANALYTICS</head>#i"
