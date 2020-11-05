@@ -392,6 +392,15 @@ class TestBacktest(TestCase):
 
         self.assertFalse(Backtest(SHORT_DATA, S).run()._trades.empty)
 
+    def test_check_adjusted_price_when_placing_order(self):
+        class S(Strategy):
+            def init(self): pass
+
+            def next(self):
+                self.buy(tp=self.data.Close * 1.01)
+
+        self.assertRaises(ValueError, Backtest(SHORT_DATA, S, commission=.02).run)
+
 
 class TestStrategy(TestCase):
     def _Backtest(self, strategy_coroutine, **kwargs):

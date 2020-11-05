@@ -699,15 +699,16 @@ class _Broker:
         tp = tp and float(tp)
 
         is_long = size > 0
+        adjusted_price = self._adjusted_price(size)
 
         if is_long:
-            if not (sl or -np.inf) <= (limit or stop or self.last_price) <= (tp or np.inf):
+            if not (sl or -np.inf) < (limit or stop or adjusted_price) < (tp or np.inf):
                 raise ValueError("Long orders require: SL ({}) < LIMIT ({}) < TP ({})".format(
-                    sl, limit or stop or self.last_price, tp))
+                    sl, limit or stop or adjusted_price, tp))
         else:
-            if not (tp or -np.inf) <= (limit or stop or self.last_price) <= (sl or np.inf):
+            if not (tp or -np.inf) < (limit or stop or adjusted_price) < (sl or np.inf):
                 raise ValueError("Short orders require: TP ({}) < LIMIT ({}) < SL ({})".format(
-                    tp, limit or stop or self.last_price, sl))
+                    tp, limit or stop or adjusted_price, sl))
 
         order = Order(self, size, limit, stop, sl, tp, trade)
         # Put the new order in the order queue,
@@ -730,10 +731,12 @@ class _Broker:
 
     @property
     def last_price(self) -> float:
-        """Return price at the last (current) close.
-        Used e.g. in `Orders._is_price_ok()` to see if the set price is reasonable.
-        """
+        """ Price at the last (current) close. """
         return self._data.Close[-1]
+
+    def _adjusted_price(self, size=None, price=None) -> float:
+        """ Long/short `price`, adjusted for commitions."""
+        return (price or self.last_price) * (1 + copysign(self._commission, size))
 
     @property
     def equity(self) -> float:
@@ -839,7 +842,7 @@ class _Broker:
 
             # Adjust price to include commission (or bid-ask spread).
             # In long positions, the adjusted price is a fraction higher, and vice versa.
-            adjusted_price = price * (1 + copysign(self._commission, order.size))
+            adjusted_price = self._adjusted_price(order.size, price)
 
             # If order size was specified proportionally,
             # precompute true size in units, accounting for margin and spread/commissions
