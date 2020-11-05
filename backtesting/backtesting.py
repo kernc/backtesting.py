@@ -1392,8 +1392,10 @@ class Backtest:
         c = data.Close.values
         s.loc['Buy & Hold Return [%]'] = (c[-1] - c[0]) / c[0] * 100  # long-only return
 
-        def geometric_mean(x):
-            return np.exp(np.log(1 + x).sum() / (len(x) or np.nan)) - 1
+        def geometric_mean(returns):
+            returns = returns.fillna(0) + 1
+            return (0 if np.any(returns <= 0) else
+                    np.exp(np.log(returns).sum() / (len(returns) or np.nan)) - 1)
 
         day_returns = gmean_day_return = annual_trading_days = np.array(np.nan)
         if index.is_all_dates:
