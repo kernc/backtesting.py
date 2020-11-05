@@ -1157,11 +1157,11 @@ class Backtest:
                 if start < len(self._data):
                     try_(broker.next, exception=_OutOfMoneyError)
 
-        # Set data back to full length
-        # for future `indicator._opts['data'].index` calls to work
-        data._set_length(len(self._data))
+            # Set data back to full length
+            # for future `indicator._opts['data'].index` calls to work
+            data._set_length(len(self._data))
 
-        self._results = self._compute_stats(broker, strategy)
+            self._results = self._compute_stats(broker, strategy)
         return self._results
 
     def optimize(self,
@@ -1414,7 +1414,7 @@ class Backtest:
         # our risk doesn't; they use the simpler approach below.
         annualized_return = (1 + gmean_day_return)**annual_trading_days - 1
         s.loc['Return (Ann.) [%]'] = annualized_return * 100
-        s.loc['Volatility (Ann.) [%]'] = np.sqrt((day_returns.var(ddof=1) + (1 + gmean_day_return)**2)**annual_trading_days - (1 + gmean_day_return)**(2*annual_trading_days)) * 100  # noqa: E501
+        s.loc['Volatility (Ann.) [%]'] = np.sqrt((day_returns.var(ddof=int(bool(day_returns.shape))) + (1 + gmean_day_return)**2)**annual_trading_days - (1 + gmean_day_return)**(2*annual_trading_days)) * 100  # noqa: E501
         # s.loc['Return (Ann.) [%]'] = gmean_day_return * annual_trading_days * 100
         # s.loc['Risk (Ann.) [%]'] = day_returns.std(ddof=1) * np.sqrt(annual_trading_days) * 100
 
