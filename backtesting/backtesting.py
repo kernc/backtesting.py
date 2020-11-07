@@ -4,11 +4,6 @@ Objects from this module can also be imported from the top-level
 module directly, e.g.
 
     from backtesting import Backtest, Strategy
-
-.. warning:: v0.2.0 breaking changes
-   Version 0.2.0 introduced some **breaking API changes**. For quick ways to
-   migrate existing 0.1.x code, see the implementing
-   [pull request](https://github.com/kernc/backtesting.py/pull/47/).
 """
 import multiprocessing as mp
 import os
@@ -713,15 +708,16 @@ class _Broker:
         tp = tp and float(tp)
 
         is_long = size > 0
+        adjusted_price = self._adjusted_price(size)
 
         if is_long:
-            if not (sl or -np.inf) <= (limit or stop or self.last_price) <= (tp or np.inf):
+            if not (sl or -np.inf) < (limit or stop or adjusted_price) < (tp or np.inf):
                 raise ValueError("Long orders require: SL ({}) < LIMIT ({}) < TP ({})".format(
-                    sl, limit or stop or self.last_price, tp))
+                    sl, limit or stop or adjusted_price, tp))
         else:
-            if not (tp or -np.inf) <= (limit or stop or self.last_price) <= (sl or np.inf):
+            if not (tp or -np.inf) < (limit or stop or adjusted_price) < (sl or np.inf):
                 raise ValueError("Short orders require: TP ({}) < LIMIT ({}) < SL ({})".format(
-                    tp, limit or stop or self.last_price, sl))
+                    tp, limit or stop or adjusted_price, sl))
 
         order = Order(self, size, limit, stop, sl, tp, trade)
         # Put the new order in the order queue,
@@ -744,10 +740,12 @@ class _Broker:
 
     @property
     def last_price(self) -> float:
-        """Return price at the last (current) close.
-        Used e.g. in `Orders._is_price_ok()` to see if the set price is reasonable.
-        """
+        """ Price at the last (current) close. """
         return self._data.Close[-1]
+
+    def _adjusted_price(self, size=None, price=None) -> float:
+        """ Long/short `price`, adjusted for commitions."""
+        return (price or self.last_price) * (1 + copysign(self._commission, size))
 
     @property
     def equity(self) -> float:
@@ -853,7 +851,7 @@ class _Broker:
 
             # Adjust price to include commission (or bid-ask spread).
             # In long positions, the adjusted price is a fraction higher, and vice versa.
-            adjusted_price = price * (1 + copysign(self._commission, order.size))
+            adjusted_price = self._adjusted_price(order.size, price)
 
             # If order size was specified proportionally,
             # precompute true size in units, accounting for margin and spread/commissions
@@ -1163,12 +1161,17 @@ class Backtest:
 
                 # Next tick, a moment before bar close
                 strategy.next()
+            else:
+                # Re-run broker one last time to handle orders placed in the last strategy
+                # iteration. Use the same OHLC values as in the last broker iteration.
+                if start < len(self._data):
+                    try_(broker.next, exception=_OutOfMoneyError)
 
-        # Set data back to full length
-        # for future `indicator._opts['data'].index` calls to work
-        data._set_length(len(self._data))
+            # Set data back to full length
+            # for future `indicator._opts['data'].index` calls to work
+            data._set_length(len(self._data))
 
-        self._results = self._compute_stats(broker, strategy)
+            self._results = self._compute_stats(broker, strategy)
         return self._results
 
     def optimize(self,
@@ -1462,8 +1465,10 @@ class Backtest:
         c = data.Close.values
         s.loc['Buy & Hold Return [%]'] = (c[-1] - c[0]) / c[0] * 100  # long-only return
 
-        def geometric_mean(x):
-            return np.exp(np.log(1 + x).sum() / (len(x) or np.nan)) - 1
+        def geometric_mean(returns):
+            returns = returns.fillna(0) + 1
+            return (0 if np.any(returns <= 0) else
+                    np.exp(np.log(returns).sum() / (len(returns) or np.nan)) - 1)
 
         day_returns = gmean_day_return = annual_trading_days = np.array(np.nan)
         if index.is_all_dates:
@@ -1479,7 +1484,7 @@ class Backtest:
         # our risk doesn't; they use the simpler approach below.
         annualized_return = (1 + gmean_day_return)**annual_trading_days - 1
         s.loc['Return (Ann.) [%]'] = annualized_return * 100
-        s.loc['Volatility (Ann.) [%]'] = np.sqrt((day_returns.var(ddof=1) + (1 + gmean_day_return)**2)**annual_trading_days - (1 + gmean_day_return)**(2*annual_trading_days)) * 100  # noqa: E501
+        s.loc['Volatility (Ann.) [%]'] = np.sqrt((day_returns.var(ddof=int(bool(day_returns.shape))) + (1 + gmean_day_return)**2)**annual_trading_days - (1 + gmean_day_return)**(2*annual_trading_days)) * 100  # noqa: E501
         # s.loc['Return (Ann.) [%]'] = gmean_day_return * annual_trading_days * 100
         # s.loc['Risk (Ann.) [%]'] = day_returns.std(ddof=1) * np.sqrt(annual_trading_days) * 100
 

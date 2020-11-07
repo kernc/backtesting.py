@@ -381,6 +381,27 @@ class TestBacktest(TestCase):
         bt = Backtest(GOOG, SmaCross, commission=.002)
         bt.run()
 
+    def test_close_orders_from_last_strategy_iteration(self):
+        class S(Strategy):
+            def init(self): pass
+
+            def next(self):
+                if not self.position:
+                    self.buy()
+                elif len(self.data) == len(SHORT_DATA):
+                    self.position.close()
+
+        self.assertFalse(Backtest(SHORT_DATA, S).run()._trades.empty)
+
+    def test_check_adjusted_price_when_placing_order(self):
+        class S(Strategy):
+            def init(self): pass
+
+            def next(self):
+                self.buy(tp=self.data.Close * 1.01)
+
+        self.assertRaises(ValueError, Backtest(SHORT_DATA, S, commission=.02).run)
+
 
 class TestStrategy(TestCase):
     def _Backtest(self, strategy_coroutine, **kwargs):
