@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.5.1
+#       jupytext_version: 1.6.0
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -152,6 +152,35 @@ from backtesting.lib import plot_heatmaps
 
 plot_heatmaps(heatmap, agg='mean')
 # -
+
+# ## Stochastic optimization
+# In the previous method, we used a *Grid Search* method. The *Grid Search* is an exhaustive search through a set of manually specified set of values of hyperparameters. You evaluate the performance for each set of parameters and finally select the one that performed best. This however might be computationally expensive for large data sets. In the follwing example, we will use *skopt.forest_minimize* from *scikit-optimize* which is a sequential optimization method using decision trees. This is suitable for modeling the expensive to evaluate functions. The model is improved by sequentially evaluating the expensive function at the next best point. Thereby finding the parameters producing the optimum value for the function with as few evaluations as possible.  
+
+stats_skopt, optimization, heatmap_skopt = backtest.optimize(
+    n1=range(10, 110, 10),
+    n2=range(20, 210, 20),
+    n_enter=range(15, 35, 5),
+    n_exit=range(10, 25, 5),
+    constraint=lambda p: p.n_exit < p.n_enter < p.n1 < p.n2,
+    maximize='Equity Final [$]',
+    method='skopt',
+    max_tries=200,
+    return_heatmap=True,
+    return_optimization=True)
+
+optimization.x
+
+# Understanding the impact of each parameter on the function in two dimensions is easy, but partial dependency subplots start to be useful when the number of dimensions grows. The *skopt.plots* methods *plots.plot_evaluations* and *plots.plot_objective*  take care of many of the more mundane things needed to make good plots of all combinations of the dimensions.
+
+# +
+from skopt.plots import plot_objective
+
+_ = plot_objective(optimization, n_points=10)
+
+# -
+
+from skopt.plots import plot_evaluations
+_ = plot_evaluations(optimization, bins=10)
 
 # Learn more by exploring further
 # [examples](https://kernc.github.io/backtesting.py/doc/backtesting/index.html#tutorials)
