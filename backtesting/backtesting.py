@@ -735,7 +735,10 @@ class _Broker:
         return self._data.Close[-1]
 
     def _adjusted_price(self, size=None, price=None) -> float:
-        """ Long/short `price`, adjusted for commitions."""
+        """
+        Long/short `price`, adjusted for commisions.
+        In long positions, the adjusted price is a fraction higher, and vice versa.
+        """
         return (price or self.last_price) * (1 + copysign(self._commission, size))
 
     @property
