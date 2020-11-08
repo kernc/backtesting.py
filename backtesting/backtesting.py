@@ -969,7 +969,7 @@ class Backtest:
                  data: pd.DataFrame,
                  strategy: Type[Strategy],
                  *,
-                 cash: float = 10000,
+                 cash: float = 10_000,
                  commission: float = .0,
                  margin: float = 1.,
                  trade_on_close=False,
