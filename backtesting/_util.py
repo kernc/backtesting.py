@@ -45,7 +45,6 @@ class _Array(np.ndarray):
     ndarray extended to supply .name and other arbitrary properties
     in ._opts dict.
     """
-
     def __new__(cls, array, *, name=None, **kwargs):
         obj = np.asarray(array).view(cls)
         obj.name = name or array.name
@@ -97,7 +96,6 @@ class _Data:
     and the returned "series" are _not_ `pd.Series` but `np.ndarray`
     for performance reasons.
     """
-
     def __init__(self, df: pd.DataFrame):
         self.__df = df
         self.__i = len(df)
@@ -143,8 +141,8 @@ class _Data:
     @property
     def pip(self) -> float:
         if self.__pip is None:
-            self.__pip = 10 ** -np.median([len(s.partition('.')[-1])
-                                           for s in self.__arrays['Close'].astype(str)])
+            self.__pip = 10**-np.median([len(s.partition('.')[-1])
+                                         for s in self.__arrays['Close'].astype(str)])
         return self.__pip
 
     def __get_array(self, key) -> _Array:
