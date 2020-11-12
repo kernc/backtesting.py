@@ -5,6 +5,8 @@ Backtesting.py
 [![Build Status](https://img.shields.io/github/workflow/status/kernc/backtesting.py/CI/master?style=for-the-badge)](https://github.com/kernc/backtesting.py/actions)
 [![Code Coverage](https://img.shields.io/codecov/c/gh/kernc/backtesting.py.svg?style=for-the-badge)](https://codecov.io/gh/kernc/backtesting.py)
 [![Backtesting on PyPI](https://img.shields.io/pypi/v/backtesting.svg?color=blue&style=for-the-badge)](https://pypi.org/project/backtesting)
+[![PyPI downloads](https://img.shields.io/pypi/dd/backtesting.svg?color=skyblue&style=for-the-badge)](https://pypi.org/project/backtesting)
+[![GitHub Sponsors](https://img.shields.io/github/sponsors/kernc?color=pink&style=for-the-badge)](https://github.com/sponsors/kernc)
 
 Backtest trading strategies with Python.
 
@@ -98,17 +100,19 @@ Features
 * Interactive visualizations
 
 
+-------------------------------------------------
+
 Alternatives
 ------------
 The thing with backtesting is, unless you dug into the dirty details yourself,
-you can't rely on execution correctness, and you may lose your house.
+you can't rely on execution correctness, and you risk losing your house.
 In addition, everyone has their own preconveived ideas about how a mechanical
-trading strategy should be conducted, so everyone (and their brothers)
+trading strategy should be conducted, so everyone (and their brother)
 just rolls their own backtesting frameworks.
 
 If after reviewing the docs and exmples perchance you find
-[_Backtesting.py_][website] is not your cup of tea,
-you can have a look at some similar alternative Python backtesting frameworks:
+[_Backtesting.py_][website] not your cup of tea,
+kindly have a look at some similar alternative Python backtesting frameworks:
 
 - [bt](http://pmorissette.github.io/bt/) -
   a framework based on reusable and flexible blocks of

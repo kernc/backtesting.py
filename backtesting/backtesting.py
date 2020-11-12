@@ -4,11 +4,6 @@ Objects from this module can also be imported from the top-level
 module directly, e.g.
 
     from backtesting import Backtest, Strategy
-
-.. warning:: v0.2.0 breaking changes
-   Version 0.2.0 introduced some **breaking API changes**. For quick ways to
-   migrate existing 0.1.x code, see the implementing
-   [pull request](https://github.com/kernc/backtesting.py/pull/47/).
 """
 import multiprocessing as mp
 import os
@@ -54,8 +49,8 @@ class Strategy(metaclass=ABCMeta):
     """
     def __init__(self, broker, data, params):
         self._indicators = []
-        self._broker = broker  # type: _Broker
-        self._data = data   # type: _Data
+        self._broker: _Broker = broker
+        self._data: _Data = data
         self._params = self._check_params(params)
 
     def __repr__(self):
@@ -511,11 +506,11 @@ class Trade:
         self.__broker = broker
         self.__size = size
         self.__entry_price = entry_price
-        self.__exit_price = None  # type: Optional[float]
-        self.__entry_bar = entry_bar  # type: int
-        self.__exit_bar = None  # type: Optional[int]
-        self.__sl_order = None  # type: Optional[Order]
-        self.__tp_order = None  # type: Optional[Order]
+        self.__exit_price: Optional[float] = None
+        self.__entry_bar: int = entry_bar
+        self.__exit_bar: Optional[int] = None
+        self.__sl_order: Optional[Order] = None
+        self.__tp_order: Optional[Order] = None
 
     def __repr__(self):
         return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
@@ -652,7 +647,7 @@ class Trade:
         assert type in ('sl', 'tp')
         assert price is None or 0 < price < np.inf
         attr = f'_{self.__class__.__qualname__}__{type}_order'
-        order = getattr(self, attr)  # type: Order
+        order: Order = getattr(self, attr)  # type: Order
         if order:
             order.cancel()
         if price:
@@ -667,7 +662,7 @@ class _Broker:
         assert 0 < cash, f"cash should be >0, is {cash}"
         assert 0 <= commission < .1, f"commission should be between 0-10%, is {commission}"
         assert 0 < margin <= 1, f"margin should be between 0 and 1, is {margin}"
-        self._data = data  # type: _Data
+        self._data: _Data = data
         self._cash = cash
         self._commission = commission
         self._leverage = 1 / margin
@@ -676,10 +671,10 @@ class _Broker:
         self._exclusive_orders = exclusive_orders
 
         self._equity = np.tile(np.nan, len(index))
-        self.orders = []  # type: List[Order]
-        self.trades = []  # type: List[Trade]
+        self.orders: List[Order] = []
+        self.trades: List[Trade] = []
         self.position = Position(self)
-        self.closed_trades = []  # type: List[Trade]
+        self.closed_trades: List[Trade] = []
 
     def __repr__(self):
         return f'<Broker: {self._cash:.0f}{self.position.pl:+.1f} ({len(self.trades)} trades)>'
@@ -702,17 +697,18 @@ class _Broker:
         tp = tp and float(tp)
 
         is_long = size > 0
+        adjusted_price = self._adjusted_price(size)
 
         if is_long:
-            if not (sl or -np.inf) <= (limit or stop or self.last_price) <= (tp or np.inf):
+            if not (sl or -np.inf) < (limit or stop or adjusted_price) < (tp or np.inf):
                 raise ValueError(
                     "Long orders require: "
-                    f"SL ({sl}) < LIMIT ({limit or stop or self.last_price}) < TP ({tp})")
+                    f"SL ({sl}) < LIMIT ({limit or stop or adjusted_price}) < TP ({tp})")
         else:
-            if not (tp or -np.inf) <= (limit or stop or self.last_price) <= (sl or np.inf):
+            if not (tp or -np.inf) < (limit or stop or adjusted_price) < (sl or np.inf):
                 raise ValueError(
                     "Short orders require: "
-                    f"TP ({tp}) < LIMIT ({limit or stop or self.last_price}) < SL ({sl})")
+                    f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})")
 
         order = Order(self, size, limit, stop, sl, tp, trade)
         # Put the new order in the order queue,
@@ -735,10 +731,15 @@ class _Broker:
 
     @property
     def last_price(self) -> float:
-        """Return price at the last (current) close.
-        Used e.g. in `Orders._is_price_ok()` to see if the set price is reasonable.
-        """
+        """ Price at the last (current) close. """
         return self._data.Close[-1]
+
+    def _adjusted_price(self, size=None, price=None) -> float:
+        """
+        Long/short `price`, adjusted for commisions.
+        In long positions, the adjusted price is a fraction higher, and vice versa.
+        """
+        return (price or self.last_price) * (1 + copysign(self._commission, size))
 
     @property
     def equity(self) -> float:
@@ -844,7 +845,7 @@ class _Broker:
 
             # Adjust price to include commission (or bid-ask spread).
             # In long positions, the adjusted price is a fraction higher, and vice versa.
-            adjusted_price = price * (1 + copysign(self._commission, order.size))
+            adjusted_price = self._adjusted_price(order.size, price)
 
             # If order size was specified proportionally,
             # precompute true size in units, accounting for margin and spread/commissions
@@ -971,7 +972,7 @@ class Backtest:
                  data: pd.DataFrame,
                  strategy: Type[Strategy],
                  *,
-                 cash: float = 10000,
+                 cash: float = 10_000,
                  commission: float = .0,
                  margin: float = 1.,
                  trade_on_close=False,
@@ -1071,7 +1072,7 @@ class Backtest:
                           'but `pd.DateTimeIndex` is advised.',
                           stacklevel=2)
 
-        self._data = data   # type: pd.DataFrame
+        self._data: pd.DataFrame = data
         self._broker = partial(
             _Broker, cash=cash, commission=commission, margin=margin,
             trade_on_close=trade_on_close, hedging=hedging,
@@ -1118,8 +1119,8 @@ class Backtest:
             dtype: object
         """
         data = _Data(self._data.copy(deep=False))
-        broker = self._broker(data=data)  # type: _Broker
-        strategy = self._strategy(broker, data, kwargs)  # type: Strategy
+        broker: _Broker = self._broker(data=data)
+        strategy: Strategy = self._strategy(broker, data, kwargs)
 
         strategy.init()
         data._update()  # Strategy.init might have changed/added to data.df
@@ -1153,12 +1154,17 @@ class Backtest:
 
                 # Next tick, a moment before bar close
                 strategy.next()
+            else:
+                # Re-run broker one last time to handle orders placed in the last strategy
+                # iteration. Use the same OHLC values as in the last broker iteration.
+                if start < len(self._data):
+                    try_(broker.next, exception=_OutOfMoneyError)
 
-        # Set data back to full length
-        # for future `indicator._opts['data'].index` calls to work
-        data._set_length(len(self._data))
+            # Set data back to full length
+            # for future `indicator._opts['data'].index` calls to work
+            data._set_length(len(self._data))
 
-        self._results = self._compute_stats(broker, strategy)
+            self._results = self._compute_stats(broker, strategy)
         return self._results
 
     def optimize(self,
@@ -1322,7 +1328,7 @@ class Backtest:
                              for stats in (bt.run(**params)
                                            for params in param_batches[batch_index])]
 
-    _mp_backtests = {}  # type: Dict[float, Tuple[Backtest, List, Callable]]
+    _mp_backtests: Dict[float, Tuple['Backtest', List, Callable]] = {}
 
     @staticmethod
     def _compute_drawdown_duration_peaks(dd: pd.Series):
@@ -1392,8 +1398,10 @@ class Backtest:
         c = data.Close.values
         s.loc['Buy & Hold Return [%]'] = (c[-1] - c[0]) / c[0] * 100  # long-only return
 
-        def geometric_mean(x):
-            return np.exp(np.log(1 + x).sum() / (len(x) or np.nan)) - 1
+        def geometric_mean(returns):
+            returns = returns.fillna(0) + 1
+            return (0 if np.any(returns <= 0) else
+                    np.exp(np.log(returns).sum() / (len(returns) or np.nan)) - 1)
 
         day_returns = gmean_day_return = annual_trading_days = np.array(np.nan)
         if index.is_all_dates:
@@ -1409,7 +1417,7 @@ class Backtest:
         # our risk doesn't; they use the simpler approach below.
         annualized_return = (1 + gmean_day_return)**annual_trading_days - 1
         s.loc['Return (Ann.) [%]'] = annualized_return * 100
-        s.loc['Volatility (Ann.) [%]'] = np.sqrt((day_returns.var(ddof=1) + (1 + gmean_day_return)**2)**annual_trading_days - (1 + gmean_day_return)**(2*annual_trading_days)) * 100  # noqa: E501
+        s.loc['Volatility (Ann.) [%]'] = np.sqrt((day_returns.var(ddof=int(bool(day_returns.shape))) + (1 + gmean_day_return)**2)**annual_trading_days - (1 + gmean_day_return)**(2*annual_trading_days)) * 100  # noqa: E501
         # s.loc['Return (Ann.) [%]'] = gmean_day_return * annual_trading_days * 100
         # s.loc['Risk (Ann.) [%]'] = day_returns.std(ddof=1) * np.sqrt(annual_trading_days) * 100
 

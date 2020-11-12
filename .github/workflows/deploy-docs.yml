@@ -30,7 +30,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -U pip setuptools wheel
-          pip install -U .[doc,test]
+          pip install -U -e .[doc,test]
 
       - name: Build docs
         run: time catchsegv doc/build.sh

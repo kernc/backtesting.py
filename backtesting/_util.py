@@ -37,7 +37,7 @@ def _as_list(value) -> List:
 def _data_period(index) -> Union[pd.Timedelta, Number]:
     """Return data index period as pd.Timedelta"""
     values = pd.Series(index[-100:])
-    return values.diff().median()
+    return values.diff().dropna().median()
 
 
 class _Array(np.ndarray):
@@ -99,9 +99,9 @@ class _Data:
     def __init__(self, df: pd.DataFrame):
         self.__df = df
         self.__i = len(df)
-        self.__pip = None   # type: Optional[float]
-        self.__cache = {}   # type: Dict[str, _Array]
-        self.__arrays = {}  # type: Dict[str, _Array]
+        self.__pip: Optional[float] = None
+        self.__cache: Dict[str, _Array] = {}
+        self.__arrays: Dict[str, _Array] = {}
         self._update()
 
     def __getitem__(self, item):

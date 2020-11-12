@@ -155,7 +155,7 @@ class SmaCross(Strategy):
 # +
 from backtesting import Backtest
 
-bt = Backtest(GOOG, SmaCross, cash=10000, commission=.002)
+bt = Backtest(GOOG, SmaCross, cash=10_000, commission=.002)
 stats = bt.run()
 stats
 # -
