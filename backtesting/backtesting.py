@@ -49,8 +49,8 @@ class Strategy(metaclass=ABCMeta):
     """
     def __init__(self, broker, data, params):
         self._indicators = []
-        self._broker = broker  # type: _Broker
-        self._data = data   # type: _Data
+        self._broker: _Broker = broker
+        self._data: _Data = data
         self._params = self._check_params(params)
 
     def __repr__(self):
@@ -506,11 +506,11 @@ class Trade:
         self.__broker = broker
         self.__size = size
         self.__entry_price = entry_price
-        self.__exit_price = None  # type: Optional[float]
-        self.__entry_bar = entry_bar  # type: int
-        self.__exit_bar = None  # type: Optional[int]
-        self.__sl_order = None  # type: Optional[Order]
-        self.__tp_order = None  # type: Optional[Order]
+        self.__exit_price: Optional[float] = None
+        self.__entry_bar: int = entry_bar
+        self.__exit_bar: Optional[int] = None
+        self.__sl_order: Optional[Order] = None
+        self.__tp_order: Optional[Order] = None
 
     def __repr__(self):
         return '<Trade size={} time={}-{} price={}-{} pl={:.0f}>'.format(
@@ -648,7 +648,7 @@ class Trade:
         assert type in ('sl', 'tp')
         assert price is None or 0 < price < np.inf
         attr = '_{}__{}_order'.format(self.__class__.__qualname__, type)
-        order = getattr(self, attr)  # type: Order
+        order: Order = getattr(self, attr)
         if order:
             order.cancel()
         if price:
@@ -663,7 +663,7 @@ class _Broker:
         assert 0 < cash, "cash shosuld be >0, is {}".format(cash)
         assert 0 <= commission < .1, "commission should be between 0-10%, is {}".format(commission)
         assert 0 < margin <= 1, "margin should be between 0 and 1, is {}".format(margin)
-        self._data = data  # type: _Data
+        self._data: _Data = data
         self._cash = cash
         self._commission = commission
         self._leverage = 1 / margin
@@ -672,10 +672,10 @@ class _Broker:
         self._exclusive_orders = exclusive_orders
 
         self._equity = np.tile(np.nan, len(index))
-        self.orders = []  # type: List[Order]
-        self.trades = []  # type: List[Trade]
+        self.orders: List[Order] = []
+        self.trades: List[Trade] = []
         self.position = Position(self)
-        self.closed_trades = []  # type: List[Trade]
+        self.closed_trades: List[Trade] = []
 
     def __repr__(self):
         return '<Broker: {:.0f}{:+.1f} ({} trades)>'.format(
@@ -1072,7 +1072,7 @@ class Backtest:
                           'but `pd.DateTimeIndex` is advised.',
                           stacklevel=2)
 
-        self._data = data   # type: pd.DataFrame
+        self._data: pd.DataFrame = data
         self._broker = partial(
             _Broker, cash=cash, commission=commission, margin=margin,
             trade_on_close=trade_on_close, hedging=hedging,
@@ -1119,8 +1119,8 @@ class Backtest:
             dtype: object
         """
         data = _Data(self._data.copy(deep=False))
-        broker = self._broker(data=data)  # type: _Broker
-        strategy = self._strategy(broker, data, kwargs)  # type: Strategy
+        broker: _Broker = self._broker(data=data)
+        strategy: Strategy = self._strategy(broker, data, kwargs)
 
         strategy.init()
         data._update()  # Strategy.init might have changed/added to data.df
@@ -1328,7 +1328,7 @@ class Backtest:
                              for stats in (bt.run(**params)
                                            for params in param_batches[batch_index])]
 
-    _mp_backtests = {}  # type: Dict[float, Tuple[Backtest, List, Callable]]
+    _mp_backtests: Dict[float, Tuple['Backtest', List, Callable]] = {}
 
     @staticmethod
     def _compute_drawdown_duration_peaks(dd: pd.Series):

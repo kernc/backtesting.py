@@ -99,9 +99,9 @@ class _Data:
     def __init__(self, df: pd.DataFrame):
         self.__df = df
         self.__i = len(df)
-        self.__pip = None   # type: Optional[float]
-        self.__cache = {}   # type: Dict[str, _Array]
-        self.__arrays = {}  # type: Dict[str, _Array]
+        self.__pip: Optional[float] = None
+        self.__cache: Dict[str, _Array] = {}
+        self.__arrays: Dict[str, _Array] = {}
         self._update()
 
     def __getitem__(self, item):
