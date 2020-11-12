@@ -647,7 +647,7 @@ class Trade:
         assert type in ('sl', 'tp')
         assert price is None or 0 < price < np.inf
         attr = f'_{self.__class__.__qualname__}__{type}_order'
-        order: Order = getattr(self, attr)  # type: Order
+        order: Order = getattr(self, attr)
         if order:
             order.cancel()
         if price:
