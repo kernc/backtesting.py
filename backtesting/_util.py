@@ -111,7 +111,7 @@ class _Data:
         try:
             return self.__get_array(item)
         except KeyError:
-            raise AttributeError("Column '{}' not in data".format(item)) from None
+            raise AttributeError(f"Column '{item}' not in data") from None
 
     def _set_length(self, i):
         self.__i = i
@@ -125,9 +125,9 @@ class _Data:
 
     def __repr__(self):
         i = min(self.__i, len(self.__df) - 1)
-        return '<Data i={} ({}) {}>'.format(i, self.__arrays['__index'][i],
-                                            ', '.join('{}={}'.format(k, v)
-                                                      for k, v in self.__df.iloc[i].items()))
+        index = self.__arrays['__index'][i]
+        items = ', '.join(f'{k}={v}' for k, v in self.__df.iloc[i].items())
+        return f'<Data i={i} ({index}) {items}>'
 
     def __len__(self):
         return self.__i

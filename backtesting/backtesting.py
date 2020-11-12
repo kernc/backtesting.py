@@ -57,19 +57,19 @@ class Strategy(metaclass=ABCMeta):
         return '<Strategy ' + str(self) + '>'
 
     def __str__(self):
-        params = ','.join('{}={}'.format(*p) for p in zip(self._params.keys(),
-                                                          map(_as_str, self._params.values())))
+        params = ','.join(f'{i[0]}={i[1]}' for i in zip(self._params.keys(),
+                                                        map(_as_str, self._params.values())))
         if params:
             params = '(' + params + ')'
-        return '{}{}'.format(self.__class__.__name__, params)
+        return f'{self.__class__.__name__}{params}'
 
     def _check_params(self, params):
         for k, v in params.items():
             if not hasattr(self, k):
                 raise AttributeError(
-                    "Strategy '{}' is missing parameter '{}'. Strategy class "
-                    "should define parameters as class variables before they "
-                    "can be optimized or run with.".format(self.__class__.__name__, k))
+                    f"Strategy '{self.__class__.__name__}' is missing parameter '{k}'."
+                    "Strategy class should define parameters as class variables before they "
+                    "can be optimized or run with.")
             setattr(self, k, v)
         return params
 
@@ -116,7 +116,7 @@ class Strategy(metaclass=ABCMeta):
         if name is None:
             params = ','.join(filter(None, map(_as_str, chain(args, kwargs.values()))))
             func_name = _as_str(func)
-            name = ('{}({})' if params else '{}').format(func_name, params)
+            name = (f'{func_name}({params})' if params else f'{func_name}')
         else:
             name = name.format(*map(_as_str, args),
                                **dict(zip(kwargs.keys(), map(_as_str, kwargs.values()))))
@@ -124,7 +124,7 @@ class Strategy(metaclass=ABCMeta):
         try:
             value = func(*args, **kwargs)
         except Exception as e:
-            raise RuntimeError('Indicator "{}" errored with exception: {}'.format(name, e))
+            raise RuntimeError(f'Indicator "{name}" errored with exception: {e}')
 
         if isinstance(value, pd.DataFrame):
             value = value.values.T
@@ -140,8 +140,8 @@ class Strategy(metaclass=ABCMeta):
         if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data.Close):
             raise ValueError(
                 'Indicators must return (optionally a tuple of) numpy.arrays of same '
-                'length as `data` (data shape: {}; indicator "{}" shape: {}, returned value: {})'
-                .format(self._data.Close.shape, name, getattr(value, 'shape', ''), value))
+                f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}"'
+                f'shape: {getattr(value, "shape" , "")}, returned value: {value})')
 
         if plot and overlay is None and np.issubdtype(value.dtype, np.number):
             x = value / self._data.Close
@@ -288,10 +288,10 @@ class _Orders(tuple):
         removed_attrs = ('entry', 'set_entry', 'is_long', 'is_short',
                          'sl', 'tp', 'set_sl', 'set_tp')
         if item in removed_attrs:
-            raise AttributeError('Strategy.orders.{} were removed in Backtesting 0.2.0. '
-                                 'Use `Order` API instead. See docs.'
-                                 .format('/.'.join(removed_attrs)))
-        raise AttributeError("'tuple' object has no attribute {!r}".format(item))
+            raise AttributeError(f'Strategy.orders.{"/.".join(removed_attrs)} were removed in'
+                                 'Backtesting 0.2.0. '
+                                 'Use `Order` API instead. See docs.')
+        raise AttributeError(f"'tuple' object has no attribute {item!r}")
 
 
 class Position:
@@ -346,7 +346,7 @@ class Position:
             trade.close(portion)
 
     def __repr__(self):
-        return '<Position: {} ({} trades)>'.format(self.size, len(self.__broker.trades))
+        return f'<Position: {self.size} ({len(self.__broker.trades)} trades)>'
 
 
 class _OutOfMoneyError(Exception):
@@ -386,11 +386,11 @@ class Order:
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
-            setattr(self, '_{}__{}'.format(self.__class__.__qualname__, k), v)
+            setattr(self, f'_{self.__class__.__qualname__}__{k}', v)
         return self
 
     def __repr__(self):
-        return '<Order {}>'.format(', '.join('{}={}'.format(param, round(value, 5))
+        return '<Order {}>'.format(', '.join(f'{param}={round(value, 5)}'
                                              for param, value in (
                                                  ('size', self.__size),
                                                  ('limit', self.__limit_price),
@@ -513,13 +513,12 @@ class Trade:
         self.__tp_order: Optional[Order] = None
 
     def __repr__(self):
-        return '<Trade size={} time={}-{} price={}-{} pl={:.0f}>'.format(
-            self.__size, self.__entry_bar, self.__exit_bar or '',
-            self.__entry_price, self.__exit_price or '', self.pl)
+        return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
+               f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}>'
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
-            setattr(self, '_{}__{}'.format(self.__class__.__qualname__, k), v)
+            setattr(self, f'_{self.__class__.__qualname__}__{k}', v)
         return self
 
     def _copy(self, **kwargs):
@@ -647,8 +646,8 @@ class Trade:
     def __set_contingent(self, type, price):
         assert type in ('sl', 'tp')
         assert price is None or 0 < price < np.inf
-        attr = '_{}__{}_order'.format(self.__class__.__qualname__, type)
-        order: Order = getattr(self, attr)
+        attr = f'_{self.__class__.__qualname__}__{type}_order'
+        order: Order = getattr(self, attr)  # type: Order
         if order:
             order.cancel()
         if price:
@@ -660,9 +659,9 @@ class Trade:
 class _Broker:
     def __init__(self, *, data, cash, commission, margin,
                  trade_on_close, hedging, exclusive_orders, index):
-        assert 0 < cash, "cash shosuld be >0, is {}".format(cash)
-        assert 0 <= commission < .1, "commission should be between 0-10%, is {}".format(commission)
-        assert 0 < margin <= 1, "margin should be between 0 and 1, is {}".format(margin)
+        assert 0 < cash, f"cash should be >0, is {cash}"
+        assert 0 <= commission < .1, f"commission should be between 0-10%, is {commission}"
+        assert 0 < margin <= 1, f"margin should be between 0 and 1, is {margin}"
         self._data: _Data = data
         self._cash = cash
         self._commission = commission
@@ -678,8 +677,7 @@ class _Broker:
         self.closed_trades: List[Trade] = []
 
     def __repr__(self):
-        return '<Broker: {:.0f}{:+.1f} ({} trades)>'.format(
-            self._cash, self.position.pl, len(self.trades))
+        return f'<Broker: {self._cash:.0f}{self.position.pl:+.1f} ({len(self.trades)} trades)>'
 
     def new_order(self,
                   size: float,
@@ -703,12 +701,14 @@ class _Broker:
 
         if is_long:
             if not (sl or -np.inf) < (limit or stop or adjusted_price) < (tp or np.inf):
-                raise ValueError("Long orders require: SL ({}) < LIMIT ({}) < TP ({})".format(
-                    sl, limit or stop or adjusted_price, tp))
+                raise ValueError(
+                    "Long orders require: "
+                    f"SL ({sl}) < LIMIT ({limit or stop or adjusted_price}) < TP ({tp})")
         else:
             if not (tp or -np.inf) < (limit or stop or adjusted_price) < (sl or np.inf):
-                raise ValueError("Short orders require: TP ({}) < LIMIT ({}) < SL ({})".format(
-                    tp, limit or stop or adjusted_price, sl))
+                raise ValueError(
+                    "Short orders require: "
+                    f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})")
 
         order = Order(self, size, limit, stop, sl, tp, trade)
         # Put the new order in the order queue,
@@ -1243,8 +1243,8 @@ class Backtest:
 
         for k, v in kwargs.items():
             if len(_tuple(v)) == 0:
-                raise ValueError("Optimization variable '{0}' is passed no "
-                                 "optimization values: {0}={1}".format(k, v))
+                raise ValueError(f"Optimization variable '{k}' is passed no "
+                                 f"optimization values: {k}={v}")
 
         class AttrDict(dict):
             def __getattr__(self, item):
@@ -1259,7 +1259,7 @@ class Backtest:
             raise ValueError('No admissible parameter combinations to test')
 
         if len(param_combos) > 300:
-            warnings.warn('Searching for best of {} configurations.'.format(len(param_combos)),
+            warnings.warn(f'Searching for best of {len(param_combos)} configurations.',
                           stacklevel=2)
 
         heatmap = pd.Series(np.nan,
