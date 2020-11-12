@@ -1072,7 +1072,7 @@ class Backtest:
                           'but `pd.DateTimeIndex` is advised.',
                           stacklevel=2)
 
-        self._data = data   # type: pd.DataFrame
+        self._data: pd.DataFrame = data
         self._broker = partial(
             _Broker, cash=cash, commission=commission, margin=margin,
             trade_on_close=trade_on_close, hedging=hedging,
@@ -1328,7 +1328,7 @@ class Backtest:
                              for stats in (bt.run(**params)
                                            for params in param_batches[batch_index])]
 
-    _mp_backtests = {}  # type: Dict[float, Tuple[Backtest, List, Callable]]
+    _mp_backtests: Dict[float, Tuple['Backtest', List, Callable]] = {}
 
     @staticmethod
     def _compute_drawdown_duration_peaks(dd: pd.Series):
