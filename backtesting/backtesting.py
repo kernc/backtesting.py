@@ -424,8 +424,8 @@ class Order:
         """
         Order size (negative for short orders).
 
-        If size is a value between 0 and 1, it is interpreted as a fraction
-        of current available liquidity (cash plus `Position.pl` minus used margin).
+        If size is a value between 0 and 1, it is interpreted as a fraction of current
+        available liquidity (cash plus `Position.pl` minus used margin).
         A value greater than or equal to 1 indicates an absolute number of units.
         """
         return self.__size
@@ -664,7 +664,7 @@ class Trade:
 class _Broker:
     def __init__(self, *, data, cash, commission, margin,
                  trade_on_close, hedging, exclusive_orders, index):
-        assert 0 < cash, f"cash shosuld be >0, is {cash}"
+        assert 0 < cash, f"cash should be >0, is {cash}"
         assert 0 <= commission < .1, f"commission should be between 0-10%, is {commission}"
         assert 0 < margin <= 1, f"margin should be between 0 and 1, is {margin}"
         self._data = data  # type: _Data
@@ -705,12 +705,14 @@ class _Broker:
 
         if is_long:
             if not (sl or -np.inf) <= (limit or stop or self.last_price) <= (tp or np.inf):
-                raise ValueError(f"Long orders require: "
-                      f"SL ({sl}) < LIMIT ({limit or stop or self.last_price}) < TP ({tp})")
+                raise ValueError(
+                    "Long orders require: "
+                    f"SL ({sl}) < LIMIT ({limit or stop or self.last_price}) < TP ({tp})")
         else:
             if not (tp or -np.inf) <= (limit or stop or self.last_price) <= (sl or np.inf):
-                raise ValueError(f"Short orders require: "
-                      f"TP ({tp}) < LIMIT ({limit or stop or self.last_price}) < SL ({sl})")
+                raise ValueError(
+                    "Short orders require: "
+                    f"TP ({tp}) < LIMIT ({limit or stop or self.last_price}) < SL ({sl})")
 
         order = Order(self, size, limit, stop, sl, tp, trade)
         # Put the new order in the order queue,
