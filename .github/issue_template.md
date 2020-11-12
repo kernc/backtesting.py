@@ -3,8 +3,13 @@
 
 ### Actual Behavior
 
+<!-- In case of a bug, attach full exception traceback. -->
+
 
 ### Steps to Reproduce
+
+<!-- In case of a bug, attach steps and code sample
+     with which the bug can be reproduced. -->
 
 1.
 2.
