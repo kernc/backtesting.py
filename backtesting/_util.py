@@ -37,7 +37,7 @@ def _as_list(value) -> List:
 def _data_period(index) -> Union[pd.Timedelta, Number]:
     """Return data index period as pd.Timedelta"""
     values = pd.Series(index[-100:])
-    return values.diff().median()
+    return values.diff().dropna().median()
 
 
 class _Array(np.ndarray):

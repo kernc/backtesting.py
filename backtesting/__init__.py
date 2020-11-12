@@ -1,11 +1,4 @@
 """
-# Backtesting.py Documentation
-
-.. warning:: v0.2.0 breaking changes
-   Version 0.2.0 introduced some **breaking API changes**. For quick ways to
-   migrate existing 0.1.x code, see the implementing
-   [pull request](https://github.com/kernc/backtesting.py/pull/47/).
-
 ## Manuals
 
 * [**Quick Start User Guide**](../examples/Quick Start User Guide.html)
@@ -15,7 +8,7 @@
 * [Library of Utilities and Composable Base Strategies](../examples/Strategies Library.html)
 * [Multiple Time Frames](../examples/Multiple Time Frames.html)
 * [Parameter Heatmap](../examples/Parameter Heatmap.html)
-* [**Trading with Machine Learning**](../examples/Trading with Machine Learning.html)
+* [Trading with Machine Learning](../examples/Trading with Machine Learning.html)
 
 These tutorials are also available to test as live Jupyter notebooks:
 [![Binder](https://mybinder.org/badge_logo.svg)][binder]
@@ -48,7 +41,7 @@ itself find their way back to the community.
 try:
     from ._version import version as __version__  # noqa: F401
 except ImportError:
-    pass  # Package not installed
+    __version__ = '?.?.?'  # Package not installed
 
 from .backtesting import Backtest, Strategy  # noqa: F401
 from . import lib  # noqa: F401
