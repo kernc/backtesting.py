@@ -62,8 +62,8 @@ class Strategy(metaclass=ABCMeta):
         return '<Strategy ' + str(self) + '>'
 
     def __str__(self):
-        params = ','.join('{}={}'.format(*p) for p in zip(self._params.keys(),
-                                                          map(_as_str, self._params.values())))
+        params = ','.join(f'{i[0]}={i[1]}' for i in zip(self._params.keys(),
+                                                        map(_as_str, self._params.values())))
         if params:
             params = '(' + params + ')'
         return f'{self.__class__.__name__}{params}'
@@ -391,11 +391,11 @@ class Order:
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
-            setattr(self, '_{}__{}'.format(self.__class__.__qualname__, k), v)
+            setattr(self, f'_{self.__class__.__qualname__}__{k}', v)
         return self
 
     def __repr__(self):
-        return '<Order {}>'.format(', '.join('{}={}'.format(param, round(value, 5))
+        return '<Order {}>'.format(', '.join(f'{param}={round(value, 5)}'
                                              for param, value in (
                                                  ('size', self.__size),
                                                  ('limit', self.__limit_price),
@@ -523,7 +523,7 @@ class Trade:
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
-            setattr(self, '_{}__{}'.format(self.__class__.__qualname__, k), v)
+            setattr(self, f'_{self.__class__.__qualname__}__{k}', v)
         return self
 
     def _copy(self, **kwargs):
@@ -651,7 +651,7 @@ class Trade:
     def __set_contingent(self, type, price):
         assert type in ('sl', 'tp')
         assert price is None or 0 < price < np.inf
-        attr = '_{}__{}_order'.format(self.__class__.__qualname__, type)
+        attr = f'_{self.__class__.__qualname__}__{type}_order'
         order = getattr(self, attr)  # type: Order
         if order:
             order.cancel()

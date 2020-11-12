@@ -521,7 +521,7 @@ return this.labels[index] || "";
                 if arr.dtype == bool:
                     arr = arr.astype(int)
                 source.add(arr, source_name)
-                tooltips.append('@{{{}}}{{0,0.0[0000]}}'.format(source_name))
+                tooltips.append(f'@{{{source_name}}}{{0,0.0[0000]}}')
                 if is_overlay:
                     ohlc_extreme_values[source_name] = arr
                     if is_scatter:
