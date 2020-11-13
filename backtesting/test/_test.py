@@ -563,6 +563,7 @@ class TestPlot(TestCase):
         with _tempfile() as f:
             for p in dict(plot_volume=False,
                           plot_equity=False,
+                          plot_return=True,
                           plot_pl=False,
                           plot_drawdown=True,
                           superimpose=False,

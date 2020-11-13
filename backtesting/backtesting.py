@@ -1459,7 +1459,7 @@ class Backtest:
                 return super().__repr__()
 
     def plot(self, *, results: pd.Series = None, filename=None, plot_width=None,
-             plot_equity=True, plot_pl=True,
+             plot_equity=True, plot_return=False, plot_pl=True,
              plot_volume=True, plot_drawdown=False,
              smooth_equity=False, relative_equity=True,
              superimpose: Union[bool, str] = True,
@@ -1483,7 +1483,12 @@ class Backtest:
         currently non-adjustable.
 
         If `plot_equity` is `True`, the resulting plot will contain
-        an equity (cash plus assets) graph section.
+        an equity (initial cash plus assets) graph section. This is the same
+        as `plot_return` plus initial 100%.
+
+        If `plot_return` is `True`, the resulting plot will contain
+        a cumulative return graph section. This is the same
+        as `plot_equity` minus initial 100%.
 
         If `plot_pl` is `True`, the resulting plot will contain
         a profit/loss (P/L) indicator section.
@@ -1548,6 +1553,7 @@ class Backtest:
             filename=filename,
             plot_width=plot_width,
             plot_equity=plot_equity,
+            plot_return=plot_return,
             plot_pl=plot_pl,
             plot_volume=plot_volume,
             plot_drawdown=plot_drawdown,

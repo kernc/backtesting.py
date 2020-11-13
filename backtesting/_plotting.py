@@ -147,7 +147,7 @@ def plot(*, results: pd.Series,
          df: pd.DataFrame,
          indicators: List[_Indicator],
          filename='', plot_width=None,
-         plot_equity=True, plot_pl=True,
+         plot_equity=True, plot_return=False, plot_pl=True,
          plot_volume=True, plot_drawdown=False,
          smooth_equity=False, relative_equity=True,
          superimpose=True, resample=True,
@@ -172,6 +172,7 @@ def plot(*, results: pd.Series,
 
     plot_volume = plot_volume and not df.Volume.isnull().all()
     plot_equity = plot_equity and not trades.empty
+    plot_return = plot_return and not trades.empty
     plot_pl = plot_pl and not trades.empty
     is_datetime_index = df.index.is_all_dates
 
@@ -274,7 +275,7 @@ return this.labels[index] || "";
             renderers=renderers, formatters=formatters,
             tooltips=tooltips, mode='vline' if vline else 'mouse'))
 
-    def _plot_equity_section():
+    def _plot_equity_section(is_return=False):
         """Equity section"""
         # Max DD Dur. line
         equity = equity_data['Equity'].copy()
@@ -307,10 +308,14 @@ return this.labels[index] || "";
 
         if relative_equity:
             equity /= equity.iloc[0]
+        if is_return:
+            equity -= equity.iloc[0]
 
-        source.add(equity, 'equity')
+        yaxis_label = 'Return' if is_return else 'Equity'
+        source_key = 'eq_return' if is_return else 'equity'
+        source.add(equity, source_key)
         fig = new_indicator_figure(
-            y_axis_label="Equity",
+            y_axis_label=yaxis_label,
             **({} if plot_drawdown else dict(plot_height=110)))
 
         # High-watermark drawdown dents
@@ -322,16 +327,16 @@ return this.labels[index] || "";
                   fill_color='#ffffea', line_color='#ffcb66')
 
         # Equity line
-        r = fig.line('index', 'equity', source=source, line_width=1.5, line_alpha=1)
+        r = fig.line('index', source_key, source=source, line_width=1.5, line_alpha=1)
         if relative_equity:
-            tooltip_format = '@equity{+0,0.[000]%}'
+            tooltip_format = f'@{source_key}{{+0,0.[000]%}}'
             tick_format = '0,0.[00]%'
             legend_format = '{:,.0f}%'
         else:
-            tooltip_format = '@equity{$ 0,0}'
+            tooltip_format = f'@{source_key}{{$ 0,0}}'
             tick_format = '$ 0.0 a'
             legend_format = '${:,.0f}'
-        set_tooltips(fig, [('Equity', tooltip_format)], renderers=[r])
+        set_tooltips(fig, [(yaxis_label, tooltip_format)], renderers=[r])
         fig.yaxis.formatter = NumeralTickFormatter(format=tick_format)
 
         # Peaks
@@ -568,6 +573,9 @@ return this.labels[index] || "";
 
     if plot_equity:
         _plot_equity_section()
+
+    if plot_return:
+        _plot_equity_section(is_return=True)
 
     if plot_drawdown:
         figs_above_ohlc.append(_plot_drawdown_section())
