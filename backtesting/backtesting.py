@@ -51,7 +51,6 @@ class Strategy(metaclass=ABCMeta):
     `backtesting.backtesting.Strategy.next` to define
     your own strategy.
     """
-
     def __init__(self, broker, data, params):
         self._indicators = []
         self._broker: _Broker = broker
@@ -282,7 +281,6 @@ class _Orders(tuple):
     """
     TODO: remove this class. Only for deprecation.
     """
-
     def cancel(self):
         """Cancel all non-contingent (i.e. SL/TP) orders."""
         for order in self:
@@ -310,7 +308,6 @@ class Position:
         if self.position:
             ...  # we have a position, either long or short
     """
-
     def __init__(self, broker: '_Broker'):
         self.__broker = broker
 
@@ -375,7 +372,6 @@ class Order:
     [filled]: https://www.investopedia.com/terms/f/fill.asp
     [Good 'Til Canceled]: https://www.investopedia.com/terms/g/gtc.asp
     """
-
     def __init__(self, broker: '_Broker',
                  size: float,
                  limit_price: float = None,
@@ -406,7 +402,7 @@ class Order:
                                                  ('sl', self.__sl_price),
                                                  ('tp', self.__tp_price),
                                                  ('contingent', self.is_contingent),
-        ) if value is not None))
+                                             ) if value is not None))
 
     def cancel(self):
         """Cancel the order."""
@@ -510,7 +506,6 @@ class Trade:
     When an `Order` is filled, it results in an active `Trade`.
     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
     """
-
     def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar):
         self.__broker = broker
         self.__size = size
@@ -977,7 +972,6 @@ class Backtest:
     instance, or `backtesting.backtesting.Backtest.optimize` to
     optimize it.
     """
-
     def __init__(self,
                  data: pd.DataFrame,
                  strategy: Type[Strategy],
@@ -1247,13 +1241,14 @@ class Backtest:
             raise TypeError('`maximize` must be str (a field of backtest.run() result '
                             'Series) or a function that accepts result Series '
                             'and returns a number; the higher the better')
+
         if constraint is None:
 
             def constraint(_):
                 return True
 
         elif not callable(constraint):
-            raise TypeError("constraint` must be a function that accepts a dict "
+            raise TypeError("`constraint` must be a function that accepts a dict "
                             "of strategy parameters and returns a bool whether "
                             "the combination of parameters is admissible or not")
 
@@ -1391,7 +1386,7 @@ class Backtest:
 
         return output
 
-    @ staticmethod
+    @staticmethod
     def _mp_task(backtest_uuid, batch_index):
         bt, param_batches, maximize_func = Backtest._mp_backtests[backtest_uuid]
         return batch_index, [maximize_func(stats) if stats['# Trades'] else np.nan
@@ -1400,7 +1395,7 @@ class Backtest:
 
     _mp_backtests: Dict[float, Tuple['Backtest', List, Callable]] = {}
 
-    @ staticmethod
+    @staticmethod
     def _compute_drawdown_duration_peaks(dd: pd.Series):
         iloc = np.unique(np.r_[(dd == 0).values.nonzero()[0], len(dd) - 1])
         iloc = pd.Series(iloc, index=dd.index[iloc])

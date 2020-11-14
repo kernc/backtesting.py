@@ -1,6 +1,5 @@
 import inspect
 import os
-# from pickle import TRUE
 import sys
 import time
 import unittest
