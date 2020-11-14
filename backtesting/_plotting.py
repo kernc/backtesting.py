@@ -86,7 +86,7 @@ def lightness(color, lightness=.94):
     return color.to_rgb()
 
 
-_MAX_CANDLES = 10000
+_MAX_CANDLES = 10_000
 
 
 def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
@@ -101,8 +101,8 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
         FREQS = ('1T', '5T', '10T', '15T', '30T', '1H', '2H', '4H', '8H', '1D', '1W', '1M')
         freq = next((f for f in FREQS[from_index:]
                      if len(df.resample(f)) <= _MAX_CANDLES), FREQS[-1])
-        warnings.warn("Data contains too many candlesticks to plot; downsampling to {!r}. "
-                      "See `Backtest.plot(resample=...)`".format(freq))
+        warnings.warn(f"Data contains too many candlesticks to plot; downsampling to {freq!r}. "
+                      "See `Backtest.plot(resample=...)`")
 
     from .lib import OHLCV_AGG, TRADES_AGG, _EQUITY_AGG
     df = df.resample(freq, label='right').agg(OHLCV_AGG).dropna()
@@ -147,7 +147,7 @@ def plot(*, results: pd.Series,
          df: pd.DataFrame,
          indicators: List[_Indicator],
          filename='', plot_width=None,
-         plot_equity=True, plot_pl=True,
+         plot_equity=True, plot_return=False, plot_pl=True,
          plot_volume=True, plot_drawdown=False,
          smooth_equity=False, relative_equity=True,
          superimpose=True, resample=True,
@@ -172,6 +172,7 @@ def plot(*, results: pd.Series,
 
     plot_volume = plot_volume and not df.Volume.isnull().all()
     plot_equity = plot_equity and not trades.empty
+    plot_return = plot_return and not trades.empty
     plot_pl = plot_pl and not trades.empty
     is_datetime_index = df.index.is_all_dates
 
@@ -274,7 +275,7 @@ return this.labels[index] || "";
             renderers=renderers, formatters=formatters,
             tooltips=tooltips, mode='vline' if vline else 'mouse'))
 
-    def _plot_equity_section():
+    def _plot_equity_section(is_return=False):
         """Equity section"""
         # Max DD Dur. line
         equity = equity_data['Equity'].copy()
@@ -307,10 +308,14 @@ return this.labels[index] || "";
 
         if relative_equity:
             equity /= equity.iloc[0]
+        if is_return:
+            equity -= equity.iloc[0]
 
-        source.add(equity, 'equity')
+        yaxis_label = 'Return' if is_return else 'Equity'
+        source_key = 'eq_return' if is_return else 'equity'
+        source.add(equity, source_key)
         fig = new_indicator_figure(
-            y_axis_label="Equity",
+            y_axis_label=yaxis_label,
             **({} if plot_drawdown else dict(plot_height=110)))
 
         # High-watermark drawdown dents
@@ -322,16 +327,16 @@ return this.labels[index] || "";
                   fill_color='#ffffea', line_color='#ffcb66')
 
         # Equity line
-        r = fig.line('index', 'equity', source=source, line_width=1.5, line_alpha=1)
+        r = fig.line('index', source_key, source=source, line_width=1.5, line_alpha=1)
         if relative_equity:
-            tooltip_format = '@equity{+0,0.[000]%}'
+            tooltip_format = f'@{source_key}{{+0,0.[000]%}}'
             tick_format = '0,0.[00]%'
             legend_format = '{:,.0f}%'
         else:
-            tooltip_format = '@equity{$ 0,0}'
+            tooltip_format = f'@{source_key}{{$ 0,0}}'
             tick_format = '$ 0.0 a'
             legend_format = '${:,.0f}'
-        set_tooltips(fig, [('Equity', tooltip_format)], renderers=[r])
+        set_tooltips(fig, [(yaxis_label, tooltip_format)], renderers=[r])
         fig.yaxis.formatter = NumeralTickFormatter(format=tick_format)
 
         # Peaks
@@ -354,7 +359,7 @@ return this.labels[index] || "";
         dd_timedelta_label = df['datetime'].iloc[int(round(dd_end))] - df['datetime'].iloc[dd_start]
         fig.line([dd_start, dd_end], equity.iloc[dd_start],
                  line_color='red', line_width=2,
-                 legend_label='Max Dd Dur. ({})'.format(dd_timedelta_label)
+                 legend_label=f'Max Dd Dur. ({dd_timedelta_label})'
                  .replace(' 00:00:00', '')
                  .replace('(0 days ', '('))
 
@@ -424,8 +429,8 @@ return this.labels[index] || "";
                               millisecond='S').get(time_resolution))
         if not resample_rule:
             warnings.warn(
-                "'Can't superimpose OHLC data with rule '{}' (index datetime resolution: '{}'). "
-                "Skipping.".format(resample_rule, time_resolution),
+                f"'Can't superimpose OHLC data with rule '{resample_rule}'"
+                f"(index datetime resolution: '{time_resolution}'). Skipping.",
                 stacklevel=4)
             return
 
@@ -469,7 +474,7 @@ return this.labels[index] || "";
         trade_source.add(trades[['EntryPrice', 'ExitPrice']].values.tolist(), 'position_lines_ys')
         fig_ohlc.multi_line(xs='position_lines_xs', ys='position_lines_ys',
                             source=trade_source, line_color=trades_cmap,
-                            legend_label='Trades ({})'.format(len(trades)),
+                            legend_label=f'Trades ({len(trades)})',
                             line_width=8, line_alpha=1, line_dash='dotted')
 
     def _plot_indicators():
@@ -478,7 +483,7 @@ return this.labels[index] || "";
         def _too_many_dims(value):
             assert value.ndim >= 2
             if value.ndim > 2:
-                warnings.warn("Can't plot indicators with >2D ('{}')".format(value.name),
+                warnings.warn(f"Can't plot indicators with >2D ('{value.name}')",
                               stacklevel=5)
                 return True
             return False
@@ -517,11 +522,11 @@ return this.labels[index] || "";
             legend_label = LegendStr(value.name)
             for j, arr in enumerate(value, 1):
                 color = next(colors)
-                source_name = '{}_{}_{}'.format(legend_label, i, j)
+                source_name = f'{legend_label}_{i}_{j}'
                 if arr.dtype == bool:
                     arr = arr.astype(int)
                 source.add(arr, source_name)
-                tooltips.append('@{{{}}}{{0,0.0[0000]}}'.format(source_name))
+                tooltips.append(f'@{{{source_name}}}{{0,0.0[0000]}}')
                 if is_overlay:
                     ohlc_extreme_values[source_name] = arr
                     if is_scatter:
@@ -568,6 +573,9 @@ return this.labels[index] || "";
 
     if plot_equity:
         _plot_equity_section()
+
+    if plot_return:
+        _plot_equity_section(is_return=True)
 
     if plot_drawdown:
         figs_above_ohlc.append(_plot_drawdown_section())
