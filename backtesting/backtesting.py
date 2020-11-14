@@ -1180,9 +1180,8 @@ class Backtest:
                  return_optimization: bool = False,
                  **kwargs) -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
         """
-        Optimize strategy parameters to an optimal combination using
-        parallel exhaustive search. Returns result `pd.Series` of
-        the best run.
+        Optimize strategy parameters to an optimal combination.
+        Returns result `pd.Series` of the best run.
 
         `maximize` is a string key from the
         `backtesting.backtesting.Backtest.run`-returned results series,
@@ -1190,12 +1189,15 @@ class Backtest:
         the higher the better. By default, the method maximizes
         Van Tharp's [System Quality Number](https://google.com/search?q=System+Quality+Number).
 
-        `method` is the optimization method. Currently two methods are supported: 1) "grid" which
-        searches for the optimum value over a regularly-spaced grid of trial points, and 2) "skopt"
-        which finds optimum strategy parameters using scikit-optimize. skopt.forest_minimize(), a
-        tree based regression model  is used to model the expensive to evaluate function.
-        (https://scikit-optimize.github.io/stable/modules/generated/skopt.forest_minimize.html).The
-        default value for base_estimator is used (ET), and n_calls = max_tries.
+        `method` is the optimization method. Currently two methods are supported:
+
+        * `"grid"` which does an exhaustive search over all
+          parameter combinations, and
+        * `"skopt"` which finds optimum strategy parameters using
+          [model-based optimization], making at most `max_tries` evaluations.
+
+        [model-based optimization]: \
+            https://scikit-optimize.github.io/stable/auto_examples/bayesian-optimization.html
 
         `constraint` is a function that accepts a dict-like object of
         parameters (with values) and returns `True` when the combination
@@ -1208,6 +1210,17 @@ class Backtest:
         inspected or projected onto 2D to plot a heatmap
         (see `backtesting.lib.plot_heatmaps()`).
 
+        If `return_optimization` is True and `method = 'skopt'`,
+        in addition to result series (and maybe heatmap), return raw
+        [`scipy.optimize.OptimizeResult`][OptimizeResult] for further
+        inspection, e.g. with [scikit-optimize]\
+        [plotting tools].
+
+        [OptimizeResult]: \
+            https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.OptimizeResult.html
+        [scikit-optimize]: https://scikit-optimize.github.io
+        [plotting tools]: https://scikit-optimize.github.io/stable/modules/plots.html
+
         Additional keyword arguments represent strategy arguments with
         list-like collections of possible values. For example, the following
         code finds and returns the "best" of the 7 admissible (of the
@@ -1215,10 +1228,6 @@ class Backtest:
 
             backtest.optimize(sma1=[5, 10, 15], sma2=[10, 20, 40],
                               constraint=lambda p: p.sma1 < p.sma2)
-
-        .. TODO::
-            Add parameter `max_tries: Union[int, float] = None` which switches
-            from exhaustive grid search to random search. See notes in the source.
 
         .. TODO::
             Improve multiprocessing/parallel execution on Windos with start method 'spawn'.
