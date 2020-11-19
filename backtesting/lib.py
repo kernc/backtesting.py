@@ -129,6 +129,13 @@ def plot_heatmaps(heatmap: pd.Series,
     aggregated by 'max' function by default. This can be tweaked
     with `agg` parameter, which accepts any argument pandas knows
     how to aggregate by.
+
+    .. todo::
+        Lay heatmaps out lower-triangular instead of in a simple grid.
+        Like [`skopt.plots.plot_objective()`][plot_objective] does.
+
+    [plot_objective]: \
+        https://scikit-optimize.github.io/stable/modules/plots.html#plot-objective
     """
     return _plot_heatmaps(heatmap, agg, ncols, filename, plot_width, open_browser)
 
