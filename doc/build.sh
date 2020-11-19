@@ -90,6 +90,7 @@ for line in sys.stdin.readlines():
     grep -v $'\t''$' |
     while read -r line; do
         while IFS=$'\t' read -r file url; do
+            url=$(python -c 'import html, sys; print(html.unescape(sys.argv[-1]))' "$url")
             [ -f "$url" ] ||
                 curl --silent --fail --retry 2 --user-agent 'Mozilla/5.0 Firefox 61' "$url" >/dev/null 2>&1 ||
                 die "broken link in $file:  $url"
