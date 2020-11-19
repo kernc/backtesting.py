@@ -500,15 +500,22 @@ class TestOptimize(TestCase):
         with _tempfile() as f:
             bt.plot(filename=f, open_browser=False)
 
-    def test_optimize_skopt(self):
+    def test_method_skopt(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
-        OPT_PARAMS = dict(fast=range(2, 5), slow=[8, 9, 10])
-
-        res, skopt_results, heatmap = bt.optimize(
-            **OPT_PARAMS, method='skopt', return_optimization=True, return_heatmap=True)
+        res, heatmap, skopt_results = bt.optimize(
+            fast=range(2, 20), slow=np.arange(2, 20, dtype=object),
+            constraint=lambda p: p.fast < p.slow,
+            max_tries=30,
+            method='skopt',
+            return_optimization=True,
+            return_heatmap=True,
+            random_state=2)
         self.assertIsInstance(res, pd.Series)
-        self.assertIsInstance(skopt_results.fun, (int, float))
         self.assertIsInstance(heatmap, pd.Series)
+        self.assertGreater(heatmap.max(), 1.1)
+        self.assertGreater(heatmap.min(), -2)
+        self.assertEqual(-skopt_results.fun, heatmap.max())
+        self.assertEqual(heatmap.index.tolist(), heatmap.dropna().index.unique().tolist())
 
     def test_nowrite_df(self):
         # Test we don't write into passed data df by default.

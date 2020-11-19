@@ -12,18 +12,14 @@ import warnings
 from abc import abstractmethod, ABCMeta
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import copy
-from functools import partial
-from itertools import repeat, product, chain
+from functools import lru_cache, partial
+from itertools import repeat, product, chain, compress
 from math import copysign
 from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
-
-from skopt.space import Integer, Real, Categorical
-from skopt import forest_minimize
-from skopt.utils import use_named_args
 
 try:
     from tqdm.auto import tqdm as _tqdm
@@ -1171,14 +1167,17 @@ class Backtest:
             self._results = self._compute_stats(broker, strategy)
         return self._results
 
-    def optimize(self,
+    def optimize(self, *,
                  maximize: Union[str, Callable[[pd.Series], float]] = 'SQN',
                  method: str = 'grid',
                  max_tries: Union[int, float] = 100,
                  constraint: Callable[[dict], bool] = None,
                  return_heatmap: bool = False,
                  return_optimization: bool = False,
-                 **kwargs) -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
+                 random_state: int = None,
+                 **kwargs) -> Union[pd.Series,
+                                    Tuple[pd.Series, pd.Series],
+                                    Tuple[pd.Series, pd.Series, dict]]:
         """
         Optimize strategy parameters to an optimal combination.
         Returns result `pd.Series` of the best run.
@@ -1221,6 +1220,9 @@ class Backtest:
         [scikit-optimize]: https://scikit-optimize.github.io
         [plotting tools]: https://scikit-optimize.github.io/stable/modules/plots.html
 
+        If you want reproducible optimization results, set `random_state`
+        to a fix integer or a `numpy.random.RandomState` object.
+
         Additional keyword arguments represent strategy arguments with
         list-like collections of possible values. For example, the following
         code finds and returns the "best" of the 7 admissible (of the
@@ -1261,22 +1263,22 @@ class Backtest:
                             "of strategy parameters and returns a bool whether "
                             "the combination of parameters is admissible or not")
 
+        if return_optimization and method != 'skopt':
+            raise ValueError("return_optimization=True only valid if method='skopt'")
+
+        def _tuple(x):
+            return x if isinstance(x, Sequence) and not isinstance(x, str) else (x,)
+
+        for k, v in kwargs.items():
+            if len(_tuple(v)) == 0:
+                raise ValueError(f"Optimization variable '{k}' is passed no "
+                                 f"optimization values: {k}={v}")
+
+        class AttrDict(dict):
+            def __getattr__(self, item):
+                return self[item]
+
         def _optimize_grid() -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
-            if return_optimization is True:
-                raise ValueError("optimization results not available for method 'grid'")
-
-            def _tuple(x):
-                return x if isinstance(x, Sequence) and not isinstance(x, str) else (x,)
-
-            for k, v in kwargs.items():
-                if len(_tuple(v)) == 0:
-                    raise ValueError(f"Optimization variable '{k}' is passed no "
-                                     f"optimization values: {k}={v}")
-
-            class AttrDict(dict):
-                def __getattr__(self, item):
-                    return self[item]
-
             param_combos = tuple(map(dict,  # back to dict so it pickles
                                      filter(constraint,  # constraints applied on our fancy dict
                                             map(AttrDict,
@@ -1349,50 +1351,96 @@ class Backtest:
                 return self._results, heatmap
             return self._results
 
-        def _optimize_skopt() -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
+        def _optimize_skopt() -> Union[pd.Series,
+                                       Tuple[pd.Series, pd.Series],
+                                       Tuple[pd.Series, pd.Series, dict]]:
+            try:
+                from skopt import forest_minimize
+                from skopt.space import Integer, Real, Categorical
+                from skopt.utils import use_named_args
+                from skopt.callbacks import DeltaXStopper
+                from skopt.learning import ExtraTreesRegressor
+            except ImportError:
+                raise ImportError("Need package 'scikit-optimize' for method='skopt'. "
+                                  "pip install scikit-optimize")
 
             dimensions = []
-            for key, value in kwargs.items():
-                args_array = np.array(value)
+            for key, values in kwargs.items():
+                values = np.asarray(values)
+                if values.dtype.kind in 'mM':  # timedelta, datetime64
+                    # these dtypes are unsupported in skopt, so convert to raw int
+                    # TODO: save dtype and convert back later
+                    values = values.astype(int)
 
-                if args_array.dtype.kind in 'ium':
-                    dimensions.append(Integer(low=min(value), high=max(value), name=key))
-                elif args_array.dtype.kind == 'f':
-                    dimensions.append(Real(low=min(value), high=max(value), name=key))
+                if values.dtype.kind in 'iumM':
+                    dimensions.append(Integer(low=values.min(), high=values.max(), name=key))
+                elif values.dtype.kind == 'f':
+                    dimensions.append(Real(low=values.min(), high=values.max(), name=key))
                 else:
-                    dimensions.append(Categorical(args_array.tolist(), name=key))
+                    dimensions.append(Categorical(values.tolist(), name=key, transform='onehot'))
+
+            # Avoid recomputing re-evaluations:
+            # "The objective has been evaluated at this point before."
+            # https://github.com/scikit-optimize/scikit-optimize/issues/302
+            memoized_run = lru_cache()(lambda tup: self.run(**dict(tup)))
+
+            # np.inf/np.nan breaks sklearn, np.finfo(float).max breaks skopt.plots.plot_objective
+            INVALID = 1e300
 
             @use_named_args(dimensions=dimensions)
-            def convert(**params):
-                res = self.run(**params)
-                return -res[maximize_key]
+            def objective_function(**params):
+                # Check constraints
+                # TODO: Adjust after https://github.com/scikit-optimize/scikit-optimize/pull/971
+                if not constraint(AttrDict(params)):
+                    return INVALID
+                res = memoized_run(tuple(params.items()))
+                value = -maximize(res)
+                if np.isnan(value):
+                    return INVALID
+                return value
 
-            res = forest_minimize(func=convert,
-                                  dimensions=dimensions,
-                                  n_calls=max_tries, base_estimator="ET",
-                                  random_state=4)
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    'ignore', 'The objective has been evaluated at this point before.')
 
-            self.run(**dict(zip(list(kwargs.keys()), res.x)))
+                res = forest_minimize(
+                    func=objective_function,
+                    dimensions=dimensions,
+                    n_calls=max_tries,
+                    base_estimator=ExtraTreesRegressor(n_estimators=20, min_samples_leaf=2),
+                    acq_func='LCB',
+                    kappa=3,
+                    n_initial_points=min(max_tries, 20 + 3 * len(kwargs)),
+                    initial_point_generator='lhs',  # 'sobel' requires n_initial_points ~ 2**N
+                    callback=DeltaXStopper(9e-7),
+                    random_state=random_state)
 
-            heatmap_df = pd.DataFrame(res.x_iters, columns=list(kwargs.keys()))
-            heatmap = pd.Series(res.func_vals,
-                                name=maximize_key,
-                                index=pd.MultiIndex.from_frame(heatmap_df))
+            # Re-run with best params so that the next .plot() call can render it
+            stats = self.run(**dict(zip(kwargs.keys(), res.x)))
+            output = [stats]
 
-            if return_optimization and return_heatmap:
-                return self._results, res, heatmap
-            elif return_optimization:
-                return self._results, res
-            elif return_heatmap:
-                return self._results, heatmap
-            else:
-                return self._results
+            if return_heatmap:
+                heatmap = pd.Series(dict(zip(map(tuple, res.x_iters), -res.func_vals)),
+                                    name=maximize_key)
+                heatmap.index.names = kwargs.keys()
+                heatmap = heatmap[heatmap != -INVALID]
+                heatmap.sort_index(inplace=True)
+                output.append(heatmap)
+
+            if return_optimization:
+                valid = res.func_vals != INVALID
+                res.x_iters = list(compress(res.x_iters, valid))
+                res.func_vals = res.func_vals[valid]
+                output.append(res)
+
+            return stats if len(output) == 1 else tuple(output)
 
         if method == 'grid':
             output = _optimize_grid()
-        else:
+        elif method == 'skopt':
             output = _optimize_skopt()
-
+        else:
+            raise ValueError(f"Method should be 'grid' or 'skopt', not {method!r}")
         return output
 
     @staticmethod

@@ -51,7 +51,6 @@ if __name__ == '__main__':
             ],
             'dev': [
                 'flake8',
-                'scikit-optimize',
                 'coverage',
                 'mypy',
             ],
