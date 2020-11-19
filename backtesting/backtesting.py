@@ -1443,7 +1443,7 @@ class Backtest:
         s.loc['Max. Trade Duration'] = _round_timedelta(durations.max())
         s.loc['Avg. Trade Duration'] = _round_timedelta(durations.mean())
         s.loc['Profit Factor'] = returns[returns > 0].sum() / (abs(returns[returns < 0].sum()) or np.nan)  # noqa: E501
-        s.loc['Expectancy [%]'] = ((returns[returns > 0].mean() * win_rate -
+        s.loc['Expectancy [%]'] = ((returns[returns > 0].mean() * win_rate +
                                     returns[returns < 0].mean() * (100 - win_rate)))
         s.loc['SQN'] = np.sqrt(n_trades) * pl.mean() / (pl.std() or np.nan)
 

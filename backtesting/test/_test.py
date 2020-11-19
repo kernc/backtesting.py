@@ -266,7 +266,7 @@ class TestBacktest(TestCase):
                 'End': pd.Timestamp('2013-03-01 00:00:00'),
                 'Equity Final [$]': 51959.94999999997,
                 'Equity Peak [$]': 75787.44,
-                'Expectancy [%]': 8.791710931051735,
+                'Expectancy [%]': 3.097629974370269,
                 'Exposure Time [%]': 93.99441340782123,
                 'Max. Drawdown Duration': pd.Timedelta('584 days 00:00:00'),
                 'Max. Drawdown [%]': -47.98012705007589,
