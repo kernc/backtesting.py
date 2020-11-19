@@ -1231,7 +1231,7 @@ class Backtest:
         [plotting tools]: https://scikit-optimize.github.io/stable/modules/plots.html
 
         If you want reproducible optimization results, set `random_state`
-        to a fix integer or a `numpy.random.RandomState` object.
+        to a fixed integer or a `numpy.random.RandomState` object.
 
         Additional keyword arguments represent strategy arguments with
         list-like collections of possible values. For example, the following
