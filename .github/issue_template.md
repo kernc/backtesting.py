@@ -3,7 +3,9 @@
 
 ### Actual Behavior
 
-<!-- In case of a bug, attach full exception traceback. -->
+<!-- In case of a bug, attach full exception traceback. Please
+     wrap verbatim code/output in Markdown fenced code blocks:
+     https://bit.ly/3nEvlHP -->
 
 
 ### Steps to Reproduce
