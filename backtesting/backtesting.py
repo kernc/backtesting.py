@@ -1361,14 +1361,13 @@ class Backtest:
             if pd.isnull(best_params):
                 # No trade was made in any of the runs. Just make a random
                 # run so we get some, if empty, results
-                self.run(**param_combos[0])
+                stats = self.run(**param_combos[0])
             else:
-                # Re-run best strategy so that the next .plot() call will render it
-                self.run(**dict(zip(heatmap.index.names, best_params)))
+                stats = self.run(**dict(zip(heatmap.index.names, best_params)))
 
             if return_heatmap:
-                return self._results, heatmap
-            return self._results
+                return stats, heatmap
+            return stats
 
         def _optimize_skopt() -> Union[pd.Series,
                                        Tuple[pd.Series, pd.Series],
@@ -1439,7 +1438,6 @@ class Backtest:
                     callback=DeltaXStopper(9e-7),
                     random_state=random_state)
 
-            # Re-run with best params so that the next .plot() call can render it
             stats = self.run(**dict(zip(kwargs.keys(), res.x)))
             output = [stats]
 
