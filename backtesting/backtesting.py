@@ -1170,7 +1170,7 @@ class Backtest:
     def optimize(self, *,
                  maximize: Union[str, Callable[[pd.Series], float]] = 'SQN',
                  method: str = 'grid',
-                 max_tries: Union[int, float] = 100,
+                 max_tries: Union[int, float] = None,
                  constraint: Callable[[dict], bool] = None,
                  return_heatmap: bool = False,
                  return_optimization: bool = False,
@@ -1190,13 +1190,21 @@ class Backtest:
 
         `method` is the optimization method. Currently two methods are supported:
 
-        * `"grid"` which does an exhaustive search over all
-          parameter combinations, and
-        * `"skopt"` which finds optimum strategy parameters using
+        * `"grid"` which does an exhaustive (or randomized) search over the
+          cartesian product of parameter combinations, and
+        * `"skopt"` which finds close-to-optimal strategy parameters using
           [model-based optimization], making at most `max_tries` evaluations.
 
         [model-based optimization]: \
             https://scikit-optimize.github.io/stable/auto_examples/bayesian-optimization.html
+
+        `max_tries` is the maximal number of strategy runs to perform.
+        If `method="grid"`, this results in randomized grid search.
+        If `max_tries` is a floating value between (0, 1], this sets the
+        number of runs to approximately that fraction of full grid space.
+        Alternatively, if integer, it denotes the absolute maximum number
+        of evaluations. If unspecified (default), grid search is exhaustive,
+        whereas for `method="skopt"`, `max_tries` is set to 200.
 
         `constraint` is a function that accepts a dict-like object of
         parameters (with values) and returns `True` when the combination
@@ -1253,6 +1261,7 @@ class Backtest:
                             'Series) or a function that accepts result Series '
                             'and returns a number; the higher the better')
 
+        have_constraint = bool(constraint)
         if constraint is None:
 
             def constraint(_):
@@ -1278,12 +1287,25 @@ class Backtest:
             def __getattr__(self, item):
                 return self[item]
 
+        def _grid_size():
+            size = np.prod([len(_tuple(v)) for v in kwargs.values()])
+            if size < 10_000 and have_constraint:
+                size = sum(1 for p in product(*(zip(repeat(k), _tuple(v))
+                                                for k, v in kwargs.items()))
+                           if constraint(AttrDict(p)))
+            return size
+
         def _optimize_grid() -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
-            param_combos = tuple(map(dict,  # back to dict so it pickles
-                                     filter(constraint,  # constraints applied on our fancy dict
-                                            map(AttrDict,
-                                                product(*(zip(repeat(k), _tuple(v))
-                                                          for k, v in kwargs.items()))))))
+            rand = np.random.RandomState(random_state).random
+            grid_frac = (1 if max_tries is None else
+                         max_tries if 0 < max_tries <= 1 else
+                         max_tries / _grid_size())
+            param_combos = [dict(params)  # back to dict so it pickles
+                            for params in (AttrDict(params)
+                                           for params in product(*(zip(repeat(k), _tuple(v))
+                                                                   for k, v in kwargs.items())))
+                            if constraint(params)
+                            and rand() <= grid_frac]
             if not param_combos:
                 raise ValueError('No admissible parameter combinations to test')
 
@@ -1296,11 +1318,6 @@ class Backtest:
                                 index=pd.MultiIndex.from_tuples(
                                     [p.values() for p in param_combos],
                                     names=next(iter(param_combos)).keys()))
-
-            # TODO: add parameter `max_tries:Union[int, float]=None` which switches
-            # exhaustive grid search to random search. This might need to avoid
-            # returning NaNs in stats on runs with no trades to differentiate those
-            # from non-tested parameter combos in heatmap.
 
             def _batch(seq):
                 n = np.clip(len(seq) // (os.cpu_count() or 1), 5, 300)
@@ -1363,6 +1380,11 @@ class Backtest:
             except ImportError:
                 raise ImportError("Need package 'scikit-optimize' for method='skopt'. "
                                   "pip install scikit-optimize")
+
+            nonlocal max_tries
+            max_tries = (200 if max_tries is None else
+                         max(1, int(max_tries * _grid_size())) if 0 < max_tries <= 1 else
+                         max_tries)
 
             dimensions = []
             for key, values in kwargs.items():

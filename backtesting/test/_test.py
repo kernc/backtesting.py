@@ -517,6 +517,23 @@ class TestOptimize(TestCase):
         self.assertEqual(-skopt_results.fun, heatmap.max())
         self.assertEqual(heatmap.index.tolist(), heatmap.dropna().index.unique().tolist())
 
+    def test_max_tries(self):
+        bt = Backtest(GOOG.iloc[:100], SmaCross)
+        OPT_PARAMS = dict(fast=range(2, 10, 2), slow=[2, 5, 7, 9])
+        for method, max_tries, random_state in (('grid', 5, 2),
+                                                ('grid', .3, 2),
+                                                ('skopt', 7, 0),
+                                                ('skopt', .45, 0)):
+            with self.subTest(method=method,
+                              max_tries=max_tries,
+                              random_state=random_state):
+                _, heatmap = bt.optimize(max_tries=max_tries,
+                                         method=method,
+                                         random_state=random_state,
+                                         return_heatmap=True,
+                                         **OPT_PARAMS)
+                self.assertEqual(len(heatmap), 6)
+
     def test_nowrite_df(self):
         # Test we don't write into passed data df by default.
         # Important for copy-on-write in Backtest.optimize()
