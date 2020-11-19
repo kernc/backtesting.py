@@ -1306,7 +1306,7 @@ class Backtest:
                             for params in (AttrDict(params)
                                            for params in product(*(zip(repeat(k), _tuple(v))
                                                                    for k, v in kwargs.items())))
-                            if constraint(params)
+                            if constraint(params)  # type: ignore
                             and rand() <= grid_frac]
             if not param_combos:
                 raise ValueError('No admissible parameter combinations to test')
@@ -1361,7 +1361,7 @@ class Backtest:
             if pd.isnull(best_params):
                 # No trade was made in any of the runs. Just make a random
                 # run so we get some, if empty, results
-                self.run(**param_combos[0])  # type: ignore
+                self.run(**param_combos[0])
             else:
                 # Re-run best strategy so that the next .plot() call will render it
                 self.run(**dict(zip(heatmap.index.names, best_params)))
