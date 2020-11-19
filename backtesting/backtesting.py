@@ -1096,6 +1096,11 @@ class Backtest:
             Equity Peak [$]                       75787.4
             Return [%]                            419.599
             Buy & Hold Return [%]                 703.458
+            Return (Ann.) [%]                      21.328
+            Volatility (Ann.) [%]                 36.5383
+            Sharpe Ratio                         0.583718
+            Sortino Ratio                         1.09239
+            Calmar Ratio                         0.444518
             Max. Drawdown [%]                    -47.9801
             Avg. Drawdown [%]                    -5.92585
             Max. Drawdown Duration      584 days 00:00:00
@@ -1110,9 +1115,6 @@ class Backtest:
             Profit Factor                         2.08802
             Expectancy [%]                        8.79171
             SQN                                  0.916893
-            Sharpe Ratio                         0.179141
-            Sortino Ratio                         0.55887
-            Calmar Ratio                         0.049056
             _strategy                            SmaCross
             _equity_curve                           Eq...
             _trades                       Size  EntryB...
