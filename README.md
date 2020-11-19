@@ -63,6 +63,11 @@ Equity Final [$]                     68935.12
 Equity Peak [$]                      68991.22
 Return [%]                             589.35
 Buy & Hold Return [%]                  703.46
+Return (Ann.) [%]                       25.42
+Volatility (Ann.) [%]                   38.43
+Sharpe Ratio                             0.66
+Sortino Ratio                            1.30
+Calmar Ratio                             0.77
 Max. Drawdown [%]                      -33.08
 Avg. Drawdown [%]                       -5.58
 Max. Drawdown Duration      688 days 00:00:00
@@ -77,12 +82,10 @@ Avg. Trade Duration          32 days 00:00:00
 Profit Factor                            2.13
 Expectancy [%]                           6.91
 SQN                                      1.78
-Sharpe Ratio                             0.18
-Sortino Ratio                            0.44
-Calmar Ratio                             0.06
 _strategy              SmaCross(n1=10, n2=20)
 _equity_curve                          Equ...
 _trades                       Size  EntryB...
+dtype: object
 ```
 [![plot of trading simulation](https://i.imgur.com/xRFNHfg.png)](https://kernc.github.io/backtesting.py/#example)
 
