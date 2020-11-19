@@ -824,18 +824,29 @@ class TestUtil(TestCase):
         Backtest(GOOG.iloc[:20], S).run()
 
 
-@unittest.skipUnless(
-    os.path.isdir(os.path.join(os.path.dirname(__file__),
-                               '..', '..', 'doc')),
-    "docs dir doesn't exist")
 class TestDocs(TestCase):
+    DOCS_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'doc')
+
+    @unittest.skipUnless(os.path.isdir(DOCS_DIR), "docs dir doesn't exist")
     def test_examples(self):
-        examples = glob(os.path.join(os.path.dirname(__file__),
-                                     '..', '..', 'doc', 'examples', '*.py'))
+        examples = glob(os.path.join(self.DOCS_DIR, 'examples', '*.py'))
         self.assertGreaterEqual(len(examples), 4)
         with chdir(gettempdir()):
             for file in examples:
                 run_path(file)
+
+    def test_backtest_run_docstring_contains_stats_keys(self):
+        stats = Backtest(SHORT_DATA, SmaCross).run()
+        for key in stats.index:
+            self.assertIn(key, Backtest.run.__doc__)
+
+    def test_readme_contains_stats_keys(self):
+        with open(os.path.join(os.path.dirname(__file__),
+                               '..', '..', 'README.md')) as f:
+            readme = f.read()
+        stats = Backtest(SHORT_DATA, SmaCross).run()
+        for key in stats.index:
+            self.assertIn(key, readme)
 
 
 if __name__ == '__main__':
