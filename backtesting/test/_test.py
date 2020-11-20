@@ -83,7 +83,7 @@ class TestBacktest(TestCase):
         start = time.process_time()
         bt.run()
         end = time.process_time()
-        self.assertLess(end - start, .2)
+        self.assertLess(end - start, .3)
 
     def test_data_missing_columns(self):
         df = GOOG.copy(deep=False)
