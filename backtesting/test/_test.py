@@ -278,9 +278,16 @@ class TestBacktest(TestCase):
                 'Win Rate [%]': 46.96969696969697,
                 'Worst Trade [%]': -18.39887353835481,
         })
+
+        def almost_equal(a, b):
+            try:
+                return np.isclose(a, b, rtol=1.e-8)
+            except TypeError:
+                return a == b
+
         diff = {key: print(key) or value
                 for key, value in stats.filter(regex='^[^_]').items()
-                if value != expected[key]}
+                if not almost_equal(value, expected[key])}
         self.assertDictEqual(diff, {})
 
         self.assertSequenceEqual(
