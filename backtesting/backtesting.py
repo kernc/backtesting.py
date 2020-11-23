@@ -879,6 +879,8 @@ class _Broker:
                         # so it will only be closed partially
                         self._reduce_trade(trade, price, need_size, time_index)
                         need_size = 0
+
+                    if not need_size:
                         break
 
             # If we don't have enough liquidity to cover for the order, cancel it

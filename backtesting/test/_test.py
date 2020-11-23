@@ -469,6 +469,16 @@ class TestStrategy(TestCase):
 
         self._Backtest(coroutine).run()
 
+    def test_close_trade_leaves_needsize_0(self):
+        def coroutine(self):
+            self.buy(size=1)
+            self.buy(size=1)
+            yield
+            if self.position:
+                self.sell(size=1)
+
+        self._Backtest(coroutine).run()
+
 
 class TestOptimize(TestCase):
     def test_optimize(self):
