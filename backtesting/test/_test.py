@@ -479,6 +479,15 @@ class TestStrategy(TestCase):
 
         self._Backtest(coroutine).run()
 
+    def test_stop_limit_order_price_is_stop_price(self):
+        def coroutine(self):
+            self.buy(stop=112, limit=113, size=1)
+            self.sell(stop=107, limit=105, size=1)
+            yield
+
+        stats = self._Backtest(coroutine).run()
+        self.assertListEqual(stats._trades.filter(like='Price').stack().tolist(), [112, 107])
+
 
 class TestOptimize(TestCase):
     def test_optimize(self):
