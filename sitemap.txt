@@ -5,6 +5,7 @@ https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html
 https://kernc.github.io/backtesting.py/doc/backtesting/lib.html
 https://kernc.github.io/backtesting.py/doc/backtesting/test/
 https://kernc.github.io/backtesting.py/doc/examples/Multiple Time Frames.html
+https://kernc.github.io/backtesting.py/doc/examples/Parameter Heatmap & Optimization.html
 https://kernc.github.io/backtesting.py/doc/examples/Parameter Heatmap.html
 https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html
 https://kernc.github.io/backtesting.py/doc/examples/Strategies Library.html

@@ -39,12 +39,6 @@ Objects from this module can also be imported from the top-level
 module directly, e.g.</p>
 <pre><code>from backtesting import Backtest, Strategy
 </code></pre>
-<div class="admonition warning">
-<p class="admonition-title">Warning:&ensp;v0.2.0 breaking changes</p>
-<p>Version 0.2.0 introduced some <strong>breaking API changes</strong>. For quick ways to
-migrate existing 0.1.x code, see the implementing
-<a href="https://github.com/kernc/backtesting.py/pull/47/">pull request</a>.</p>
-</div>
 </section>
 <section>
 </section>
@@ -101,17 +95,30 @@ at each time.</p></div>
 <h3>Methods</h3>
 <dl>
 <dt id="backtesting.backtesting.Backtest.optimize"><code class="name flex">
-<span>def <span class="ident">optimize</span></span>(<span>self, maximize='SQN', constraint=None, return_heatmap=False, **kwargs)</span>
+<span>def <span class="ident">optimize</span></span>(<span>self, *, maximize='SQN', method='grid', max_tries=None, constraint=None, return_heatmap=False, return_optimization=False, random_state=None, **kwargs)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Optimize strategy parameters to an optimal combination using
-parallel exhaustive search. Returns result <code>pd.Series</code> of
-the best run.</p>
+<div class="desc"><p>Optimize strategy parameters to an optimal combination.
+Returns result <code>pd.Series</code> of the best run.</p>
 <p><code>maximize</code> is a string key from the
 <code><a title="backtesting.backtesting.Backtest.run" href="#backtesting.backtesting.Backtest.run">Backtest.run()</a></code>-returned results series,
 or a function that accepts this series object and returns a number;
 the higher the better. By default, the method maximizes
 Van Tharp's <a href="https://google.com/search?q=System+Quality+Number">System Quality Number</a>.</p>
+<p><code>method</code> is the optimization method. Currently two methods are supported:</p>
+<ul>
+<li><code>"grid"</code> which does an exhaustive (or randomized) search over the
+cartesian product of parameter combinations, and</li>
+<li><code>"skopt"</code> which finds close-to-optimal strategy parameters using
+<a href="https://scikit-optimize.github.io/stable/auto_examples/bayesian-optimization.html">model-based optimization</a>, making at most <code>max_tries</code> evaluations.</li>
+</ul>
+<p><code>max_tries</code> is the maximal number of strategy runs to perform.
+If <code>method="grid"</code>, this results in randomized grid search.
+If <code>max_tries</code> is a floating value between (0, 1], this sets the
+number of runs to approximately that fraction of full grid space.
+Alternatively, if integer, it denotes the absolute maximum number
+of evaluations. If unspecified (default), grid search is exhaustive,
+whereas for <code>method="skopt"</code>, <code>max_tries</code> is set to 200.</p>
 <p><code>constraint</code> is a function that accepts a dict-like object of
 parameters (with values) and returns <code>True</code> when the combination
 is admissible to test with. By default, any parameters combination
@@ -121,6 +128,13 @@ series, an additional <code>pd.Series</code> is returned with a multiindex
 of all admissible parameter combinations, which can be further
 inspected or projected onto 2D to plot a heatmap
 (see <code><a title="backtesting.lib.plot_heatmaps" href="lib.html#backtesting.lib.plot_heatmaps">plot_heatmaps()</a></code>).</p>
+<p>If <code>return_optimization</code> is True and <code>method = 'skopt'</code>,
+in addition to result series (and maybe heatmap), return raw
+<a href="https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.OptimizeResult.html"><code>scipy.optimize.OptimizeResult</code></a> for further
+inspection, e.g. with <a href="https://scikit-optimize.github.io">scikit-optimize</a>
+<a href="https://scikit-optimize.github.io/stable/modules/plots.html">plotting tools</a>.</p>
+<p>If you want reproducible optimization results, set <code>random_state</code>
+to a fixed integer or a <code>numpy.random.RandomState</code> object.</p>
 <p>Additional keyword arguments represent strategy arguments with
 list-like collections of possible values. For example, the following
 code finds and returns the "best" of the 7 admissible (of the
@@ -130,16 +144,11 @@ code finds and returns the "best" of the 7 admissible (of the
 </code></pre>
 <div class="admonition todo">
 <p class="admonition-title">TODO</p>
-<p>Add parameter <code>max_tries: Union[int, float] = None</code> which switches
-from exhaustive grid search to random search. See notes in the source.</p>
-</div>
-<div class="admonition todo">
-<p class="admonition-title">TODO</p>
 <p>Improve multiprocessing/parallel execution on Windos with start method 'spawn'.</p>
 </div></div>
 </dd>
 <dt id="backtesting.backtesting.Backtest.plot"><code class="name flex">
-<span>def <span class="ident">plot</span></span>(<span>self, *, results=None, filename=None, plot_width=None, plot_equity=True, plot_pl=True, plot_volume=True, plot_drawdown=False, smooth_equity=False, relative_equity=True, superimpose=True, resample=True, reverse_indicators=False, show_legend=True, open_browser=True)</span>
+<span>def <span class="ident">plot</span></span>(<span>self, *, results=None, filename=None, plot_width=None, plot_equity=True, plot_return=False, plot_pl=True, plot_volume=True, plot_drawdown=False, smooth_equity=False, relative_equity=True, superimpose=True, resample=True, reverse_indicators=False, show_legend=True, open_browser=True)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Plot the progression of the last backtest run.</p>
@@ -155,7 +164,11 @@ current working directory.</p>
 the plot is made to span 100% of browser width. The height is
 currently non-adjustable.</p>
 <p>If <code>plot_equity</code> is <code>True</code>, the resulting plot will contain
-an equity (cash plus assets) graph section.</p>
+an equity (initial cash plus assets) graph section. This is the same
+as <code>plot_return</code> plus initial 100%.</p>
+<p>If <code>plot_return</code> is <code>True</code>, the resulting plot will contain
+a cumulative return graph section. This is the same
+as <code>plot_equity</code> minus initial 100%.</p>
 <p>If <code>plot_pl</code> is <code>True</code>, the resulting plot will contain
 a profit/loss (P/L) indicator section.</p>
 <p>If <code>plot_volume</code> is <code>True</code>, the resulting plot will contain
@@ -208,6 +221,11 @@ Equity Final [$]                      51959.9
 Equity Peak [$]                       75787.4
 Return [%]                            419.599
 Buy &amp; Hold Return [%]                 703.458
+Return (Ann.) [%]                      21.328
+Volatility (Ann.) [%]                 36.5383
+Sharpe Ratio                         0.583718
+Sortino Ratio                         1.09239
+Calmar Ratio                         0.444518
 Max. Drawdown [%]                    -47.9801
 Avg. Drawdown [%]                    -5.92585
 Max. Drawdown Duration      584 days 00:00:00
@@ -222,9 +240,6 @@ Avg. Trade Duration          46 days 00:00:00
 Profit Factor                         2.08802
 Expectancy [%]                        8.79171
 SQN                                  0.916893
-Sharpe Ratio                         0.179141
-Sortino Ratio                         0.55887
-Calmar Ratio                         0.049056
 _strategy                            SmaCross
 _equity_curve                           Eq...
 _trades                       Size  EntryB...
@@ -669,7 +684,7 @@ data-gaCategoryParameter="backtesting.backtesting">
 </main>
 <footer id="footer">
 <p>
-<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.2.4</a>
+<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.3.0</a>
 <span style="color:#ddd">&#21328;</span>
 </p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
