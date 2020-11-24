@@ -43,6 +43,12 @@ These were the major changes contributing to each release:
 (2020-07-15)
 
 * New Order/Trade/Position API (#47)
+* Add data pandas accessors [`.df` and `.s`](https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Strategy.data)
+* Add `Backtest(..., exclusive_orders=)` that closes previous trades on new orders
+* Add `Backtest(..., hedging=)` that makes FIFO trade closing optional
+* Add `bt.plot(reverse_indicators=)` param
+* Add `bt.plot(resample=)` and auto-downsample large data
+* Use geometric mean return in Sharpe/Sortino stats computation
 
 
 ### 0.1.8
