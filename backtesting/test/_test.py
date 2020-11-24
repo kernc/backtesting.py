@@ -83,7 +83,7 @@ class TestBacktest(TestCase):
         start = time.process_time()
         bt.run()
         end = time.process_time()
-        self.assertLess(end - start, .2)
+        self.assertLess(end - start, .3)
 
     def test_data_missing_columns(self):
         df = GOOG.copy(deep=False)
@@ -214,7 +214,7 @@ class TestBacktest(TestCase):
         bt = Backtest(GOOG, Assertive)
         with self.assertWarns(UserWarning):
             stats = bt.run()
-        self.assertEqual(stats['# Trades'], 144)
+        self.assertEqual(stats['# Trades'], 145)
 
     def test_broker_params(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross,
@@ -248,47 +248,53 @@ class TestBacktest(TestCase):
 
     def test_compute_stats(self):
         stats = Backtest(GOOG, SmaCross).run()
-        # Pandas compares in 'almost equal' manner
-        from pandas.testing import assert_series_equal
-        assert_series_equal(
-            stats.filter(regex='^[^_]').sort_index(),
-            pd.Series({
+        expected = pd.Series({
                 # NOTE: These values are also used on the website!
-                '# Trades': 65,
+                '# Trades': 66,
                 'Avg. Drawdown Duration': pd.Timedelta('41 days 00:00:00'),
                 'Avg. Drawdown [%]': -5.925851581948801,
                 'Avg. Trade Duration': pd.Timedelta('46 days 00:00:00'),
-                'Avg. Trade [%]': 2.3537113951143773,
+                'Avg. Trade [%]': 2.531715975158555,
                 'Best Trade [%]': 53.59595229490424,
                 'Buy & Hold Return [%]': 703.4582419772772,
-                'Calmar Ratio': 0.4445179349739874,
+                'Calmar Ratio': 0.4414380935608377,
                 'Duration': pd.Timedelta('3116 days 00:00:00'),
                 'End': pd.Timestamp('2013-03-01 00:00:00'),
-                'Equity Final [$]': 51959.94999999997,
+                'Equity Final [$]': 51422.98999999996,
                 'Equity Peak [$]': 75787.44,
-                'Expectancy [%]': 8.791710931051735,
-                'Exposure Time [%]': 93.99441340782123,
+                'Expectancy [%]': 3.2748078066748834,
+                'Exposure Time [%]': 96.74115456238361,
                 'Max. Drawdown Duration': pd.Timedelta('584 days 00:00:00'),
                 'Max. Drawdown [%]': -47.98012705007589,
                 'Max. Trade Duration': pd.Timedelta('183 days 00:00:00'),
-                'Profit Factor': 2.0880175388920286,
-                'Return (Ann.) [%]': 21.32802699608929,
-                'Return [%]': 419.59949999999964,
-                'Volatility (Ann.) [%]': 36.53825234483751,
-                'SQN': 0.916892986080858,
-                'Sharpe Ratio': 0.5837177650097084,
-                'Sortino Ratio': 1.0923863161583591,
+                'Profit Factor': 2.167945974262033,
+                'Return (Ann.) [%]': 21.180255813792282,
+                'Return [%]': 414.2298999999996,
+                'Volatility (Ann.) [%]': 36.49390889140787,
+                'SQN': 1.0766187356697705,
+                'Sharpe Ratio': 0.5803778344714113,
+                'Sortino Ratio': 1.0847880675854096,
                 'Start': pd.Timestamp('2004-08-19 00:00:00'),
-                'Win Rate [%]': 46.15384615384615,
+                'Win Rate [%]': 46.96969696969697,
                 'Worst Trade [%]': -18.39887353835481,
-            }).sort_index()
-        )
+        })
+
+        def almost_equal(a, b):
+            try:
+                return np.isclose(a, b, rtol=1.e-8)
+            except TypeError:
+                return a == b
+
+        diff = {key: print(key) or value
+                for key, value in stats.filter(regex='^[^_]').items()
+                if not almost_equal(value, expected[key])}
+        self.assertDictEqual(diff, {})
 
         self.assertSequenceEqual(
             sorted(stats['_equity_curve'].columns),
             sorted(['Equity', 'DrawdownPct', 'DrawdownDuration']))
 
-        self.assertEqual(len(stats['_trades']), 65)
+        self.assertEqual(len(stats['_trades']), 66)
 
         self.assertSequenceEqual(
             sorted(stats['_trades'].columns),
@@ -468,6 +474,32 @@ class TestStrategy(TestCase):
             yield
 
         self._Backtest(coroutine).run()
+
+    def test_close_trade_leaves_needsize_0(self):
+        def coroutine(self):
+            self.buy(size=1)
+            self.buy(size=1)
+            yield
+            if self.position:
+                self.sell(size=1)
+
+        self._Backtest(coroutine).run()
+
+    def test_stop_limit_order_price_is_stop_price(self):
+        def coroutine(self):
+            self.buy(stop=112, limit=113, size=1)
+            self.sell(stop=107, limit=105, size=1)
+            yield
+
+        stats = self._Backtest(coroutine).run()
+        self.assertListEqual(stats._trades.filter(like='Price').stack().tolist(), [112, 107])
+
+    def test_autoclose_trades_on_finish(self):
+        def coroutine(self):
+            yield self.buy()
+
+        stats = self._Backtest(coroutine).run()
+        self.assertEqual(len(stats._trades), 1)
 
 
 class TestOptimize(TestCase):
@@ -802,7 +834,7 @@ class TestLib(TestCase):
                                 self.data.Close < sma)
 
         stats = Backtest(GOOG, S).run()
-        self.assertEqual(stats['# Trades'], 1180)
+        self.assertEqual(stats['# Trades'], 1182)
 
     def test_TrailingStrategy(self):
         class S(TrailingStrategy):
@@ -818,7 +850,7 @@ class TestLib(TestCase):
                     self.buy()
 
         stats = Backtest(GOOG, S).run()
-        self.assertEqual(stats['# Trades'], 50)
+        self.assertEqual(stats['# Trades'], 51)
 
 
 class TestUtil(TestCase):

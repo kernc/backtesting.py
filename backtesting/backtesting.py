@@ -806,9 +806,9 @@ class _Broker:
                     continue
 
                 # stop_price, if set, was hit within this bar
-                price = (min(open, order.limit, stop_price or np.inf)
+                price = (min(stop_price or open, order.limit)
                          if order.is_long else
-                         max(open, order.limit, stop_price or -np.inf))
+                         max(stop_price or open, order.limit))
             else:
                 # Market-if-touched / market order
                 price = prev_close if self._trade_on_close else open
@@ -879,6 +879,8 @@ class _Broker:
                         # so it will only be closed partially
                         self._reduce_trade(trade, price, need_size, time_index)
                         need_size = 0
+
+                    if not need_size:
                         break
 
             # If we don't have enough liquidity to cover for the order, cancel it
@@ -1157,6 +1159,10 @@ class Backtest:
                 # Next tick, a moment before bar close
                 strategy.next()
             else:
+                # Close any remaining open trades so they produce some stats
+                for trade in broker.trades:
+                    trade.close()
+
                 # Re-run broker one last time to handle orders placed in the last strategy
                 # iteration. Use the same OHLC values as in the last broker iteration.
                 if start < len(self._data):
@@ -1585,7 +1591,7 @@ class Backtest:
         s.loc['Max. Trade Duration'] = _round_timedelta(durations.max())
         s.loc['Avg. Trade Duration'] = _round_timedelta(durations.mean())
         s.loc['Profit Factor'] = returns[returns > 0].sum() / (abs(returns[returns < 0].sum()) or np.nan)  # noqa: E501
-        s.loc['Expectancy [%]'] = ((returns[returns > 0].mean() * win_rate -
+        s.loc['Expectancy [%]'] = ((returns[returns > 0].mean() * win_rate +
                                     returns[returns < 0].mean() * (100 - win_rate)))
         s.loc['SQN'] = np.sqrt(n_trades) * pl.mean() / (pl.std() or np.nan)
 
