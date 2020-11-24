@@ -309,8 +309,9 @@ class SmaCross(Strategy):
     n2 = 20
 
     def init(self):
-        self.sma1 = self.I(SMA, self.data.Close, self.n1)
-        self.sma2 = self.I(SMA, self.data.Close, self.n2)
+        close = self.data.Close
+        self.sma1 = self.I(SMA, close, self.n1)
+        self.sma2 = self.I(SMA, close, self.n2)
 
     def next(self):
         if crossover(self.sma1, self.sma2):
@@ -319,8 +320,9 @@ class SmaCross(Strategy):
             self.sell()
 
 
-bt = Backtest(GOOG, SmaCross, cash=10000,
-              commission=.002, exclusive_orders=True)
+bt = Backtest(GOOG, SmaCross,
+              cash=10000, commission=.002,
+              exclusive_orders=True)
 
 output = bt.run()
 bt.plot()</code></pre>
@@ -335,7 +337,12 @@ Exposure Time [%]                       94.27
 Equity Final [$]                     68935.12
 Equity Peak [$]                      68991.22
 Return [%]                             589.35
-Buy & Hold Return [%]                  703.46
+Buy &amp; Hold Return [%]                  703.46
+Return (Ann.) [%]                       25.42
+Volatility (Ann.) [%]                   38.43
+Sharpe Ratio                             0.66
+Sortino Ratio                            1.30
+Calmar Ratio                             0.77
 Max. Drawdown [%]                      -33.08
 Avg. Drawdown [%]                       -5.58
 Max. Drawdown Duration      688 days 00:00:00
@@ -350,9 +357,6 @@ Avg. Trade Duration          32 days 00:00:00
 Profit Factor                            2.13
 Expectancy [%]                           6.91
 SQN                                      1.78
-Sharpe Ratio                             0.18
-Sortino Ratio                            0.44
-Calmar Ratio                             0.06
 _strategy              SmaCross(n1=10, n2=20)</samp></pre>
                 </div>
             </div>
