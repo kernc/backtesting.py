@@ -21,6 +21,12 @@ urlpath=lab%2Ftree%2Fdoc%2Fexamples%2FQuick%20Start%20User%20Guide.ipynb
 
 * (contributions welcome)
 
+
+.. tip::
+    For an overview of recent changes, see
+    [What's New](https://github.com/kernc/backtesting.py/blob/master/CHANGELOG.md).
+
+
 ## FAQ
 
 Potentially outdated answers to frequent and popular questions can be found on the
