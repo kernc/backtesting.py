@@ -15,5 +15,9 @@ htmlcov/*
 doc/build/*
 
 .idea/*
+.vscode/
+
 **/.ipynb_checkpoints
 *~*
+
+.venv/

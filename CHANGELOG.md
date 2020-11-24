@@ -6,6 +6,8 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
+* Faster [model-based optimization](https://kernc.github.io/backtesting.py/doc/examples/Parameter%20Heatmap%20&amp;%20Optimization.html#Model-based%20optimization) using scikit-optimize (#154)
+* Optionally faster [optimization](https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Backtest.optimize) by randomized grid search (#154)
 * _Annualized_ Return/Volatility/Sharpe/Sortino/Calmar stats (#156)
 * Auto close open trades on backtest finish
 * Add `Backtest.plot(plot_return=)`, akin to `plot_equity=`

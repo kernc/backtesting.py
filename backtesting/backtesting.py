@@ -12,8 +12,8 @@ import warnings
 from abc import abstractmethod, ABCMeta
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import copy
-from functools import partial
-from itertools import repeat, product, chain
+from functools import lru_cache, partial
+from itertools import repeat, product, chain, compress
 from math import copysign
 from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
@@ -1176,21 +1176,44 @@ class Backtest:
             self._results = self._compute_stats(broker, strategy)
         return self._results
 
-    def optimize(self,
+    def optimize(self, *,
                  maximize: Union[str, Callable[[pd.Series], float]] = 'SQN',
+                 method: str = 'grid',
+                 max_tries: Union[int, float] = None,
                  constraint: Callable[[dict], bool] = None,
                  return_heatmap: bool = False,
-                 **kwargs) -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
+                 return_optimization: bool = False,
+                 random_state: int = None,
+                 **kwargs) -> Union[pd.Series,
+                                    Tuple[pd.Series, pd.Series],
+                                    Tuple[pd.Series, pd.Series, dict]]:
         """
-        Optimize strategy parameters to an optimal combination using
-        parallel exhaustive search. Returns result `pd.Series` of
-        the best run.
+        Optimize strategy parameters to an optimal combination.
+        Returns result `pd.Series` of the best run.
 
         `maximize` is a string key from the
         `backtesting.backtesting.Backtest.run`-returned results series,
         or a function that accepts this series object and returns a number;
         the higher the better. By default, the method maximizes
         Van Tharp's [System Quality Number](https://google.com/search?q=System+Quality+Number).
+
+        `method` is the optimization method. Currently two methods are supported:
+
+        * `"grid"` which does an exhaustive (or randomized) search over the
+          cartesian product of parameter combinations, and
+        * `"skopt"` which finds close-to-optimal strategy parameters using
+          [model-based optimization], making at most `max_tries` evaluations.
+
+        [model-based optimization]: \
+            https://scikit-optimize.github.io/stable/auto_examples/bayesian-optimization.html
+
+        `max_tries` is the maximal number of strategy runs to perform.
+        If `method="grid"`, this results in randomized grid search.
+        If `max_tries` is a floating value between (0, 1], this sets the
+        number of runs to approximately that fraction of full grid space.
+        Alternatively, if integer, it denotes the absolute maximum number
+        of evaluations. If unspecified (default), grid search is exhaustive,
+        whereas for `method="skopt"`, `max_tries` is set to 200.
 
         `constraint` is a function that accepts a dict-like object of
         parameters (with values) and returns `True` when the combination
@@ -1203,6 +1226,20 @@ class Backtest:
         inspected or projected onto 2D to plot a heatmap
         (see `backtesting.lib.plot_heatmaps()`).
 
+        If `return_optimization` is True and `method = 'skopt'`,
+        in addition to result series (and maybe heatmap), return raw
+        [`scipy.optimize.OptimizeResult`][OptimizeResult] for further
+        inspection, e.g. with [scikit-optimize]\
+        [plotting tools].
+
+        [OptimizeResult]: \
+            https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.OptimizeResult.html
+        [scikit-optimize]: https://scikit-optimize.github.io
+        [plotting tools]: https://scikit-optimize.github.io/stable/modules/plots.html
+
+        If you want reproducible optimization results, set `random_state`
+        to a fixed integer or a `numpy.random.RandomState` object.
+
         Additional keyword arguments represent strategy arguments with
         list-like collections of possible values. For example, the following
         code finds and returns the "best" of the 7 admissible (of the
@@ -1210,10 +1247,6 @@ class Backtest:
 
             backtest.optimize(sma1=[5, 10, 15], sma2=[10, 20, 40],
                               constraint=lambda p: p.sma1 < p.sma2)
-
-        .. TODO::
-            Add parameter `max_tries: Union[int, float] = None` which switches
-            from exhaustive grid search to random search. See notes in the source.
 
         .. TODO::
             Improve multiprocessing/parallel execution on Windos with start method 'spawn'.
@@ -1237,6 +1270,7 @@ class Backtest:
                             'Series) or a function that accepts result Series '
                             'and returns a number; the higher the better')
 
+        have_constraint = bool(constraint)
         if constraint is None:
 
             def constraint(_):
@@ -1246,6 +1280,9 @@ class Backtest:
             raise TypeError("`constraint` must be a function that accepts a dict "
                             "of strategy parameters and returns a bool whether "
                             "the combination of parameters is admissible or not")
+
+        if return_optimization and method != 'skopt':
+            raise ValueError("return_optimization=True only valid if method='skopt'")
 
         def _tuple(x):
             return x if isinstance(x, Sequence) and not isinstance(x, str) else (x,)
@@ -1259,76 +1296,181 @@ class Backtest:
             def __getattr__(self, item):
                 return self[item]
 
-        param_combos = tuple(map(dict,  # back to dict so it pickles
-                                 filter(constraint,  # constraints applied on our fancy dict
-                                        map(AttrDict,
-                                            product(*(zip(repeat(k), _tuple(v))
-                                                      for k, v in kwargs.items()))))))
-        if not param_combos:
-            raise ValueError('No admissible parameter combinations to test')
+        def _grid_size():
+            size = np.prod([len(_tuple(v)) for v in kwargs.values()])
+            if size < 10_000 and have_constraint:
+                size = sum(1 for p in product(*(zip(repeat(k), _tuple(v))
+                                                for k, v in kwargs.items()))
+                           if constraint(AttrDict(p)))
+            return size
 
-        if len(param_combos) > 300:
-            warnings.warn(f'Searching for best of {len(param_combos)} configurations.',
-                          stacklevel=2)
+        def _optimize_grid() -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
+            rand = np.random.RandomState(random_state).random
+            grid_frac = (1 if max_tries is None else
+                         max_tries if 0 < max_tries <= 1 else
+                         max_tries / _grid_size())
+            param_combos = [dict(params)  # back to dict so it pickles
+                            for params in (AttrDict(params)
+                                           for params in product(*(zip(repeat(k), _tuple(v))
+                                                                   for k, v in kwargs.items())))
+                            if constraint(params)  # type: ignore
+                            and rand() <= grid_frac]
+            if not param_combos:
+                raise ValueError('No admissible parameter combinations to test')
 
-        heatmap = pd.Series(np.nan,
-                            name=maximize_key,
-                            index=pd.MultiIndex.from_tuples([p.values() for p in param_combos],
-                                                            names=next(iter(param_combos)).keys()))
+            if len(param_combos) > 300:
+                warnings.warn(f'Searching for best of {len(param_combos)} configurations.',
+                              stacklevel=2)
 
-        # TODO: add parameter `max_tries:Union[int, float]=None` which switches
-        # exhaustive grid search to random search. This might need to avoid
-        # returning NaNs in stats on runs with no trades to differentiate those
-        # from non-tested parameter combos in heatmap.
+            heatmap = pd.Series(np.nan,
+                                name=maximize_key,
+                                index=pd.MultiIndex.from_tuples(
+                                    [p.values() for p in param_combos],
+                                    names=next(iter(param_combos)).keys()))
 
-        def _batch(seq):
-            n = np.clip(len(seq) // (os.cpu_count() or 1), 5, 300)
-            for i in range(0, len(seq), n):
-                yield seq[i:i + n]
+            def _batch(seq):
+                n = np.clip(len(seq) // (os.cpu_count() or 1), 5, 300)
+                for i in range(0, len(seq), n):
+                    yield seq[i:i + n]
 
-        # Save necessary objects into "global" state; pass into concurrent executor
-        # (and thus pickle) nothing but two numbers; receive nothing but numbers.
-        # With start method "fork", children processes will inherit parent address space
-        # in a copy-on-write manner, achieving better performance/RAM benefit.
-        backtest_uuid = np.random.random()
-        param_batches = list(_batch(param_combos))
-        Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)  # type: ignore
-        try:
-            # If multiprocessing start method is 'fork' (i.e. on POSIX), use
-            # a pool of processes to compute results in parallel.
-            # Otherwise (i.e. on Windos), sequential computation will be "faster".
-            if mp.get_start_method(allow_none=False) == 'fork':
-                with ProcessPoolExecutor() as executor:
-                    futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
-                               for i in range(len(param_batches))]
-                    for future in _tqdm(as_completed(futures), total=len(futures)):
-                        batch_index, values = future.result()
+            # Save necessary objects into "global" state; pass into concurrent executor
+            # (and thus pickle) nothing but two numbers; receive nothing but numbers.
+            # With start method "fork", children processes will inherit parent address space
+            # in a copy-on-write manner, achieving better performance/RAM benefit.
+            backtest_uuid = np.random.random()
+            param_batches = list(_batch(param_combos))
+            Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)  # type: ignore
+            try:
+                # If multiprocessing start method is 'fork' (i.e. on POSIX), use
+                # a pool of processes to compute results in parallel.
+                # Otherwise (i.e. on Windos), sequential computation will be "faster".
+                if mp.get_start_method(allow_none=False) == 'fork':
+                    with ProcessPoolExecutor() as executor:
+                        futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
+                                   for i in range(len(param_batches))]
+                        for future in _tqdm(as_completed(futures), total=len(futures)):
+                            batch_index, values = future.result()
+                            for value, params in zip(values, param_batches[batch_index]):
+                                heatmap[tuple(params.values())] = value
+                else:
+                    if os.name == 'posix':
+                        warnings.warn("For multiprocessing support in `Backtest.optimize()` "
+                                      "set multiprocessing start method to 'fork'.")
+                    for batch_index in _tqdm(range(len(param_batches))):
+                        _, values = Backtest._mp_task(backtest_uuid, batch_index)
                         for value, params in zip(values, param_batches[batch_index]):
                             heatmap[tuple(params.values())] = value
+            finally:
+                del Backtest._mp_backtests[backtest_uuid]
+
+            best_params = heatmap.idxmax()
+
+            if pd.isnull(best_params):
+                # No trade was made in any of the runs. Just make a random
+                # run so we get some, if empty, results
+                stats = self.run(**param_combos[0])
             else:
-                if os.name == 'posix':
-                    warnings.warn("For multiprocessing support in `Backtest.optimize()` "
-                                  "set multiprocessing start method to 'fork'.")
-                for batch_index in _tqdm(range(len(param_batches))):
-                    _, values = Backtest._mp_task(backtest_uuid, batch_index)
-                    for value, params in zip(values, param_batches[batch_index]):
-                        heatmap[tuple(params.values())] = value
-        finally:
-            del Backtest._mp_backtests[backtest_uuid]
+                stats = self.run(**dict(zip(heatmap.index.names, best_params)))
 
-        best_params = heatmap.idxmax()
+            if return_heatmap:
+                return stats, heatmap
+            return stats
 
-        if pd.isnull(best_params):
-            # No trade was made in any of the runs. Just make a random
-            # run so we get some, if empty, results
-            self.run(**param_combos[0])  # type: ignore
+        def _optimize_skopt() -> Union[pd.Series,
+                                       Tuple[pd.Series, pd.Series],
+                                       Tuple[pd.Series, pd.Series, dict]]:
+            try:
+                from skopt import forest_minimize
+                from skopt.space import Integer, Real, Categorical
+                from skopt.utils import use_named_args
+                from skopt.callbacks import DeltaXStopper
+                from skopt.learning import ExtraTreesRegressor
+            except ImportError:
+                raise ImportError("Need package 'scikit-optimize' for method='skopt'. "
+                                  "pip install scikit-optimize")
+
+            nonlocal max_tries
+            max_tries = (200 if max_tries is None else
+                         max(1, int(max_tries * _grid_size())) if 0 < max_tries <= 1 else
+                         max_tries)
+
+            dimensions = []
+            for key, values in kwargs.items():
+                values = np.asarray(values)
+                if values.dtype.kind in 'mM':  # timedelta, datetime64
+                    # these dtypes are unsupported in skopt, so convert to raw int
+                    # TODO: save dtype and convert back later
+                    values = values.astype(int)
+
+                if values.dtype.kind in 'iumM':
+                    dimensions.append(Integer(low=values.min(), high=values.max(), name=key))
+                elif values.dtype.kind == 'f':
+                    dimensions.append(Real(low=values.min(), high=values.max(), name=key))
+                else:
+                    dimensions.append(Categorical(values.tolist(), name=key, transform='onehot'))
+
+            # Avoid recomputing re-evaluations:
+            # "The objective has been evaluated at this point before."
+            # https://github.com/scikit-optimize/scikit-optimize/issues/302
+            memoized_run = lru_cache()(lambda tup: self.run(**dict(tup)))
+
+            # np.inf/np.nan breaks sklearn, np.finfo(float).max breaks skopt.plots.plot_objective
+            INVALID = 1e300
+
+            @use_named_args(dimensions=dimensions)
+            def objective_function(**params):
+                # Check constraints
+                # TODO: Adjust after https://github.com/scikit-optimize/scikit-optimize/pull/971
+                if not constraint(AttrDict(params)):
+                    return INVALID
+                res = memoized_run(tuple(params.items()))
+                value = -maximize(res)
+                if np.isnan(value):
+                    return INVALID
+                return value
+
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    'ignore', 'The objective has been evaluated at this point before.')
+
+                res = forest_minimize(
+                    func=objective_function,
+                    dimensions=dimensions,
+                    n_calls=max_tries,
+                    base_estimator=ExtraTreesRegressor(n_estimators=20, min_samples_leaf=2),
+                    acq_func='LCB',
+                    kappa=3,
+                    n_initial_points=min(max_tries, 20 + 3 * len(kwargs)),
+                    initial_point_generator='lhs',  # 'sobel' requires n_initial_points ~ 2**N
+                    callback=DeltaXStopper(9e-7),
+                    random_state=random_state)
+
+            stats = self.run(**dict(zip(kwargs.keys(), res.x)))
+            output = [stats]
+
+            if return_heatmap:
+                heatmap = pd.Series(dict(zip(map(tuple, res.x_iters), -res.func_vals)),
+                                    name=maximize_key)
+                heatmap.index.names = kwargs.keys()
+                heatmap = heatmap[heatmap != -INVALID]
+                heatmap.sort_index(inplace=True)
+                output.append(heatmap)
+
+            if return_optimization:
+                valid = res.func_vals != INVALID
+                res.x_iters = list(compress(res.x_iters, valid))
+                res.func_vals = res.func_vals[valid]
+                output.append(res)
+
+            return stats if len(output) == 1 else tuple(output)
+
+        if method == 'grid':
+            output = _optimize_grid()
+        elif method == 'skopt':
+            output = _optimize_skopt()
         else:
-            # Re-run best strategy so that the next .plot() call will render it
-            self.run(**dict(zip(heatmap.index.names, best_params)))
-
-        if return_heatmap:
-            return self._results, heatmap
-        return self._results
+            raise ValueError(f"Method should be 'grid' or 'skopt', not {method!r}")
+        return output
 
     @staticmethod
     def _mp_task(backtest_uuid, batch_index):

@@ -7,7 +7,7 @@
 
 * [Library of Utilities and Composable Base Strategies](../examples/Strategies Library.html)
 * [Multiple Time Frames](../examples/Multiple Time Frames.html)
-* [Parameter Heatmap](../examples/Parameter Heatmap.html)
+* [**Parameter Heatmap & Optimization**](../examples/Parameter Heatmap &amp; Optimization.html)
 * [Trading with Machine Learning](../examples/Trading with Machine Learning.html)
 
 These tutorials are also available as live Jupyter notebooks:
