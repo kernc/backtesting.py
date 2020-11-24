@@ -10,12 +10,15 @@
 * [Parameter Heatmap](../examples/Parameter Heatmap.html)
 * [Trading with Machine Learning](../examples/Trading with Machine Learning.html)
 
-These tutorials are also available to test as live Jupyter notebooks:
+These tutorials are also available as live Jupyter notebooks:
 [![Binder](https://mybinder.org/badge_logo.svg)][binder]
+[![Google Colab](https://colab.research.google.com/assets/colab-badge.svg)][colab]
+<br>In Colab, you might have to `!pip install backtesting`.
 
 [binder]: \
     https://mybinder.org/v2/gh/kernc/backtesting.py/master?\
 urlpath=lab%2Ftree%2Fdoc%2Fexamples%2FQuick%20Start%20User%20Guide.ipynb
+[colab]: https://colab.research.google.com/github/kernc/backtesting.py/
 
 ## Example Strategies
 
