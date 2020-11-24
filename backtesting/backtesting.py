@@ -901,9 +901,10 @@ class _Broker:
                     elif (low <= (order.sl or -np.inf) <= high or
                           low <= (order.tp or -np.inf) <= high):
                         warnings.warn(
-                            "A SL/TP order would execute in the same bar as its contingent upon "
-                            "stop/limit order. Since we can't assert the precise intra-candle "
-                            "price movement, the affected SL/TP order will be executed on "
+                            f"({data.index[-1]}) A contingent SL/TP order would execute in the "
+                            "same bar its parent stop/limit order was turned into a trade. "
+                            "Since we can't assert the precise intra-candle "
+                            "price movement, the affected SL/TP order will instead be executed on "
                             "the next (matching) price/bar, making the result (of this trade) "
                             "somewhat dubious. "
                             "See https://github.com/kernc/backtesting.py/issues/119",
