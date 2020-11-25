@@ -34,6 +34,7 @@ urlpath=lab%2Ftree%2Fdoc%2Fexamples%2FQuick%20Start%20User%20Guide.ipynb
 
 Potentially outdated answers to frequent and popular questions can be found on the
 [issue tracker](https://github.com/kernc/backtesting.py/issues?q=label%3Aquestion+-label%3Ainvalid).
+Please use the search.
 
 ## License
 
