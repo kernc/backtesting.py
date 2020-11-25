@@ -356,8 +356,6 @@ class SignalStrategy(Strategy):
     __entry_signal = (0,)
     __exit_signal = (False,)
 
-    __pdoc__['SignalStrategy.__init__'] = False
-
     def set_signal(self, entry_size: Sequence[float],
                    exit_portion: Sequence[float] = None,
                    *,
@@ -420,8 +418,6 @@ class TrailingStrategy(Strategy):
     __n_atr = 6.
     __atr = None
 
-    __pdoc__['SignalStrategy.__init__'] = False
-
     def init(self):
         super().init()
         self.set_atr_periods()
@@ -452,6 +448,12 @@ class TrailingStrategy(Strategy):
             else:
                 trade.sl = min(trade.sl or np.inf,
                                self.data.Close[-1] + self.__atr[-1] * self.__n_atr)
+
+
+# Prevent pdoc3 documenting __init__ signature of Strategy subclasses
+for cls in list(globals().values()):
+    if isinstance(cls, type) and issubclass(cls, Strategy):
+        __pdoc__[f'{cls.__name__}.__init__'] = False
 
 
 # NOTE: Don't put anything below this __all__ list
