@@ -1039,7 +1039,7 @@ class Backtest:
         data = data.copy(deep=False)
 
         # Convert index to datetime index
-        if (not data.index.is_all_dates and
+        if (not isinstance(data.index, pd.DatetimeIndex) and
             not isinstance(data.index, pd.RangeIndex) and
             # Numeric index with most large numbers
             (data.index.is_numeric() and
@@ -1070,7 +1070,7 @@ class Backtest:
             warnings.warn('Data index is not sorted in ascending order. Sorting.',
                           stacklevel=2)
             data = data.sort_index()
-        if not data.index.is_all_dates:
+        if not isinstance(data.index, pd.DatetimeIndex):
             warnings.warn('Data index is not datetime. Assuming simple periods, '
                           'but `pd.DateTimeIndex` is advised.',
                           stacklevel=2)
@@ -1556,7 +1556,7 @@ class Backtest:
 
         day_returns = gmean_day_return = np.array(np.nan)
         annual_trading_days = np.nan
-        if index.is_all_dates:
+        if isinstance(index, pd.DatetimeIndex):
             day_returns = equity_df['Equity'].resample('D').last().dropna().pct_change()
             gmean_day_return = geometric_mean(day_returns)
             annual_trading_days = float(

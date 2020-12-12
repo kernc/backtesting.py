@@ -282,7 +282,7 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
             elif result.ndim == 2:
                 result = pd.DataFrame(result.T)
         # Resample back to data index
-        if not result.index.is_all_dates:
+        if not isinstance(result.index, pd.DatetimeIndex):
             result.index = resampled.index
         result = result.reindex(index=series.index | resampled.index,
                                 method='ffill').reindex(series.index)
