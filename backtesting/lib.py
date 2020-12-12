@@ -284,7 +284,7 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
         # Resample back to data index
         if not isinstance(result.index, pd.DatetimeIndex):
             result.index = resampled.index
-        result = result.reindex(index=series.index | resampled.index,
+        result = result.reindex(index=series.index.union(resampled.index),
                                 method='ffill').reindex(series.index)
         return result
 

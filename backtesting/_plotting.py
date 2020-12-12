@@ -299,7 +299,7 @@ return this.labels[index] || "";
                 # Include max dd end points. Otherwise the MaxDD line looks amiss.
                 dd_start, int(dd_end), min(int(dd_end + 1), equity.size - 1),
             ])
-            select = pd.Index(trades['ExitBar']) | interest_points
+            select = pd.Index(trades['ExitBar']).union(interest_points)
             select = select.unique().dropna()
             equity = equity.iloc[select].reindex(equity.index)
             equity.interpolate(inplace=True)
