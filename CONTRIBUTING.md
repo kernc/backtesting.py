@@ -9,9 +9,15 @@ have been fixed already.
 
 To have your issue dealt with promptly, it's best to construct a
 [minimal working example] that exposes the issue in a clear and
-reproducible manner.
+reproducible manner. Make sure to understand
+[how to report bugs effectively][bugs].
+
+Show verbatim code in [fenced code blocks], and use the
+preview function!
 
 [minimal working example]: https://en.wikipedia.org/wiki/Minimal_working_example
+[bugs]: https://www.chiark.greenend.org.uk/~sgtatham/bugs.html
+[fenced code blocks]: https://www.markdownguide.org/extended-syntax/#fenced-code-blocks
 
 
 Installation
@@ -32,11 +38,12 @@ Please write reasonable unit tests for any new / changed functionality.
 See _backtesting/test_ directory for existing tests.
 Before submitting a PR, ensure the tests pass:
 
-    python setup.py test
+    python -m backtesting.test
 
 Also ensure that idiomatic code style is respected by running:
 
     flake8  
+    mypy backtesting
 
 
 Documentation
@@ -49,7 +56,10 @@ is generated from [pdoc]-compatible docstrings in code.
 
 Pull requests
 -------------
+A general recommended reading:
+[How to make your code reviewer fall in love with you][code-review].
 Please use explicit commit messages. See [NumPy's development workflow]
 for inspiration.
 
+[code-review]: https://mtlynch.io/code-review-love/
 [NumPy's development workflow]: https://docs.scipy.org/doc/numpy/dev/gitwash/development_workflow.html
