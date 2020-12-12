@@ -1554,11 +1554,12 @@ class Backtest:
             return (0 if np.any(returns <= 0) else
                     np.exp(np.log(returns).sum() / (len(returns) or np.nan)) - 1)
 
-        day_returns = gmean_day_return = annual_trading_days = np.array(np.nan)
+        day_returns = gmean_day_return = np.array(np.nan)
+        annual_trading_days = np.nan
         if index.is_all_dates:
             day_returns = equity_df['Equity'].resample('D').last().dropna().pct_change()
             gmean_day_return = geometric_mean(day_returns)
-            annual_trading_days = (
+            annual_trading_days = float(
                 365 if index.dayofweek.to_series().between(5, 6).mean() > 2/7 * .6 else
                 252)
 
