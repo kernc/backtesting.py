@@ -1054,7 +1054,7 @@ class Backtest:
 
         if len(data) == 0:
             raise ValueError('OHLC `data` is empty')
-        if len(data.columns & {'Open', 'High', 'Low', 'Close', 'Volume'}) != 5:
+        if len(data.columns.intersection({'Open', 'High', 'Low', 'Close', 'Volume'})) != 5:
             raise ValueError("`data` must be a pandas.DataFrame with columns "
                              "'Open', 'High', 'Low', 'Close', and (optionally) 'Volume'")
         if data[['Open', 'High', 'Low', 'Close']].isnull().values.any():

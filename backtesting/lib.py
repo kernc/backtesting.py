@@ -317,7 +317,7 @@ def random_ohlc_data(example_data: pd.DataFrame, *,
     def shuffle(x):
         return x.sample(frac=frac, replace=frac > 1, random_state=random_state)
 
-    if len(example_data.columns & {'Open', 'High', 'Low', 'Close'}) != 4:
+    if len(example_data.columns.intersection({'Open', 'High', 'Low', 'Close'})) != 4:
         raise ValueError("`data` must be a pandas.DataFrame with columns "
                          "'Open', 'High', 'Low', 'Close'")
     while True:
