@@ -193,7 +193,8 @@ class Strategy(metaclass=ABCMeta):
             limit: float = None,
             stop: float = None,
             sl: float = None,
-            tp: float = None):
+            tp: float = None,
+            id = None):
         """
         Place a new long order. For explanation of parameters, see `Order` and its properties.
 
@@ -201,14 +202,15 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(size, limit, stop, sl, tp)
+        return self._broker.new_order(size, limit, stop, sl, tp, id)
 
     def sell(self, *,
              size: float = 1 - sys.float_info.epsilon,
              limit: float = None,
              stop: float = None,
              sl: float = None,
-             tp: float = None):
+             tp: float = None
+             id = None):
         """
         Place a new short order. For explanation of parameters, see `Order` and its properties.
 
@@ -216,7 +218,7 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(-size, limit, stop, sl, tp)
+        return self._broker.new_order(-size, limit, stop, sl, tp, id)
 
     @property
     def equity(self) -> float:
@@ -374,7 +376,8 @@ class Order:
                  stop_price: float = None,
                  sl_price: float = None,
                  tp_price: float = None,
-                 parent_trade: 'Trade' = None):
+                 parent_trade: 'Trade' = None,
+                 order_id = None):
         self.__broker = broker
         assert size != 0
         self.__size = size
@@ -383,6 +386,7 @@ class Order:
         self.__sl_price = sl_price
         self.__tp_price = tp_price
         self.__parent_trade = parent_trade
+        self.__order_id = order_id
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
@@ -398,6 +402,7 @@ class Order:
                                                  ('sl', self.__sl_price),
                                                  ('tp', self.__tp_price),
                                                  ('contingent', self.is_contingent),
+                                                 ('id', self.__order_id),
                                              ) if value is not None))
 
     def cancel(self):
@@ -468,6 +473,14 @@ class Order:
     def parent_trade(self):
         return self.__parent_trade
 
+    @property
+    def id(self) -> Optional[]:
+        """
+        An ID attribute which, if set, persists to enable tracking of this order
+        if it becomes a trade in `Strategy.trades` and when closed in `Strategy.closed_trades`.
+        """
+        return self.__order_id
+
     __pdoc__['Order.parent_trade'] = False
 
     # Extra properties
@@ -502,7 +515,7 @@ class Trade:
     When an `Order` is filled, it results in an active `Trade`.
     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
     """
-    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar):
+    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar, id):
         self.__broker = broker
         self.__size = size
         self.__entry_price = entry_price
@@ -511,10 +524,12 @@ class Trade:
         self.__exit_bar: Optional[int] = None
         self.__sl_order: Optional[Order] = None
         self.__tp_order: Optional[Order] = None
+        self.__order_id = id
 
     def __repr__(self):
         return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
-               f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}>'
+               f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}' \
+               f'{" id="+str(self.__order_id) if self.__order_id is not None}>'
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
@@ -560,6 +575,14 @@ class Trade:
         (or None if the trade is still active).
         """
         return self.__exit_bar
+
+    @property
+    def id(self) -> Optional[]:
+        """
+        An ID attribute set when placing an order with `Strategy.buy()` or `Strategy.sell()`.
+        See `Order.id`.
+        """
+        return self.__order_id
 
     @property
     def _sl_order(self):
@@ -685,6 +708,7 @@ class _Broker:
                   stop: float = None,
                   sl: float = None,
                   tp: float = None,
+                  id: None,
                   *,
                   trade: Trade = None):
         """
@@ -710,7 +734,7 @@ class _Broker:
                     "Short orders require: "
                     f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})")
 
-        order = Order(self, size, limit, stop, sl, tp, trade)
+        order = Order(self, size, limit, stop, sl, tp, trade, id)
         # Put the new order in the order queue,
         # inserting SL/TP/trade-closing orders in-front
         if trade:
@@ -890,7 +914,7 @@ class _Broker:
 
             # Open a new trade
             if need_size:
-                self._open_trade(adjusted_price, need_size, order.sl, order.tp, time_index)
+                self._open_trade(adjusted_price, need_size, order.sl, order.tp, time_index, order.id)
 
                 # We need to reprocess the SL/TP orders newly added to the queue.
                 # This allows e.g. SL hitting in the same bar the order was open.
@@ -948,8 +972,8 @@ class _Broker:
         self.closed_trades.append(trade._replace(exit_price=price, exit_bar=time_index))
         self._cash += trade.pl
 
-    def _open_trade(self, price: float, size: int, sl: float, tp: float, time_index: int):
-        trade = Trade(self, size, price, time_index)
+    def _open_trade(self, price: float, size: int, sl: float, tp: float, time_index: int, id):
+        trade = Trade(self, size, price, time_index, id)
         self.trades.append(trade)
         # Create SL/TP (bracket) orders.
         # Make sure SL order is created first so it gets adversarially processed before TP order
