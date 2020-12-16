@@ -914,7 +914,12 @@ class _Broker:
 
             # Open a new trade
             if need_size:
-                self._open_trade(adjusted_price, need_size, order.sl, order.tp, time_index, order.id)
+                self._open_trade(adjusted_price,
+                                 need_size,
+                                 order.sl,
+                                 order.tp,
+                                 time_index,
+                                 order.id)
 
                 # We need to reprocess the SL/TP orders newly added to the queue.
                 # This allows e.g. SL hitting in the same bar the order was open.
