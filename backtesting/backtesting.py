@@ -984,7 +984,8 @@ class _Broker:
         self.closed_trades.append(trade._replace(exit_price=price, exit_bar=time_index))
         self._cash += trade.pl
 
-    def _open_trade(self, price: float, size: int, sl: float, tp: float, time_index: int, tag: object):
+    def _open_trade(self, price: float, size: int, sl: float, tp: float,
+                    time_index: int, tag: object):
         trade = Trade(self, size, price, time_index, tag)
         self.trades.append(trade)
         # Create SL/TP (bracket) orders.
