@@ -62,4 +62,4 @@ Please use explicit commit messages. See [NumPy's development workflow]
 for inspiration.
 
 [code-review]: https://mtlynch.io/code-review-love/
-[NumPy's development workflow]: https://docs.scipy.org/doc/numpy/dev/gitwash/development_workflow.html
+[NumPy's development workflow]: https://numpy.org/doc/stable/dev/development_workflow.html
