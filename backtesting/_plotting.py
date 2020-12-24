@@ -615,7 +615,8 @@ return this.labels[index] || "";
 
     for f in plots:
         if f.legend:
-            f.legend.location = 'top_left' if show_legend else None
+            f.legend.visible = show_legend
+            f.legend.location = 'top_left'
             f.legend.border_line_width = 1
             f.legend.border_line_color = '#333333'
             f.legend.padding = 5
