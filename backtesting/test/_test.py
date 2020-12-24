@@ -649,7 +649,7 @@ class TestPlot(TestCase):
             bt.plot(filename=f, show_legend=False)
             # Give browser time to open before tempfile is removed
             time.sleep(10)
-            
+
     def test_resolutions(self):
         with _tempfile() as f:
             for rule in 'LSTHDWM':
