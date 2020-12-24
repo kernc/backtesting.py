@@ -648,7 +648,7 @@ class TestPlot(TestCase):
         with _tempfile() as f:
             bt.plot(filename=f, show_legend=False)
             # Give browser time to open before tempfile is removed
-            time.sleep(10)
+            time.sleep(5)
 
     def test_resolutions(self):
         with _tempfile() as f:
