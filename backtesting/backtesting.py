@@ -1585,7 +1585,7 @@ class Backtest:
         s.loc['Max. Drawdown Duration'] = _round_timedelta(dd_dur.max())
         s.loc['Avg. Drawdown Duration'] = _round_timedelta(dd_dur.mean())
         s.loc['# Trades'] = n_trades = len(trades)
-        s.loc['Win Rate [%]'] = win_rate = np.nan if not n_trades else (pl > 0).sum() / n_trades * 100  # noqa: E501
+        s.loc['Win Rate [%]'] = np.nan if not n_trades else (pl > 0).sum() / n_trades * 100  # noqa: E501
         s.loc['Best Trade [%]'] = returns.max() * 100
         s.loc['Worst Trade [%]'] = returns.min() * 100
         mean_return = geometric_mean(returns)
@@ -1593,8 +1593,7 @@ class Backtest:
         s.loc['Max. Trade Duration'] = _round_timedelta(durations.max())
         s.loc['Avg. Trade Duration'] = _round_timedelta(durations.mean())
         s.loc['Profit Factor'] = returns[returns > 0].sum() / (abs(returns[returns < 0].sum()) or np.nan)  # noqa: E501
-        s.loc['Expectancy [%]'] = ((returns[returns > 0].mean() * win_rate +
-                                    returns[returns < 0].mean() * (100 - win_rate)))
+        s.loc['Expectancy [%]'] = returns.mean() * 100
         s.loc['SQN'] = np.sqrt(n_trades) * pl.mean() / (pl.std() or np.nan)
 
         s.loc['_strategy'] = strategy
