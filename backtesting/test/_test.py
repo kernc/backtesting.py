@@ -909,7 +909,8 @@ class TestDocs(TestCase):
         self.assertGreaterEqual(len(examples), 4)
         with chdir(gettempdir()):
             for file in examples:
-                run_path(file)
+                with self.subTest(example=os.path.basename(file)):
+                    run_path(file)
 
     def test_backtest_run_docstring_contains_stats_keys(self):
         stats = Backtest(SHORT_DATA, SmaCross).run()
