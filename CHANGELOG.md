@@ -7,6 +7,13 @@ These were the major changes contributing to each release:
 ### 0.x.x
 
 
+### 0.3.1
+(2021-01-25)
+
+* Avoid some `pandas.Index` deprecations
+* Fix `Backtest.plot(show_legend=False)` for recent Bokeh
+
+
 ### 0.3.0
 (2020-11-24)
 
