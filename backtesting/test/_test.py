@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 from backtesting import Backtest, Strategy
+from backtesting._stats import compute_drawdown_duration_peaks
 from backtesting.lib import (
     OHLCV_AGG,
     barssince,
@@ -242,7 +243,7 @@ class TestBacktest(TestCase):
 
     def test_compute_drawdown(self):
         dd = pd.Series([0, 1, 7, 0, 4, 0, 0])
-        durations, peaks = Backtest._compute_drawdown_duration_peaks(dd)
+        durations, peaks = compute_drawdown_duration_peaks(dd)
         np.testing.assert_array_equal(durations, pd.Series([3, 2], index=[3, 5]).reindex(dd.index))
         np.testing.assert_array_equal(peaks, pd.Series([7, 4], index=[3, 5]).reindex(dd.index))
 
