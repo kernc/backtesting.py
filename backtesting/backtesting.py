@@ -1460,7 +1460,7 @@ class Backtest:
                     initial_point_generator='lhs',  # 'sobel' requires n_initial_points ~ 2**N
                     callback=[
                         DeltaXStopper(9e-7),
-                        SkoptProgressBar(desc="Sequential optimisation using decision trees.")
+                        SkoptProgressBar(total=max_tries, desc="Skopt optimizations")
                     ],
                     random_state=random_state)
 
