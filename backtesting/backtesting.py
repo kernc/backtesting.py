@@ -1458,7 +1458,10 @@ class Backtest:
                     kappa=3,
                     n_initial_points=min(max_tries, 20 + 3 * len(kwargs)),
                     initial_point_generator='lhs',  # 'sobel' requires n_initial_points ~ 2**N
-                    callback=[DeltaXStopper(9e-7), SkoptProgressBar(desc="Sequential optimisation using decision trees.")],
+                    callback=[
+                        DeltaXStopper(9e-7),
+                        SkoptProgressBar(desc="Sequential optimisation using decision trees.")
+                    ],
                     random_state=random_state)
 
             stats = self.run(**dict(zip(kwargs.keys(), res.x)))
