@@ -39,6 +39,18 @@ __pdoc__ = {
 }
 
 
+class SkoptProgressBar:
+    """
+    Progress bar using tqdm for scikit-optimize
+    Open feature request: https://github.com/scikit-optimize/scikit-optimize/issues/674
+    """
+    def __init__(self, **kwargs):
+        self._tqdm = _tqdm(**kwargs)
+
+    def __call__(self, result):
+        self._tqdm.update()
+
+
 class Strategy(metaclass=ABCMeta):
     """
     A trading strategy base class. Extend this class and
@@ -1446,7 +1458,7 @@ class Backtest:
                     kappa=3,
                     n_initial_points=min(max_tries, 20 + 3 * len(kwargs)),
                     initial_point_generator='lhs',  # 'sobel' requires n_initial_points ~ 2**N
-                    callback=DeltaXStopper(9e-7),
+                    callback=[DeltaXStopper(9e-7), SkoptProgressBar(desc="Sequential optimisation using decision trees.")],
                     random_state=random_state)
 
             stats = self.run(**dict(zip(kwargs.keys(), res.x)))
