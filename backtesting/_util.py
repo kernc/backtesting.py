@@ -56,6 +56,16 @@ class _Array(np.ndarray):
             self.name = getattr(obj, 'name', '')
             self._opts = getattr(obj, '_opts', {})
 
+    # Make sure properties name and _opts are carried over
+    # when (un-)pickling.
+    def __reduce__(self):
+        value = super().__reduce__()
+        return value[:2] + (value[2] + (self.__dict__,),)
+
+    def __setstate__(self, state):
+        self.__dict__.update(state[-1])
+        super().__setstate__(state[:-1])
+
     def __bool__(self):
         try:
             return bool(self[-1])
