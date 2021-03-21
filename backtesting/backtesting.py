@@ -1420,11 +1420,12 @@ class Backtest:
 
             # np.inf/np.nan breaks sklearn, np.finfo(float).max breaks skopt.plots.plot_objective
             INVALID = 1e300
-            skopt_pbar = _tqdm(total=max_tries, desc="Skopt optimizations")
+            skopt_pbar = _tqdm(dimensions, total=max_tries, desc="Skopt optimizations")
 
             @use_named_args(dimensions=dimensions)
             def objective_function(**params):
-                skopt_pbar.update(1)
+                if hasattr(skopt_pbar, "update"):
+                    skopt_pbar.update(1)
                 # Check constraints
                 # TODO: Adjust after https://github.com/scikit-optimize/scikit-optimize/pull/971
                 if not constraint(AttrDict(params)):
