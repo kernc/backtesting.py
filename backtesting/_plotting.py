@@ -110,8 +110,8 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
     indicators = [_Indicator(i.df.resample(freq, label='right').mean()
                              .dropna().reindex(df.index).values.T,
                              **dict(i._opts, name=i.name,
-                                    # HACK: override `data` for its index
-                                    data=pd.Series(np.nan, index=df.index)))
+                                    # Replace saved index with the resampled one
+                                    index=df.index))
                   for i in indicators]
     assert not indicators or indicators[0].df.index.equals(df.index)
 

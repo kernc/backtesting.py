@@ -153,7 +153,7 @@ class Strategy(metaclass=ABCMeta):
         value = _Indicator(value, name=name, plot=plot, overlay=overlay,
                            color=color, scatter=scatter,
                            # _Indicator.s Series accessor uses this:
-                           data=self.data)
+                           index=self.data.index)
         self._indicators.append(value)
         return value
 
