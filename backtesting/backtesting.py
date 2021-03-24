@@ -21,7 +21,6 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 import numpy as np
 import pandas as pd
 
-from ._stats import compute_stats
 
 try:
     from tqdm.auto import tqdm as _tqdm
@@ -31,6 +30,7 @@ except ImportError:
         return seq
 
 from ._plotting import plot
+from ._stats import compute_stats
 from ._util import _as_str, _Indicator, _Data, try_
 
 __pdoc__ = {
@@ -1088,7 +1088,7 @@ class Backtest:
             exclusive_orders=exclusive_orders, index=data.index,
         )
         self._strategy = strategy
-        self._results = None
+        self._results: Union[pd.Series, None] = None
 
     def run(self, **kwargs) -> pd.Series:
         """
@@ -1179,7 +1179,16 @@ class Backtest:
             # for future `indicator._opts['data'].index` calls to work
             data._set_length(len(self._data))
 
-            self._results = compute_stats(self._data, broker, strategy)
+            equity = pd.Series(broker._equity).bfill().fillna(broker._cash).values
+
+            self._results = compute_stats(
+                trades=broker.closed_trades,
+                equity=equity,
+                ohlc_data=self._data,
+                risk_free_rate=0.0
+            )
+            self._results.loc['_strategy'] = strategy
+
         return self._results
 
     def optimize(self, *,
@@ -1255,7 +1264,7 @@ class Backtest:
                               constraint=lambda p: p.sma1 < p.sma2)
 
         .. TODO::
-            Improve multiprocessing/parallel execution on Windos with start method 'spawn'.
+            Improve multiprocessing/parallel execution on Windows with start method 'spawn'.
         """
         if not kwargs:
             raise ValueError('Need some strategy parameters to optimize')
