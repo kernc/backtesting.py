@@ -1,3 +1,5 @@
+from typing import List
+
 import numpy as np
 import pandas as pd
 
@@ -9,19 +11,32 @@ def compute_drawdown_duration_peaks(dd: pd.Series):
     iloc = pd.Series(iloc, index=dd.index[iloc])
     df = iloc.to_frame('iloc').assign(prev=iloc.shift())
     df = df[df['iloc'] > df['prev'] + 1].astype(int)
+
     # If no drawdown since no trade, avoid below for pandas sake and return nan series
     if not len(df):
         return (dd.replace(0, np.nan),) * 2
+
     df['duration'] = df['iloc'].map(dd.index.__getitem__) - df['prev'].map(dd.index.__getitem__)
     df['peak_dd'] = df.apply(lambda row: dd.iloc[row['prev']:row['iloc'] + 1].max(), axis=1)
     df = df.reindex(dd.index)
     return df['duration'], df['peak_dd']
 
 
-def compute_stats(data, broker, strategy) -> pd.Series:
-    index = data.index
+def geometric_mean(returns: pd.Series) -> float:
+    returns = returns.fillna(0) + 1
+    if np.any(returns <= 0):
+        return 0
 
-    equity = pd.Series(broker._equity).bfill().fillna(broker._cash).values
+    return np.exp(np.log(returns).sum() / (len(returns) or np.nan)) - 1
+
+
+def compute_stats(
+        trades: List[pd.DataFrame],
+        equity: np.ndarray,
+        ohlc_data: pd.DataFrame,
+        risk_free_rate: float = 0) -> pd.Series:
+
+    index = ohlc_data.index
     dd = 1 - equity / np.maximum.accumulate(equity)
     dd_dur, dd_peaks = compute_drawdown_duration_peaks(pd.Series(dd, index=index))
 
@@ -31,7 +46,6 @@ def compute_stats(data, broker, strategy) -> pd.Series:
         'DrawdownDuration': dd_dur},
         index=index)
 
-    trades = broker.closed_trades
     trades_df = pd.DataFrame({
         'Size': [t.size for t in trades],
         'EntryBar': [t.entry_bar for t in trades],
@@ -68,15 +82,11 @@ def compute_stats(data, broker, strategy) -> pd.Series:
     s.loc['Equity Final [$]'] = equity[-1]
     s.loc['Equity Peak [$]'] = equity.max()
     s.loc['Return [%]'] = (equity[-1] - equity[0]) / equity[0] * 100
-    c = data.Close.values
+    c = ohlc_data.Close.values
     s.loc['Buy & Hold Return [%]'] = (c[-1] - c[0]) / c[0] * 100  # long-only return
 
-    def geometric_mean(returns):
-        returns = returns.fillna(0) + 1
-        return (0 if np.any(returns <= 0) else
-                np.exp(np.log(returns).sum() / (len(returns) or np.nan)) - 1)
-
-    day_returns = gmean_day_return = np.array(np.nan)
+    gmean_day_return: float = 0
+    day_returns = np.array(np.nan)
     annual_trading_days = np.nan
     if isinstance(index, pd.DatetimeIndex):
         day_returns = equity_df['Equity'].resample('D').last().dropna().pct_change()
@@ -97,7 +107,7 @@ def compute_stats(data, broker, strategy) -> pd.Series:
 
     # Our Sharpe mismatches `empyrical.sharpe_ratio()` because they use arithmetic mean return
     # and simple standard deviation
-    s.loc['Sharpe Ratio'] = np.clip(s.loc['Return (Ann.) [%]'] / (s.loc['Volatility (Ann.) [%]'] or np.nan), 0, np.inf)  # noqa: E501
+    s.loc['Sharpe Ratio'] = np.clip((s.loc['Return (Ann.) [%]'] - risk_free_rate) / (s.loc['Volatility (Ann.) [%]'] or np.nan), 0, np.inf)  # noqa: E501
     # Our Sortino mismatches `empyrical.sortino_ratio()` because they use arithmetic mean return
     s.loc['Sortino Ratio'] = np.clip(annualized_return / (np.sqrt(np.mean(day_returns.clip(-np.inf, 0)**2)) * np.sqrt(annual_trading_days)), 0, np.inf)  # noqa: E501
     max_dd = -np.nan_to_num(dd.max())
@@ -118,7 +128,6 @@ def compute_stats(data, broker, strategy) -> pd.Series:
     s.loc['Expectancy [%]'] = returns.mean() * 100
     s.loc['SQN'] = np.sqrt(n_trades) * pl.mean() / (pl.std() or np.nan)
 
-    s.loc['_strategy'] = strategy
     s.loc['_equity_curve'] = equity_df
     s.loc['_trades'] = trades_df
 
