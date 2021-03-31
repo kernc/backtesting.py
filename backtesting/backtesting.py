@@ -1352,11 +1352,8 @@ class Backtest:
                     with ProcessPoolExecutor() as executor:
                         futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
                                    for i in range(len(param_batches))]
-                        for future in _tqdm(
-                            as_completed(futures),
-                            total=len(futures),
-                            desc='Backtest.grid'
-                        ):
+                        for future in _tqdm(as_completed(futures), total=len(futures),
+                                            desc='Backtest.optimize'):
                             batch_index, values = future.result()
                             for value, params in zip(values, param_batches[batch_index]):
                                 heatmap[tuple(params.values())] = value
