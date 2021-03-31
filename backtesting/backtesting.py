@@ -1333,8 +1333,7 @@ class Backtest:
                                     names=next(iter(param_combos)).keys()))
 
             def _batch(seq):
-                bs = np.ceil(len(seq) / (os.cpu_count() or 1)).astype(int)
-                n = np.clip(bs, 1, 300)
+                n = np.clip(int(np.ceil(len(seq) / (os.cpu_count() or 1))), 1, 300)
                 for i in range(0, len(seq), n):
                     yield seq[i:i + n]
 
