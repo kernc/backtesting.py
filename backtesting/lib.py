@@ -15,13 +15,14 @@ from collections import OrderedDict
 from itertools import compress
 from numbers import Number
 from inspect import currentframe
-from typing import Sequence, Optional, Union, Callable
+from typing import Sequence, Optional, Union, Callable, List
 
 import numpy as np
 import pandas as pd
 
 from .backtesting import Strategy
 from ._plotting import plot_heatmaps as _plot_heatmaps
+from ._stats import compute_stats as _compute_stats
 from ._util import _Array, _as_str
 
 __pdoc__ = {}
@@ -75,6 +76,21 @@ def barssince(condition: Sequence[bool], default=np.inf) -> int:
         3
     """
     return next(compress(range(len(condition)), reversed(condition)), default)
+
+
+def compute_stats(
+        trades: List[pd.DataFrame],
+        equity: np.ndarray,
+        ohlc_data: pd.DataFrame,
+        risk_free_rate: float = 0) -> pd.Series:
+    # TODO: Add details
+    """
+    Computes strategy performance metrics.
+
+    >>> perf = compute_stats(trades=stats._trades, equity=stats._equity_curve['Equity'].to_numpy(), ohlc_data=df)
+    """
+
+    return _compute_stats(trades, equity, ohlc_data, risk_free_rate)
 
 
 def cross(series1: Sequence, series2: Sequence) -> bool:
