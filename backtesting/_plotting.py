@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import warnings
+from colorsys import hls_to_rgb, rgb_to_hls
 from itertools import cycle, combinations
 from functools import partial
 from typing import Callable, List, Union
@@ -9,6 +10,7 @@ from typing import Callable, List, Union
 import numpy as np
 import pandas as pd
 
+from bokeh.colors import RGB
 from bokeh.colors.named import (
     lime as BULL_COLOR,
     tomato as BEAR_COLOR
@@ -81,9 +83,10 @@ def colorgen():
 
 
 def lightness(color, lightness=.94):
-    color = color.to_hsl()
-    color.l = lightness  # noqa
-    return color.to_rgb()
+    rgb = np.array([color.r, color.g, color.b]) / 255
+    h, _, s = rgb_to_hls(*rgb)
+    rgb = np.array(hls_to_rgb(h, lightness, s)) * 255
+    return RGB(*rgb)
 
 
 _MAX_CANDLES = 10_000
