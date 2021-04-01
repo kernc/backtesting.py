@@ -1088,7 +1088,7 @@ class Backtest:
             exclusive_orders=exclusive_orders, index=data.index,
         )
         self._strategy = strategy
-        self._results: Union[pd.Series, None] = None
+        self._results: Optional[pd.Series] = None
 
     def run(self, **kwargs) -> pd.Series:
         """
