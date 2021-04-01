@@ -87,10 +87,9 @@ def compute_stats(
     """
     Computes strategy performance metrics.
 
-    >>> trades = stats._trades
-    >>> broker_eq = stats._strategy._broker._equity
-    >>> eq = pd.Series(broker_eq).bfill().fillna(stats._strategy._broker._cash).values
-    >>> compute_stats(trades=trades, equity=eq, ohlc_data=df)
+    >>> broker = stats._strategy._broker
+    >>> equity = pd.Series(broker._equity).bfill().fillna(broker._cash).values
+    >>> perf = compute_stats(trades=broker.closed_trades, equity=equity, ohlc_data=GOOG)
     """
 
     return _compute_stats(trades, equity, ohlc_data, risk_free_rate)
