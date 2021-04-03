@@ -188,12 +188,12 @@ class Strategy(metaclass=ABCMeta):
             super().next()
         """
 
-    class __FULL_EUITY(float):
+    class __FULL_EQUITY(float):
         def __repr__(self): return '.9999'
-    _FULL_EUITY = __FULL_EUITY(1 - sys.float_info.epsilon)
+    _FULL_EQUITY = __FULL_EQUITY(1 - sys.float_info.epsilon)
 
     def buy(self, *,
-            size: float = _FULL_EUITY,
+            size: float = _FULL_EQUITY,
             limit: float = None,
             stop: float = None,
             sl: float = None,
@@ -208,7 +208,7 @@ class Strategy(metaclass=ABCMeta):
         return self._broker.new_order(size, limit, stop, sl, tp)
 
     def sell(self, *,
-             size: float = _FULL_EUITY,
+             size: float = _FULL_EQUITY,
              limit: float = None,
              stop: float = None,
              sl: float = None,
