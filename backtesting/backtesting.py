@@ -664,7 +664,9 @@ class _Broker:
     def __init__(self, *, data, cash, commission, margin,
                  trade_on_close, hedging, exclusive_orders, index):
         assert 0 < cash, f"cash should be >0, is {cash}"
-        assert 0 <= commission < .1, f"commission should be between 0-10%, is {commission}"
+        assert -.1 <= commission < .1, \
+            ("commission should be between -10% "
+             f"(e.g. market-maker's rebates) and 10% (fees), is {commission}")
         assert 0 < margin <= 1, f"margin should be between 0 and 1, is {margin}"
         self._data: _Data = data
         self._cash = cash
