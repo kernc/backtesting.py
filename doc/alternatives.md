@@ -6,7 +6,7 @@ In addition, everyone has their own preconveived ideas about how a mechanical
 trading strategy should be conducted, so everyone (and their brother)
 just rolls their own backtesting frameworks.
 
-If after reviewing the docs and exmples perchance you find
+If after reviewing the docs and examples perchance you find
 [_Backtesting.py_](https://kernc.github.io/backtesting.py) not your cup of tea,
 kindly have a look at some similar alternative Python backtesting frameworks:
 
