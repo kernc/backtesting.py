@@ -15,6 +15,8 @@ GOOG = _read_file('GOOG.csv')
 EURUSD = _read_file('EURUSD.csv')
 """DataFrame of hourly EUR/USD forex data from April 2017 to February 2018."""
 
+AMZN = _read_file('AMZN.csv')
+"""DataFrame of daily NASDAQ:AMZN (Amazon) stock price data from 15/05/1997 to 23/04/2021."""
 
 def SMA(arr: pd.Series, n: int) -> pd.Series:
     """
