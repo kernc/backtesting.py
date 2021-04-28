@@ -858,9 +858,11 @@ class TestLib(TestCase):
                 super().next()
                 if not self.position and self.data.Close > self.sma:
                     self.buy()
+                    
         stats = Backtest(GOOG, S).run()
         self.assertEqual(stats['# Trades'], 57)
 
+        
 class TestUtil(TestCase):
     def test_as_str(self):
         def func():
