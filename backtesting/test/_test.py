@@ -859,33 +859,32 @@ class TestLib(TestCase):
                 super().next()
                 if not self.position and self.data.Close > self.sma:
                     self.buy()
-
         stats = Backtest(GOOG, S).run()
-	self.assertEqual(stats['# Trades'], 57)
+        self.assertEqual(stats['# Trades'], 57)
 
-	def test_TrailingStrategy_should_not_raise_Assert_error(self):
-		class Breakout(TrailingStrategy):
-			timeperiod = 10
-			position_size_decimal = 0.2
-			min_close = []
-			max_close = []
-			def init(self):
-				super().init()
-				self.ema20 = self.I(EMA,self.data.Close,20,overlay=True)
-				self.atr14 = self.I(ATR,self.data.High,self.data.Low,self.data.Close,14)
-				self.set_atr_periods(20)
-				self.set_trailing_sl(1.5)
-				print(type(self.data.Close))
-				self.min_close, self.max_close = MINMAX(self.data.Close, timeperiod=self.timeperiod)
+    def test_TrailingStrategy_should_not_raise_Assert_error(self):
+        class Breakout(TrailingStrategy):
+            timeperiod = 10
+            position_size_decimal = 0.2
+            min_close = []
+            max_close = []
+            def init(self):
+                super().init()
+                self.ema20 = self.I(EMA,self.data.Close,20,overlay=True)
+                self.atr14 = self.I(ATR,self.data.High,self.data.Low,self.data.Close,14)
+                self.set_atr_periods(20)
+                self.set_trailing_sl(1.5)
+                print(type(self.data.Close))
+                self.min_close, self.max_close = MINMAX(self.data.Close, timeperiod=self.timeperiod)
 
-			def next(self):
-				super().next()
-				index = len(self.data)-1
-				if not self.position.is_long and self.min_close[index] > (self.max_close[index] * 0.98) and self.max_close[index] < (self.min_close[index] * 1.02):
-				self.buy(size=self.position_size_decimal)
+            def next(self):
+                super().next()
+                index = len(self.data)-1
+                if not self.position.is_long and self.min_close[index] > (self.max_close[index] * 0.98) and self.max_close[index] < (self.min_close[index] * 1.02):
+                    self.buy(size=self.position_size_decimal)
 
-	stats = Backtest(AMZN,Breakout).run()
-	self.assertEqual(stats['# Trades'], 23)
+        stats = Backtest(AMZN,Breakout).run()
+        self.assertEqual(stats['# Trades'], 23)
 
 
 class TestUtil(TestCase):
