@@ -441,6 +441,13 @@ class TrailingStrategy(Strategy):
 
     def next(self):
         super().next()
+        """
+        self.data in init() is different from self.data in next(). self.data in init() has all the data. 
+        while the one in next() gets accumulated data over iterations. i.e. 5 iterations -> 5 data. n iteration -> n data. 
+        so doing self.data.Close[-1] in next() gets you the last record. 
+        but the same is not true for self.__atr, because self.__atr always has fully computed set from init(), 
+        so we need to use absolute index while accessing atr value from self.__atr.
+        """
         index = len(self.data)-1
         for trade in self.trades:
             if trade.is_long:
