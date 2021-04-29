@@ -860,7 +860,7 @@ class TestLib(TestCase):
                     self.buy()
 
         stats = Backtest(GOOG, S).run()
-        self.assertEqual(stats['# Trades'], 51)
+        self.assertEqual(stats['# Trades'], 57)
 
 
 class TestUtil(TestCase):
