@@ -37,7 +37,7 @@ OHLCV_AGG = OrderedDict((
 """Dictionary of rules for aggregating resampled OHLCV data frames,
 e.g.
 
-    df.resample('4H', label='right').agg(OHLCV_AGG)
+    df.resample('4H', label='right').agg(OHLCV_AGG).dropna()
 """
 
 TRADES_AGG = OrderedDict((
