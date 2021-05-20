@@ -414,6 +414,7 @@ class Order:
             elif self is trade._tp_order:
                 trade._replace(tp_order=None)
             else:
+                # XXX: https://github.com/kernc/backtesting.py/issues/251#issuecomment-835634984 ???
                 assert False
 
     # Fields getters
