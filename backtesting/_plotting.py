@@ -526,8 +526,8 @@ return this.labels[index] || "";
             
             indicator_max=value.df.max(axis='columns')
             indicator_min=value.df.min(axis='columns')
-            source.add(indicator_max, f'indicator_{j}_range_max')
-            source.add(indicator_min,f'indicator_{j}_range_min')
+            source.add(indicator_max, f'indicator_{i}_range_max')
+            source.add(indicator_min,f'indicator_{i}_range_min')
             
             for j, arr in enumerate(value, 1):
                 color = next(colors)
