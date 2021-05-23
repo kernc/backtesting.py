@@ -523,8 +523,8 @@ return this.labels[index] || "";
             colors = colors and cycle(_as_list(colors)) or (
                 cycle([next(ohlc_colors)]) if is_overlay else colorgen())
             legend_label = LegendStr(value.name)
-            indicator_max=value.df.max(axis='columns')
-            indicator_min=value.df.min(axis='columns')
+            indicator_max = value.df.max(axis = 'columns')
+            indicator_min = value.df.min(axis = 'columns')
             source.add(indicator_max, f'indicator_{i}_range_max')
             source.add(indicator_min, f'indicator_{i}_range_min')
             for j, arr in enumerate(value, 1):
@@ -612,10 +612,9 @@ return this.labels[index] || "";
     custom_js_args = dict(ohlc_range=fig_ohlc.y_range,
                           source=source)
     if plot_volume:
-        custom_js_args.update(volume_range=fig_volume.y_range)
-    
+        custom_js_args.update(volume_range=fig_volume.y_range)  
     indicator_ranges = {}
-    for idx,indicator in enumerate(indicator_figs):
+    for idx, indicator in enumerate(indicator_figs):
         indicator_range_key = f'indicator_{idx}_range'
         indicator_ranges.update({indicator_range_key: indicator.y_range})
     custom_js_args.update({'indicator_ranges': indicator_ranges})
