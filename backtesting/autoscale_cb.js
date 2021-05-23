@@ -31,5 +31,18 @@ window._bt_autoscale_timeout = setTimeout(function () {
         max = Math.max.apply(null, source.data['Volume'].slice(i, j));
         _bt_scale_range(volume_range, 0, max * 1.03, false);
     }
+    
+    if(indicator_ranges){
+        let keys = Object.keys(indicator_ranges);
+        for(var count=0;count<keys.length;count++){
+            if(keys[count]){
+                max = Math.max.apply(null, source.data[keys[count]+'_max'].slice(i, j));
+                min = Math.min.apply(null, source.data[keys[count]+'_min'].slice(i, j));
+                if(min && max){
+                    _bt_scale_range(indicator_ranges[keys[count]], min, max, true);
+                }    
+            }
+        }
+    }
 
 }, 50);
