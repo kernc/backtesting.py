@@ -523,12 +523,10 @@ return this.labels[index] || "";
             colors = colors and cycle(_as_list(colors)) or (
                 cycle([next(ohlc_colors)]) if is_overlay else colorgen())
             legend_label = LegendStr(value.name)
-            
             indicator_max=value.df.max(axis='columns')
             indicator_min=value.df.min(axis='columns')
             source.add(indicator_max, f'indicator_{i}_range_max')
-            source.add(indicator_min,f'indicator_{i}_range_min')
-            
+            source.add(indicator_min, f'indicator_{i}_range_min')
             for j, arr in enumerate(value, 1):
                 color = next(colors)
                 source_name = f'{legend_label}_{i}_{j}'
@@ -619,9 +617,8 @@ return this.labels[index] || "";
     indicator_ranges = {}
     for idx,indicator in enumerate(indicator_figs):
         indicator_range_key = f'indicator_{idx}_range'
-        indicator_ranges.update({indicator_range_key:indicator.y_range})
-    custom_js_args.update({'indicator_ranges':indicator_ranges})
-
+        indicator_ranges.update({indicator_range_key: indicator.y_range})
+    custom_js_args.update({'indicator_ranges': indicator_ranges})
     fig_ohlc.x_range.js_on_change('end', CustomJS(args=custom_js_args,
                                                   code=_AUTOSCALE_JS_CALLBACK))
 
