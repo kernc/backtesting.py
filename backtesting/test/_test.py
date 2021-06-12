@@ -24,6 +24,7 @@ from backtesting.lib import (
     quantile,
     SignalStrategy,
     TrailingStrategy,
+    PercentageTrailingStrategy,
     resample_apply,
     plot_heatmaps,
     random_ohlc_data,
@@ -861,6 +862,21 @@ class TestLib(TestCase):
 
         stats = Backtest(GOOG, S).run()
         self.assertEqual(stats['# Trades'], 57)
+
+    def test_PercentageTrailingStrategy(self):
+        class S(PercentageTrailingStrategy):
+            def init(self):
+                super().init()
+                self.set_trailing_sl(5)
+                self.sma = self.I(lambda: self.data.Close.s.rolling(10).mean())
+
+            def next(self):
+                super().next()
+                if not self.position and self.data.Close > self.sma:
+                    self.buy()
+
+        stats = Backtest(GOOG, S).run()
+        self.assertEqual(stats['# Trades'], 91)
 
 
 class TestUtil(TestCase):
