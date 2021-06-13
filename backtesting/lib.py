@@ -465,6 +465,7 @@ class PercentageTrailingStrategy(Strategy):
     overridden methods.
     """
     _sl_percent = 5.
+
     def init(self):
         super().init()
 
