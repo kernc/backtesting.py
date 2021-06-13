@@ -451,6 +451,40 @@ class TrailingStrategy(Strategy):
                 trade.sl = min(trade.sl or np.inf,
                                self.data.Close[index] + self.__atr[index] * self.__n_atr)
 
+class PercentageTrailingStrategy(Strategy):
+    """
+    A strategy with automatic trailing stop-loss, trailing the current
+    price at distance of some percentage. Call
+    `PercentageTrailingStrategy.set_trailing_sl()` to set said percentage
+    (`5` by default). See [tutorials] for usage examples.
+
+    [tutorials]: index.html#tutorials
+
+    Remember to call `super().init()` and `super().next()` in your
+    overridden methods.
+    """
+    _sl_percent = 5.
+    def init(self):
+        super().init()
+
+    def set_trailing_sl(self, percentage: float = 5):
+        assert percentage > 0, "percentage must be greater than 0"
+        """
+        Sets the future trailing stop-loss as some (`percentage`)
+        percentage away from the current price.
+        """
+        self._sl_percent = percentage
+
+    def next(self):
+        super().next()
+        index = len(self.data)-1
+        for trade in self.trades:
+            if trade.is_long:
+                trade.sl = max(trade.sl or -np.inf,
+                               self.data.Close[index]*(1-(self._sl_percent/100)))
+            else:
+                trade.sl = min(trade.sl or np.inf,
+                               self.data.Close[index]*(1+(self._sl_percent/100)))
 
 # Prevent pdoc3 documenting __init__ signature of Strategy subclasses
 for cls in list(globals().values()):
