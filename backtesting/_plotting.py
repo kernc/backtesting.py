@@ -392,7 +392,7 @@ return this.labels[index] || "";
         size = trades['Size'].abs()
         size = np.interp(size, (size.min(), size.max()), (8, 20))
         ohlcv_index_trade_close_arr = np.empty(source.data['index'][-1]+1, dtype=float)
-        ohlcv_index_trade_close_arr[trade_source.data['index']] = trades['ReturnPct']
+        ohlcv_index_trade_close_arr[trade_source.data['index'][:]] = trades['ReturnPct']
         source.add(ohlcv_index_trade_close_arr, 'return_pct')
         trade_source.add(returns_long, 'returns_long')
         trade_source.add(returns_short, 'returns_short')
