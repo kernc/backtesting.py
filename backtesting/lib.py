@@ -451,6 +451,7 @@ class TrailingStrategy(Strategy):
                 trade.sl = min(trade.sl or np.inf,
                                self.data.Close[index] + self.__atr[index] * self.__n_atr)
 
+
 class PercentageTrailingStrategy(Strategy):
     """
     A strategy with automatic trailing stop-loss, trailing the current
