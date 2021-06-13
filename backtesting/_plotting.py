@@ -588,7 +588,8 @@ return this.labels[index] || "";
         figs_above_ohlc.append(_plot_drawdown_section())
 
     if plot_pl:
-        figs_above_ohlc.append(_plot_pl_section())
+        fig_pl = _plot_pl_section()
+        figs_above_ohlc.append(fig_pl)
 
     if plot_volume:
         fig_volume = _plot_volume_section()
@@ -611,6 +612,8 @@ return this.labels[index] || "";
 
     custom_js_args = dict(ohlc_range=fig_ohlc.y_range,
                           source=source)
+    if plot_pl:
+        custom_js_args.update(pl_range=fig_pl.y_range)
     if plot_volume:
         custom_js_args.update(volume_range=fig_volume.y_range)
     indicator_ranges = {}
