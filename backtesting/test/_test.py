@@ -878,6 +878,7 @@ class TestLib(TestCase):
         stats = Backtest(GOOG, S).run()
         self.assertEqual(stats['# Trades'], 91)
 
+
 class TestUtil(TestCase):
     def test_as_str(self):
         def func():
