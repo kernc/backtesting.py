@@ -513,6 +513,7 @@ return this.labels[index] || "";
 
             is_overlay = value._opts['overlay']
             is_scatter = value._opts['scatter']
+            is_histogram = value._opts['histogram']
             if is_overlay:
                 fig = fig_ohlc
             else:
@@ -536,7 +537,10 @@ return this.labels[index] || "";
                 tooltips.append(f'@{{{source_name}}}{{0,0.0[0000]}}')
                 if is_overlay:
                     ohlc_extreme_values[source_name] = arr
-                    if is_scatter:
+                    if is_histogram:
+                        fig.vbar('index', BAR_WIDTH, source_name, source=source,
+                                 legend_label=legend_label, color=color)
+                    elif is_scatter:
                         fig.scatter(
                             'index', source_name, source=source,
                             legend_label=legend_label, color=color,
@@ -548,7 +552,10 @@ return this.labels[index] || "";
                             legend_label=legend_label, line_color=color,
                             line_width=1.3)
                 else:
-                    if is_scatter:
+                    if is_histogram:
+                        r = fig.vbar('index', BAR_WIDTH, source_name, source=source,
+                                     legend_label=LegendStr(legend_label), color=color)
+                    elif is_scatter:
                         r = fig.scatter(
                             'index', source_name, source=source,
                             legend_label=LegendStr(legend_label), color=color,
