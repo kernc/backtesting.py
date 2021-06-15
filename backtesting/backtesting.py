@@ -106,7 +106,7 @@ class Strategy(metaclass=ABCMeta):
         circle instead of a connected line segment (default).
 
         If `histogram` is `True`, the indicator values will be plotted
-        as a histogram instead of line or circle. When `histogram` is 
+        as a histogram instead of line or circle. When `histogram` is
         `True`, 'scatter' value will be ignored even if it's set.
 
         Additional `*args` and `**kwargs` are passed to `func` and can
