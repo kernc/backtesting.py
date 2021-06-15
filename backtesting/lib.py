@@ -464,7 +464,7 @@ class PercentageTrailingStrategy(Strategy):
     Remember to call `super().init()` and `super().next()` in your
     overridden methods.
     """
-    _sl_percent = 5.
+    _sl_pct = 5.
 
     def init(self):
         super().init()
@@ -475,7 +475,7 @@ class PercentageTrailingStrategy(Strategy):
         Sets the future trailing stop-loss as some (`percentage`)
         percentage away from the current price.
         """
-        self._sl_percent = percentage
+        self._sl_pct = percentage/100
 
     def next(self):
         super().next()
@@ -483,10 +483,10 @@ class PercentageTrailingStrategy(Strategy):
         for trade in self.trades:
             if trade.is_long:
                 trade.sl = max(trade.sl or -np.inf,
-                               self.data.Close[index]*(1-(self._sl_percent/100)))
+                               self.data.Close[index]*(1-self._sl_pct))
             else:
                 trade.sl = min(trade.sl or np.inf,
-                               self.data.Close[index]*(1+(self._sl_percent/100)))
+                               self.data.Close[index]*(1+self._sl_pct))
 
 
 # Prevent pdoc3 documenting __init__ signature of Strategy subclasses
