@@ -535,7 +535,7 @@ return this.labels[index] || "";
                     ohlc_extreme_values[source_name] = arr
                     if is_histogram:
                         fig.vbar('index', BAR_WIDTH, source_name, source=source,
-                            legend_label=legend_label, color=color)
+                                legend_label=legend_label, color=color)
                     elif is_scatter:
                         fig.scatter(
                             'index', source_name, source=source,
@@ -550,7 +550,7 @@ return this.labels[index] || "";
                 else:
                     if is_histogram:
                         r = fig.vbar('index', BAR_WIDTH, source_name, source=source,
-                            legend_label=LegendStr(legend_label), color=color)
+                                legend_label=LegendStr(legend_label), color=color)
                     elif is_scatter:
                         r = fig.scatter(
                             'index', source_name, source=source,
