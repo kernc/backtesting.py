@@ -771,6 +771,23 @@ class TestPlot(TestCase):
                     plot_drawdown=False, plot_equity=False, plot_pl=False, plot_volume=False,
                     open_browser=False)
 
+    def test_indicator_legends(self):
+        class S(Strategy):
+            def init(self):
+                self.I(lambda:(SMA(self.data.Close, 5),SMA(self.data.Close, 10)), overlay=True,
+                        scatter=False, legends=['SMA 5','SMA 10'])
+                
+            def next(self):
+                pass
+
+        bt = Backtest(GOOG, S)
+        bt.run()
+        with _tempfile() as f:
+            bt.plot(filename=f,
+                    plot_drawdown=False, plot_equity=False, plot_pl=False, plot_volume=False,
+                    open_browser=True)
+            # Give browser time to open before tempfile is removed
+            time.sleep(1)
 
 class TestLib(TestCase):
     def test_barssince(self):
