@@ -24,6 +24,7 @@ from backtesting.lib import (
     quantile,
     SignalStrategy,
     TrailingStrategy,
+    PercentageTrailingStrategy,
     resample_apply,
     plot_heatmaps,
     random_ohlc_data,
@@ -789,6 +790,24 @@ class TestPlot(TestCase):
             # Give browser time to open before tempfile is removed
             time.sleep(1)
 
+    def test_indicator_histogram(self):
+        class S(Strategy):
+            def init(self):
+                self.I(SMA, self.data.Close, 5, overlay=True, scatter=False, histogram=True)
+                self.I(SMA, self.data.Close, 10, overlay=False, scatter=False, histogram=True)
+
+            def next(self):
+                pass
+
+        bt = Backtest(GOOG, S)
+        bt.run()
+        with _tempfile() as f:
+            bt.plot(filename=f,
+                    plot_drawdown=False, plot_equity=False, plot_pl=False, plot_volume=False,
+                    open_browser=True)
+            # Give browser time to open before tempfile is removed
+            time.sleep(1)
+
 
 class TestLib(TestCase):
     def test_barssince(self):
@@ -879,6 +898,21 @@ class TestLib(TestCase):
 
         stats = Backtest(GOOG, S).run()
         self.assertEqual(stats['# Trades'], 57)
+
+    def test_PercentageTrailingStrategy(self):
+        class S(PercentageTrailingStrategy):
+            def init(self):
+                super().init()
+                self.set_trailing_sl(5)
+                self.sma = self.I(lambda: self.data.Close.s.rolling(10).mean())
+
+            def next(self):
+                super().next()
+                if not self.position and self.data.Close > self.sma:
+                    self.buy()
+
+        stats = Backtest(GOOG, S).run()
+        self.assertEqual(stats['# Trades'], 91)
 
 
 class TestUtil(TestCase):

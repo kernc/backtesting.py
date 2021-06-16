@@ -513,6 +513,7 @@ return this.labels[index] || "";
 
             is_overlay = value._opts['overlay']
             is_scatter = value._opts['scatter']
+            is_histogram = value._opts['histogram']
             if is_overlay:
                 fig = fig_ohlc
             else:
@@ -526,6 +527,10 @@ return this.labels[index] || "";
             legends = legends and cycle(_as_list(legends))
             indicator_name = value.name
             legend_label = LegendStr(indicator_name)
+            indicator_max = value.df.max(axis='columns')
+            indicator_min = value.df.min(axis='columns')
+            source.add(indicator_max, f'indicator_{i}_range_max')
+            source.add(indicator_min, f'indicator_{i}_range_min')
             for j, arr in enumerate(value, 1):
                 color = next(colors)
                 legend_label = next(legends) if legends is not None else legend_label
@@ -536,7 +541,10 @@ return this.labels[index] || "";
                 tooltips.append(f'@{{{source_name}}}{{0,0.0[0000]}}')
                 if is_overlay:
                     ohlc_extreme_values[source_name] = arr
-                    if is_scatter:
+                    if is_histogram:
+                        fig.vbar('index', BAR_WIDTH, source_name, source=source,
+                                 legend_label=legend_label, color=color)
+                    elif is_scatter:
                         fig.scatter(
                             'index', source_name, source=source,
                             legend_label=legend_label, color=color,
@@ -548,7 +556,10 @@ return this.labels[index] || "";
                             legend_label=legend_label, line_color=color,
                             line_width=1.3)
                 else:
-                    if is_scatter:
+                    if is_histogram:
+                        r = fig.vbar('index', BAR_WIDTH, source_name, source=source,
+                                     legend_label=LegendStr(legend_label), color=color)
+                    elif is_scatter:
                         r = fig.scatter(
                             'index', source_name, source=source,
                             legend_label=LegendStr(legend_label), color=color,
@@ -589,7 +600,8 @@ return this.labels[index] || "";
         figs_above_ohlc.append(_plot_drawdown_section())
 
     if plot_pl:
-        figs_above_ohlc.append(_plot_pl_section())
+        fig_pl = _plot_pl_section()
+        figs_above_ohlc.append(fig_pl)
 
     if plot_volume:
         fig_volume = _plot_volume_section()
@@ -612,9 +624,15 @@ return this.labels[index] || "";
 
     custom_js_args = dict(ohlc_range=fig_ohlc.y_range,
                           source=source)
+    if plot_pl:
+        custom_js_args.update(pl_range=fig_pl.y_range)
     if plot_volume:
         custom_js_args.update(volume_range=fig_volume.y_range)
-
+    indicator_ranges = {}
+    for idx, indicator in enumerate(indicator_figs):
+        indicator_range_key = f'indicator_{idx}_range'
+        indicator_ranges.update({indicator_range_key: indicator.y_range})
+    custom_js_args.update({'indicator_ranges': indicator_ranges})
     fig_ohlc.x_range.js_on_change('end', CustomJS(args=custom_js_args,
                                                   code=_AUTOSCALE_JS_CALLBACK))
 
