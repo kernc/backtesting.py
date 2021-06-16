@@ -775,7 +775,7 @@ class TestPlot(TestCase):
         class S(Strategy):
             def init(self):
                 self.I(lambda: (SMA(self.data.Close, 5), SMA(self.data.Close, 10)), overlay=False,
-                       name='Simple Moving Averages', scatter=False, legends=['SMA 5','SMA 10'])
+                       name='Simple Moving Averages', scatter=False, legends=['SMA 5', 'SMA 10'])
 
             def next(self):
                 pass
@@ -788,6 +788,7 @@ class TestPlot(TestCase):
                     open_browser=True)
             # Give browser time to open before tempfile is removed
             time.sleep(1)
+
 
 class TestLib(TestCase):
     def test_barssince(self):
