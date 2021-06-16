@@ -774,9 +774,9 @@ class TestPlot(TestCase):
     def test_indicator_legends(self):
         class S(Strategy):
             def init(self):
-                self.I(lambda:(SMA(self.data.Close, 5),SMA(self.data.Close, 10)), overlay=True,
-                        scatter=False, legends=['SMA 5','SMA 10'])
-                
+                self.I(lambda: (SMA(self.data.Close, 5), SMA(self.data.Close, 10)), overlay=False,
+                       name='Simple Moving Averages', scatter=False, legends=['SMA 5','SMA 10'])
+
             def next(self):
                 pass
 

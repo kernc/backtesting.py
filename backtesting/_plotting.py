@@ -569,7 +569,8 @@ return this.labels[index] || "";
             if is_overlay:
                 ohlc_tooltips.append((indicator_name, NBSP.join(tooltips)))
             else:
-                set_tooltips(fig, [(indicator_name, NBSP.join(tooltips))], vline=True, renderers=[r])
+                set_tooltips(fig, [(indicator_name, NBSP.join(tooltips))],
+                             vline=True, renderers=[r])
                 # If the sole indicator line on this figure,
                 # have the legend only contain text without the glyph
                 if len(value) == 1:
