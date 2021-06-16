@@ -522,10 +522,14 @@ return this.labels[index] || "";
             colors = value._opts['color']
             colors = colors and cycle(_as_list(colors)) or (
                 cycle([next(ohlc_colors)]) if is_overlay else colorgen())
-            legend_label = LegendStr(value.name)
+            legends = value._opts['legends']
+            legends = legends and cycle(_as_list(legends))
+            indicator_name = value.name
+            legend_label = LegendStr(indicator_name)
             for j, arr in enumerate(value, 1):
                 color = next(colors)
-                source_name = f'{legend_label}_{i}_{j}'
+                legend_label = next(legends) if legends is not None else legend_label
+                source_name = f'{indicator_name}_{i}_{j}'
                 if arr.dtype == bool:
                     arr = arr.astype(int)
                 source.add(arr, source_name)
@@ -563,9 +567,10 @@ return this.labels[index] || "";
                                             line_color='#666666', line_dash='dashed',
                                             line_width=.5))
             if is_overlay:
-                ohlc_tooltips.append((legend_label, NBSP.join(tooltips)))
+                ohlc_tooltips.append((indicator_name, NBSP.join(tooltips)))
             else:
-                set_tooltips(fig, [(legend_label, NBSP.join(tooltips))], vline=True, renderers=[r])
+                set_tooltips(fig, [(indicator_name, NBSP.join(tooltips))],
+                             vline=True, renderers=[r])
                 # If the sole indicator line on this figure,
                 # have the legend only contain text without the glyph
                 if len(value) == 1:
