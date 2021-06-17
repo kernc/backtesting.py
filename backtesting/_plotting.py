@@ -502,6 +502,7 @@ return this.labels[index] || "";
 
         ohlc_colors = colorgen()
         indicator_figs = []
+        non_overlay_indicator_idxs = []
 
         for i, value in enumerate(indicators):
             value = np.atleast_2d(value)
@@ -518,6 +519,7 @@ return this.labels[index] || "";
             else:
                 fig = new_indicator_figure()
                 indicator_figs.append(fig)
+                non_overlay_indicator_idxs.append(i)
             tooltips = []
             colors = value._opts['color']
             colors = colors and cycle(_as_list(colors)) or (
@@ -574,7 +576,7 @@ return this.labels[index] || "";
                 # have the legend only contain text without the glyph
                 if len(value) == 1:
                     fig.legend.glyph_width = 0
-        return indicator_figs
+        return (indicator_figs, non_overlay_indicator_idxs)
 
     # Construct figure ...
 
@@ -600,9 +602,10 @@ return this.labels[index] || "";
 
     ohlc_bars = _plot_ohlc()
     _plot_ohlc_trades()
-    indicator_figs = _plot_indicators()
+    indicator_figs, non_overlay_indicator_idxs = _plot_indicators()
     if reverse_indicators:
         indicator_figs = indicator_figs[::-1]
+        non_overlay_indicator_idxs = non_overlay_indicator_idxs[::-1]
     figs_below_ohlc.extend(indicator_figs)
 
     set_tooltips(fig_ohlc, ohlc_tooltips, vline=True, renderers=[ohlc_bars])
@@ -617,9 +620,9 @@ return this.labels[index] || "";
     if plot_volume:
         custom_js_args.update(volume_range=fig_volume.y_range)
     indicator_ranges = {}
-    for idx, indicator in enumerate(indicator_figs):
-        indicator_range_key = f'indicator_{idx}_range'
-        indicator_ranges.update({indicator_range_key: indicator.y_range})
+    for idx,(indicator,indicator_idx) in enumerate(zip(indicator_figs, non_overlay_indicator_idxs)):
+        indicator_range_key = f'indicator_{indicator_idx}_range'
+        indicator_ranges.update({indicator_range_key:indicator.y_range})
     custom_js_args.update({'indicator_ranges': indicator_ranges})
     fig_ohlc.x_range.js_on_change('end', CustomJS(args=custom_js_args,
                                                   code=_AUTOSCALE_JS_CALLBACK))
