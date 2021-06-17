@@ -620,9 +620,9 @@ return this.labels[index] || "";
     if plot_volume:
         custom_js_args.update(volume_range=fig_volume.y_range)
     indicator_ranges = {}
-    for idx,(indicator,indicator_idx) in enumerate(zip(indicator_figs, non_overlay_indicator_idxs)):
+    for idx, (indicator, indicator_idx) in enumerate(zip(indicator_figs, non_overlay_indicator_idxs)):
         indicator_range_key = f'indicator_{indicator_idx}_range'
-        indicator_ranges.update({indicator_range_key:indicator.y_range})
+        indicator_ranges.update({indicator_range_key: indicator.y_range})
     custom_js_args.update({'indicator_ranges': indicator_ranges})
     fig_ohlc.x_range.js_on_change('end', CustomJS(args=custom_js_args,
                                                   code=_AUTOSCALE_JS_CALLBACK))
