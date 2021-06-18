@@ -1,2 +1,6 @@
 # To run example notebooks, install required and test dependencies
+TA-Lib==0.4.20
+seaborn
+scikit-optimize
+scikit-learn
 .[test]

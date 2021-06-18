@@ -17,15 +17,16 @@ from numbers import Number
 from inspect import currentframe
 from typing import Sequence, Optional, Union, Callable
 
+import numpy
 import numpy as np
 import pandas as pd
+import talib
 
 from .backtesting import Strategy
 from ._plotting import plot_heatmaps as _plot_heatmaps
 from ._util import _Array, _as_str
 
 __pdoc__ = {}
-
 
 OHLCV_AGG = OrderedDict((
     ('Open', 'first'),
@@ -267,7 +268,7 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
         frame = frame.f_back
         level += 1
         if isinstance(frame.f_locals.get('self'), Strategy):  # type: ignore
-            strategy_I = frame.f_locals['self'].I             # type: ignore
+            strategy_I = frame.f_locals['self'].I  # type: ignore
             break
     else:
         def strategy_I(func, *args, **kwargs):
@@ -314,6 +315,7 @@ def random_ohlc_data(example_data: pd.DataFrame, *,
     >>> next(ohlc_generator)  # returns new random data
     ...
     """
+
     def shuffle(x):
         return x.sample(frac=frac, replace=frac > 1, random_state=random_state)
 
@@ -417,39 +419,55 @@ class TrailingStrategy(Strategy):
     """
     __n_atr = 6.
     __atr = None
+    __use_atr = True
+    __sl_distance = None
 
-    def init(self):
+    def init(self, use_atr=True):
         super().init()
-        self.set_atr_periods()
+        self.__use_atr = use_atr
+        if use_atr:
+            self.set_atr_periods()
 
     def set_atr_periods(self, periods: int = 100):
         """
         Set the lookback period for computing ATR. The default value
         of 100 ensures a _stable_ ATR.
         """
-        h, l, c_prev = self.data.High, self.data.Low, pd.Series(self.data.Close).shift(1)
-        tr = np.max([h - l, (c_prev - h).abs(), (c_prev - l).abs()], axis=0)
-        atr = pd.Series(tr).rolling(periods).mean().bfill().values
-        self.__atr = atr
+        self.__atr: numpy.ndarray = talib.ATR(self.data.High, self.data.Low, self.data.Close, timeperiod=periods)
+        np.nan_to_num(self.__atr, copy=False, nan=self.__atr[np.argmax(self.__atr > 0)])
 
-    def set_trailing_sl(self, n_atr: float = 6):
+    def set_trailing_atr_sl(self, n_atr: float = 6):
         """
         Sets the future trailing stop-loss as some multiple (`n_atr`)
         average true bar ranges away from the current price.
         """
         self.__n_atr = n_atr
 
+    def set_trailing_sl(self, sl_distance: float):
+        """
+        Sets the future trailing stop-loss as fixed price.
+        """
+        self.__sl_distance = sl_distance
+
     def next(self):
         super().next()
         # Can't use index=-1 because self.__atr is not an Indicator type
-        index = len(self.data)-1
+        index = len(self.data) - 1
         for trade in self.trades:
             if trade.is_long:
-                trade.sl = max(trade.sl or -np.inf,
-                               self.data.Close[index] - self.__atr[index] * self.__n_atr)
+                if self.__use_atr:
+                    trade.sl = max(trade.sl or -np.inf,
+                                   self.data.Close[index] - self.__atr[index] * self.__n_atr)
+                else:
+                    trade.sl = max(trade.sl or -np.inf,
+                                   self.data.Close[index] - self.__sl_distance)
             else:
-                trade.sl = min(trade.sl or np.inf,
-                               self.data.Close[index] + self.__atr[index] * self.__n_atr)
+                if self.__use_atr:
+                    trade.sl = min(trade.sl or np.inf,
+                                   self.data.Close[index] + self.__atr[index] * self.__n_atr)
+                else:
+                    trade.sl = min(trade.sl or np.inf,
+                                   self.data.Close[index] + self.__sl_distance)
 
 
 # Prevent pdoc3 documenting __init__ signature of Strategy subclasses
@@ -457,13 +475,12 @@ for cls in list(globals().values()):
     if isinstance(cls, type) and issubclass(cls, Strategy):
         __pdoc__[f'{cls.__name__}.__init__'] = False
 
-
 # NOTE: Don't put anything below this __all__ list
 
 __all__ = [getattr(v, '__name__', k)
-           for k, v in globals().items()                        # export
-           if ((callable(v) and v.__module__ == __name__ or     # callables from this module
-                k.isupper()) and                                # or CONSTANTS
+           for k, v in globals().items()  # export
+           if ((callable(v) and v.__module__ == __name__ or  # callables from this module
+                k.isupper()) and  # or CONSTANTS
                not getattr(v, '__name__', k).startswith('_'))]  # neither marked internal
 
 # NOTE: Don't put anything below here. See above.

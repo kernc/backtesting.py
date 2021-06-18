@@ -862,6 +862,22 @@ class TestLib(TestCase):
         stats = Backtest(GOOG, S).run()
         self.assertEqual(stats['# Trades'], 57)
 
+    def test_TrailingStrategyDistanceSL(self):
+        class S(TrailingStrategy):
+            def init(self):
+                super().init(use_atr=False)
+                self.set_trailing_sl(30)
+                self.sma = self.I(lambda: self.data.Close.s.rolling(10).mean())
+
+            def next(self):
+                super().next()
+                if not self.position and self.data.Close > self.sma:
+                    self.buy()
+        bt = Backtest(GOOG, S)
+        stats = bt.run()
+        bt.plot()
+        self.assertEqual(stats['# Trades'], 66)
+
 
 class TestUtil(TestCase):
     def test_as_str(self):
