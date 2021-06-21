@@ -4,7 +4,8 @@ What's New
 These were the major changes contributing to each release:
 
 
-### 0.x.x
+### 0.3.2
+* new param on run to manage close, or not the trades at end (#273)
 
 
 ### 0.3.1
