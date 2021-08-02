@@ -99,25 +99,23 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
         if resample_rule is False or len(df) <= _MAX_CANDLES:
             return df, indicators, equity_data, trades
 
-        minutes_to_freq = {
-            1: "1T",
-            5: "5T",
-            10: "10T",
-            15: "15T",
-            30: "30T",
-            60: "1H",
-            120: "2H",
-            240: "4H",
-            480: "8H",
-            1440: "1D",
-            10080: "1W",
-            43800: "1M",
-        }
-        index_timedelta = df.index[-1] - df.index[0]
-        req_minutes = (index_timedelta / 10000).total_seconds() // 60
-        freq = [v for k, v in minutes_to_freq.items() if k >= req_minutes]
-        freq = freq[0] if freq else "1M"
-
+        freq_minutes = pd.Series({
+            "1T": 1,
+            "5T": 5,
+            "10T": 10,
+            "15T": 15,
+            "30T": 30,
+            "1H": 60,
+            "2H": 60*2,
+            "4H": 60*4,
+            "8H": 60*8,
+            "1D": 60*24,
+            "1W": 60*24*7,
+            "1M": np.inf,
+        })
+        timespan = df.index[-1] - df.index[0]
+        require_minutes = (timespan / _MAX_CANDLES).total_seconds() // 60
+        freq = freq_minutes.where(freq_minutes >= require_minutes).first_valid_index()
         warnings.warn(f"Data contains too many candlesticks to plot; downsampling to {freq!r}. "
                       "See `Backtest.plot(resample=...)`")
 
