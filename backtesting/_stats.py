@@ -1,9 +1,12 @@
-from typing import List
+from typing import List, TYPE_CHECKING, Union
 
 import numpy as np
 import pandas as pd
 
 from ._util import _data_period
+
+if TYPE_CHECKING:
+    from .backtesting import Strategy, Trade
 
 
 def compute_drawdown_duration_peaks(dd: pd.Series):
@@ -26,15 +29,17 @@ def geometric_mean(returns: pd.Series) -> float:
     returns = returns.fillna(0) + 1
     if np.any(returns <= 0):
         return 0
-
     return np.exp(np.log(returns).sum() / (len(returns) or np.nan)) - 1
 
 
 def compute_stats(
-        trades: List[pd.DataFrame],
+        trades: Union[List['Trade'], pd.DataFrame],
         equity: np.ndarray,
         ohlc_data: pd.DataFrame,
-        risk_free_rate: float = 0) -> pd.Series:
+        strategy_instance: 'Strategy',
+        risk_free_rate: float = 0,
+) -> pd.Series:
+    assert -1 < risk_free_rate < 1
 
     index = ohlc_data.index
     dd = 1 - equity / np.maximum.accumulate(equity)
@@ -46,18 +51,23 @@ def compute_stats(
         'DrawdownDuration': dd_dur},
         index=index)
 
-    trades_df = pd.DataFrame({
-        'Size': [t.size for t in trades],
-        'EntryBar': [t.entry_bar for t in trades],
-        'ExitBar': [t.exit_bar for t in trades],
-        'EntryPrice': [t.entry_price for t in trades],
-        'ExitPrice': [t.exit_price for t in trades],
-        'PnL': [t.pl for t in trades],
-        'ReturnPct': [t.pl_pct for t in trades],
-        'EntryTime': [t.entry_time for t in trades],
-        'ExitTime': [t.exit_time for t in trades],
-    })
-    trades_df['Duration'] = trades_df['ExitTime'] - trades_df['EntryTime']
+    if isinstance(trades, pd.DataFrame):
+        trades_df = trades
+    else:
+        # Came straight from Backtest.run()
+        trades_df = pd.DataFrame({
+            'Size': [t.size for t in trades],
+            'EntryBar': [t.entry_bar for t in trades],
+            'ExitBar': [t.exit_bar for t in trades],
+            'EntryPrice': [t.entry_price for t in trades],
+            'ExitPrice': [t.exit_price for t in trades],
+            'PnL': [t.pl for t in trades],
+            'ReturnPct': [t.pl_pct for t in trades],
+            'EntryTime': [t.entry_time for t in trades],
+            'ExitTime': [t.exit_time for t in trades],
+        })
+        trades_df['Duration'] = trades_df['ExitTime'] - trades_df['EntryTime']
+    del trades
 
     pl = trades_df['PnL']
     returns = trades_df['ReturnPct']
@@ -75,8 +85,8 @@ def compute_stats(
     s.loc['Duration'] = s.End - s.Start
 
     have_position = np.repeat(0, len(index))
-    for t in trades:
-        have_position[t.entry_bar:t.exit_bar + 1] = 1
+    for t in trades_df.itertuples(index=False):
+        have_position[t.EntryBar:t.ExitBar + 1] = 1
 
     s.loc['Exposure Time [%]'] = have_position.mean() * 100  # In "n bars" time, not index time
     s.loc['Equity Final [$]'] = equity[-1]
@@ -116,7 +126,7 @@ def compute_stats(
     s.loc['Avg. Drawdown [%]'] = -dd_peaks.mean() * 100
     s.loc['Max. Drawdown Duration'] = _round_timedelta(dd_dur.max())
     s.loc['Avg. Drawdown Duration'] = _round_timedelta(dd_dur.mean())
-    s.loc['# Trades'] = n_trades = len(trades)
+    s.loc['# Trades'] = n_trades = len(trades_df)
     s.loc['Win Rate [%]'] = np.nan if not n_trades else (pl > 0).sum() / n_trades * 100  # noqa: E501
     s.loc['Best Trade [%]'] = returns.max() * 100
     s.loc['Worst Trade [%]'] = returns.min() * 100
@@ -128,6 +138,7 @@ def compute_stats(
     s.loc['Expectancy [%]'] = returns.mean() * 100
     s.loc['SQN'] = np.sqrt(n_trades) * pl.mean() / (pl.std() or np.nan)
 
+    s.loc['_strategy'] = strategy_instance
     s.loc['_equity_curve'] = equity_df
     s.loc['_trades'] = trades_df
 

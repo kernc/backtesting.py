@@ -21,7 +21,6 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 import numpy as np
 import pandas as pd
 
-
 try:
     from tqdm.auto import tqdm as _tqdm
     _tqdm = partial(_tqdm, leave=False)
@@ -1180,15 +1179,13 @@ class Backtest:
             data._set_length(len(self._data))
 
             equity = pd.Series(broker._equity).bfill().fillna(broker._cash).values
-
-            stats = compute_stats(
+            self._results = compute_stats(
                 trades=broker.closed_trades,
                 equity=equity,
                 ohlc_data=self._data,
                 risk_free_rate=0.0,
+                strategy_instance=strategy,
             )
-            stats.loc['_strategy'] = strategy
-            self._results = stats
 
         return self._results
 
@@ -1265,7 +1262,7 @@ class Backtest:
                               constraint=lambda p: p.sma1 < p.sma2)
 
         .. TODO::
-            Improve multiprocessing/parallel execution on Windows with start method 'spawn'.
+            Improve multiprocessing/parallel execution on Windos with start method 'spawn'.
         """
         if not kwargs:
             raise ValueError('Need some strategy parameters to optimize')
