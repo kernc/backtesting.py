@@ -174,8 +174,9 @@ def compute_stats(
     """
     (Re-)compute strategy performance metrics.
 
-    `stats` is the statistics series as returned by `Backtest.run()`.
-    `data` is OHLC data as passed to the `Backtest` the `stats` were obtained in.
+    `stats` is the statistics series as returned by `backtesting.backtesting.Backtest.run()`.
+    `data` is OHLC data as passed to the `backtesting.backtesting.Backtest`
+    the `stats` were obtained in.
     `trades` can be a dataframe subset of `stats._trades` (e.g. only long trades).
     You can also tune `risk_free_rate`, used in calculation of Sharpe and Sortino ratios.
 
