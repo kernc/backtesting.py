@@ -3,8 +3,19 @@ What's New
 
 These were the major changes contributing to each release:
 
-
 ### 0.x.x
+
+
+
+### 0.3.2
+(2021-08-03)
+
+* New strategy performance method [`backtesting.lib.compute_stats`](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html#backtesting.lib.compute_stats) (#281)
+* Improve plotting speed (#329) and optimization performance (#295) on large datasets.
+* Commission constraints now allow for market-maker's rebates.
+* [`Backtest.plot`](https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Backtest.plot)
+  now returns the bokeh figure object for further processing.
+* Other small bugs and fixes.
 
 
 ### 0.3.1
