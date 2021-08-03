@@ -22,6 +22,7 @@ import pandas as pd
 
 from .backtesting import Strategy
 from ._plotting import plot_heatmaps as _plot_heatmaps
+from ._stats import compute_stats as _compute_stats
 from ._util import _Array, _as_str
 
 __pdoc__ = {}
@@ -162,6 +163,38 @@ def quantile(series: Sequence, quantile: Union[None, float] = None):
             return np.nan
     assert 0 <= quantile <= 1, "quantile must be within [0, 1]"
     return np.nanpercentile(series, quantile * 100)
+
+
+def compute_stats(
+        *,
+        stats: pd.Series,
+        data: pd.DataFrame,
+        trades: pd.DataFrame = None,
+        risk_free_rate: float = 0.) -> pd.Series:
+    """
+    (Re-)compute strategy performance metrics.
+
+    `stats` is the statistics series as returned by `Backtest.run()`.
+    `data` is OHLC data as passed to the `Backtest` the `stats` were obtained in.
+    `trades` can be a dataframe subset of `stats._trades` (e.g. only long trades).
+    You can also tune `risk_free_rate`, used in calculation of Sharpe and Sortino ratios.
+
+        >>> stats = Backtest(GOOG, MyStrategy).run()
+        >>> only_long_trades = stats._trades[stats._trades.Size > 0]
+        >>> long_stats = compute_stats(stats=stats, trades=only_long_trades,
+        ...                            data=GOOG, risk_free_rate=.02)
+    """
+    equity = stats._equity_curve.Equity
+    if trades is None:
+        trades = stats._trades
+    else:
+        # XXX: Is this buggy?
+        equity = equity.copy()
+        equity[:] = stats._equity_curve.Equity.iloc[0]
+        for t in trades.itertuples(index=False):
+            equity.iloc[t.EntryBar:] += t.PnL
+    return _compute_stats(trades=trades, equity=equity, ohlc_data=data,
+                          risk_free_rate=risk_free_rate, strategy_instance=stats._strategy)
 
 
 def resample_apply(rule: str,

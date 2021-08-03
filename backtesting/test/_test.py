@@ -14,11 +14,14 @@ from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
+from pandas.testing import assert_frame_equal
 
 from backtesting import Backtest, Strategy
+from backtesting._stats import compute_drawdown_duration_peaks
 from backtesting.lib import (
     OHLCV_AGG,
     barssince,
+    compute_stats,
     cross,
     crossover,
     quantile,
@@ -243,7 +246,7 @@ class TestBacktest(TestCase):
 
     def test_compute_drawdown(self):
         dd = pd.Series([0, 1, 7, 0, 4, 0, 0])
-        durations, peaks = Backtest._compute_drawdown_duration_peaks(dd)
+        durations, peaks = compute_drawdown_duration_peaks(dd)
         np.testing.assert_array_equal(durations, pd.Series([3, 2], index=[3, 5]).reindex(dd.index))
         np.testing.assert_array_equal(peaks, pd.Series([7, 4], index=[3, 5]).reindex(dd.index))
 
@@ -835,6 +838,18 @@ class TestLib(TestCase):
         self.assertEqual(list(new_data.index), list(GOOG.index))
         self.assertEqual(new_data.shape, GOOG.shape)
         self.assertEqual(list(new_data.columns), list(GOOG.columns))
+
+    def test_compute_stats(self):
+        stats = Backtest(GOOG, SmaCross).run()
+        only_long_trades = stats._trades[stats._trades.Size > 0]
+        long_stats = compute_stats(stats=stats, trades=only_long_trades,
+                                   data=GOOG, risk_free_rate=.02)
+        self.assertNotEqual(list(stats._equity_curve.Equity),
+                            list(long_stats._equity_curve.Equity))
+        self.assertNotEqual(stats['Sharpe Ratio'], long_stats['Sharpe Ratio'])
+        self.assertEqual(long_stats['# Trades'], len(only_long_trades))
+        self.assertEqual(stats._strategy, long_stats._strategy)
+        assert_frame_equal(long_stats._trades, only_long_trades)
 
     def test_SignalStrategy(self):
         class S(SignalStrategy):
