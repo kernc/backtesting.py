@@ -80,8 +80,8 @@ def barssince(condition: Sequence[bool], default=np.inf) -> int:
 
 def cross(series1: Sequence, series2: Sequence) -> bool:
     """
-    Return `True` if `series1` and `series2` just crossed (either
-    direction).
+    Return `True` if `series1` and `series2` just crossed
+    (above or below) each other.
 
         >>> cross(self.data.Close, self.sma)
         True
@@ -92,7 +92,7 @@ def cross(series1: Sequence, series2: Sequence) -> bool:
 
 def crossover(series1: Sequence, series2: Sequence) -> bool:
     """
-    Return `True` if `series1` just crossed over
+    Return `True` if `series1` just crossed over (above)
     `series2`.
 
         >>> crossover(self.data.Close, self.sma)
