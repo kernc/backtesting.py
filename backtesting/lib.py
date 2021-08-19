@@ -22,6 +22,7 @@ import pandas as pd
 
 from .backtesting import Strategy
 from ._plotting import plot_heatmaps as _plot_heatmaps
+from ._stats import compute_stats as _compute_stats
 from ._util import _Array, _as_str
 
 __pdoc__ = {}
@@ -37,7 +38,7 @@ OHLCV_AGG = OrderedDict((
 """Dictionary of rules for aggregating resampled OHLCV data frames,
 e.g.
 
-    df.resample('4H', label='right').agg(OHLCV_AGG)
+    df.resample('4H', label='right').agg(OHLCV_AGG).dropna()
 """
 
 TRADES_AGG = OrderedDict((
@@ -79,8 +80,8 @@ def barssince(condition: Sequence[bool], default=np.inf) -> int:
 
 def cross(series1: Sequence, series2: Sequence) -> bool:
     """
-    Return `True` if `series1` and `series2` just crossed (either
-    direction).
+    Return `True` if `series1` and `series2` just crossed
+    (above or below) each other.
 
         >>> cross(self.data.Close, self.sma)
         True
@@ -91,7 +92,7 @@ def cross(series1: Sequence, series2: Sequence) -> bool:
 
 def crossover(series1: Sequence, series2: Sequence) -> bool:
     """
-    Return `True` if `series1` just crossed over
+    Return `True` if `series1` just crossed over (above)
     `series2`.
 
         >>> crossover(self.data.Close, self.sma)
@@ -162,6 +163,39 @@ def quantile(series: Sequence, quantile: Union[None, float] = None):
             return np.nan
     assert 0 <= quantile <= 1, "quantile must be within [0, 1]"
     return np.nanpercentile(series, quantile * 100)
+
+
+def compute_stats(
+        *,
+        stats: pd.Series,
+        data: pd.DataFrame,
+        trades: pd.DataFrame = None,
+        risk_free_rate: float = 0.) -> pd.Series:
+    """
+    (Re-)compute strategy performance metrics.
+
+    `stats` is the statistics series as returned by `backtesting.backtesting.Backtest.run()`.
+    `data` is OHLC data as passed to the `backtesting.backtesting.Backtest`
+    the `stats` were obtained in.
+    `trades` can be a dataframe subset of `stats._trades` (e.g. only long trades).
+    You can also tune `risk_free_rate`, used in calculation of Sharpe and Sortino ratios.
+
+        >>> stats = Backtest(GOOG, MyStrategy).run()
+        >>> only_long_trades = stats._trades[stats._trades.Size > 0]
+        >>> long_stats = compute_stats(stats=stats, trades=only_long_trades,
+        ...                            data=GOOG, risk_free_rate=.02)
+    """
+    equity = stats._equity_curve.Equity
+    if trades is None:
+        trades = stats._trades
+    else:
+        # XXX: Is this buggy?
+        equity = equity.copy()
+        equity[:] = stats._equity_curve.Equity.iloc[0]
+        for t in trades.itertuples(index=False):
+            equity.iloc[t.EntryBar:] += t.PnL
+    return _compute_stats(trades=trades, equity=equity, ohlc_data=data,
+                          risk_free_rate=risk_free_rate, strategy_instance=stats._strategy)
 
 
 def resample_apply(rule: str,
