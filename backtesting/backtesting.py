@@ -603,7 +603,8 @@ class Trade:
     def pl(self):
         """Trade profit (positive) or loss (negative) in cash units."""
         price = self.__exit_price or self.__broker.last_price
-        return self.__size * (price - self.__entry_price)
+        mult = self.__broker._data.mult
+        return self.__size * (price - self.__entry_price) * mult
 
     @property
     def pl_pct(self):
@@ -778,6 +779,7 @@ class _Broker:
 
     def _process_orders(self):
         data = self._data
+        mult = data.mult
         open, high, low = data.Open[-1], data.High[-1], data.Low[-1]
         prev_close = data.Close[-2]
         reprocess_orders = False
@@ -860,7 +862,7 @@ class _Broker:
             size = order.size
             if -1 < size < 1:
                 size = copysign(int((self.margin_available * self._leverage * abs(size))
-                                    // adjusted_price), size)
+                                    // adjusted_price // mult), size)
                 # Not enough cash/margin even for a single unit
                 if not size:
                     self.orders.remove(order)
@@ -892,7 +894,7 @@ class _Broker:
                         break
 
             # If we don't have enough liquidity to cover for the order, cancel it
-            if abs(need_size) * adjusted_price > self.margin_available * self._leverage:
+            if abs(need_size) * adjusted_price * mult > self.margin_available * self._leverage:
                 self.orders.remove(order)
                 continue
 
@@ -986,6 +988,7 @@ class Backtest:
                  cash: float = 10_000,
                  commission: float = .0,
                  margin: float = 1.,
+                 mult=1,
                  trade_on_close=False,
                  hedging=False,
                  exclusive_orders=False
@@ -1083,6 +1086,7 @@ class Backtest:
                           'but `pd.DateTimeIndex` is advised.',
                           stacklevel=2)
 
+        self._mult = mult
         self._data: pd.DataFrame = data
         self._broker = partial(
             _Broker, cash=cash, commission=commission, margin=margin,
@@ -1131,7 +1135,7 @@ class Backtest:
             _trades                       Size  EntryB...
             dtype: object
         """
-        data = _Data(self._data.copy(deep=False))
+        data = _Data(self._data.copy(deep=False), mult=self._mult)
         broker: _Broker = self._broker(data=data)
         strategy: Strategy = self._strategy(broker, data, kwargs)
 
