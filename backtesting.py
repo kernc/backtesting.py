@@ -1373,14 +1373,6 @@ class Backtest:
                             batch_index, values = future.result()
                             for value, params in zip(values, param_batches[batch_index]):
                                 heatmap[tuple(params.values())] = value
-                # else:
-                #     if os.name == 'posix':
-                #         warnings.warn("For multiprocessing support in `Backtest.optimize()` "
-                #                       "set multiprocessing start method to 'fork'.")
-                #     for batch_index in _tqdm(range(len(param_batches))):
-                #         _, values = Backtest._mp_task(backtest_uuid, batch_index)
-                #         for value, params in zip(values, param_batches[batch_index]):
-                #             heatmap[tuple(params.values())] = value
             finally:
                 del Backtest._mp_backtests[backtest_uuid]
 
