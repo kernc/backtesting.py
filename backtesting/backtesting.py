@@ -21,6 +21,9 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 import numpy as np
 import pandas as pd
 
+if os.name == "posix":
+    mp.set_start_method('fork')
+
 try:
     from tqdm.auto import tqdm as _tqdm
     _tqdm = partial(_tqdm, leave=False)
@@ -1265,7 +1268,7 @@ class Backtest:
                               constraint=lambda p: p.sma1 < p.sma2)
 
         .. TODO::
-            Improve multiprocessing/parallel execution on Windos with start method 'spawn'.
+            Improve multiprocessing/parallel execution on Windows with start method 'spawn'.
         """
         if not kwargs:
             raise ValueError('Need some strategy parameters to optimize')
@@ -1359,7 +1362,7 @@ class Backtest:
             try:
                 # If multiprocessing start method is 'fork' (i.e. on POSIX), use
                 # a pool of processes to compute results in parallel.
-                # Otherwise (i.e. on Windos), sequential computation will be "faster".
+                # Otherwise (i.e. on Windows), sequential computation will be "faster".
                 if mp.get_start_method(allow_none=False) == 'fork':
                     with ProcessPoolExecutor() as executor:
                         futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
@@ -1369,14 +1372,6 @@ class Backtest:
                             batch_index, values = future.result()
                             for value, params in zip(values, param_batches[batch_index]):
                                 heatmap[tuple(params.values())] = value
-                else:
-                    if os.name == 'posix':
-                        warnings.warn("For multiprocessing support in `Backtest.optimize()` "
-                                      "set multiprocessing start method to 'fork'.")
-                    for batch_index in _tqdm(range(len(param_batches))):
-                        _, values = Backtest._mp_task(backtest_uuid, batch_index)
-                        for value, params in zip(values, param_batches[batch_index]):
-                            heatmap[tuple(params.values())] = value
             finally:
                 del Backtest._mp_backtests[backtest_uuid]
 
