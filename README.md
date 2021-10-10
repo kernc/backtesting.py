@@ -92,6 +92,7 @@ dtype: object
 
 Find more usage examples in the [documentation].
 
+
 Features
 --------
 * Simple, well-documented API
@@ -102,6 +103,9 @@ Features
 * Supports _any_ financial instrument with candlestick data
 * Detailed results
 * Interactive visualizations
+
+![xkcd.com/1570](https://imgs.xkcd.com/comics/engineer_syllogism.png)
+
 
 Alternatives
 ------------

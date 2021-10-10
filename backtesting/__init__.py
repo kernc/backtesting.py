@@ -1,4 +1,7 @@
 """
+
+![xkcd.com/1570](https://imgs.xkcd.com/comics/engineer_syllogism.png)
+
 ## Manuals
 
 * [**Quick Start User Guide**](../examples/Quick Start User Guide.html)
