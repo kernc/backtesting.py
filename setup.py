@@ -31,7 +31,7 @@ if __name__ == '__main__':
             'write_to': os.path.join('backtesting', '_version.py'),
         },
         install_requires=[
-            'numpy',
+            'numpy >= 1.17.0',
             'pandas >= 0.25.0, != 0.25.0',
             'bokeh >= 1.4.0',
         ],

@@ -20,6 +20,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
+from numpy.random import default_rng
 
 try:
     from tqdm.auto import tqdm as _tqdm
@@ -1254,7 +1255,7 @@ class Backtest:
         [plotting tools]: https://scikit-optimize.github.io/stable/modules/plots.html
 
         If you want reproducible optimization results, set `random_state`
-        to a fixed integer or a `numpy.random.RandomState` object.
+        to a fixed integer random seed.
 
         Additional keyword arguments represent strategy arguments with
         list-like collections of possible values. For example, the following
@@ -1321,7 +1322,7 @@ class Backtest:
             return size
 
         def _optimize_grid() -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
-            rand = np.random.RandomState(random_state).random
+            rand = default_rng(random_state).random
             grid_frac = (1 if max_tries is None else
                          max_tries if 0 < max_tries <= 1 else
                          max_tries / _grid_size())
