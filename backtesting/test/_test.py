@@ -556,8 +556,8 @@ class TestOptimize(TestCase):
     def test_max_tries(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
         OPT_PARAMS = dict(fast=range(2, 10, 2), slow=[2, 5, 7, 9])
-        for method, max_tries, random_state in (('grid', 5, 2),
-                                                ('grid', .3, 2),
+        for method, max_tries, random_state in (('grid', 5, 0),
+                                                ('grid', .3, 0),
                                                 ('skopt', 7, 0),
                                                 ('skopt', .45, 0)):
             with self.subTest(method=method,
