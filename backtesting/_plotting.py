@@ -25,10 +25,13 @@ from bokeh.models import (
     HoverTool,
     Range1d,
     DatetimeTickFormatter,
-    FuncTickFormatter,
     WheelZoomTool,
     LinearColorMapper,
 )
+try:
+    from bokeh.models import CustomJSTickFormatter
+except ImportError:  # Bokeh < 3.0
+    from bokeh.models import FuncTickFormatter as CustomJSTickFormatter
 from bokeh.io import output_notebook, output_file, show
 from bokeh.io.state import curstate
 from bokeh.layouts import gridplot
@@ -242,7 +245,7 @@ def plot(*, results: pd.Series,
     trades_cmap = factor_cmap('returns_positive', colors_darker, ['0', '1'])
 
     if is_datetime_index:
-        fig_ohlc.xaxis.formatter = FuncTickFormatter(
+        fig_ohlc.xaxis.formatter = CustomJSTickFormatter(
             args=dict(axis=fig_ohlc.xaxis[0],
                       formatter=DatetimeTickFormatter(days=['%d %b', '%a %d'],
                                                       months=['%m/%Y', "%b'%y"]),
