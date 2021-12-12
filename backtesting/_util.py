@@ -1,5 +1,5 @@
 import warnings
-from typing import Dict, List, Optional, Sequence, Union
+from typing import Dict, List, Optional, Sequence, Union, cast
 from numbers import Number
 
 import numpy as np
@@ -153,14 +153,14 @@ class _Data:
     @property
     def pip(self) -> float:
         if self.__pip is None:
-            self.__pip = 10**-np.median([len(s.partition('.')[-1])
-                                         for s in self.__arrays['Close'].astype(str)])
+            self.__pip = float(10**-np.median([len(s.partition('.')[-1])
+                                               for s in self.__arrays['Close'].astype(str)]))
         return self.__pip
 
     def __get_array(self, key) -> _Array:
         arr = self.__cache.get(key)
         if arr is None:
-            arr = self.__cache[key] = self.__arrays[key][:self.__i]
+            arr = self.__cache[key] = cast(_Array, self.__arrays[key][:self.__i])
         return arr
 
     @property
