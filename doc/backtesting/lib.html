@@ -95,8 +95,8 @@ You can also tune <code>risk_free_rate</code>, used in calculation of Sharpe and
 <span>def <span class="ident">cross</span></span>(<span>series1, series2)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Return <code>True</code> if <code>series1</code> and <code>series2</code> just crossed (either
-direction).</p>
+<div class="desc"><p>Return <code>True</code> if <code>series1</code> and <code>series2</code> just crossed
+(above or below) each other.</p>
 <pre><code>&gt;&gt;&gt; cross(self.data.Close, self.sma)
 True
 </code></pre></div>
@@ -105,7 +105,7 @@ True
 <span>def <span class="ident">crossover</span></span>(<span>series1, series2)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Return <code>True</code> if <code>series1</code> just crossed over
+<div class="desc"><p>Return <code>True</code> if <code>series1</code> just crossed over (above)
 <code>series2</code>.</p>
 <pre><code>&gt;&gt;&gt; crossover(self.data.Close, self.sma)
 True
@@ -402,7 +402,7 @@ data-gaCategoryParameter="backtesting.lib">
 </main>
 <footer id="footer">
 <p>
-<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.3.2</a>
+<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.3.3</a>
 <span style="color:#ddd">&#21328;</span>
 </p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
