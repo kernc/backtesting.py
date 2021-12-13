@@ -6,6 +6,13 @@ These were the major changes contributing to each release:
 ### 0.x.x
 
 
+### 0.3.3
+(2021-12-13)
+
+* Fix random generation with recent NumPy.
+* Fix Pandas deprecation warnings.
+* Replace Bokeh 3.0 deprecations.
+
 
 ### 0.3.2
 (2021-08-03)
