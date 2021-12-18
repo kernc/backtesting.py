@@ -286,7 +286,7 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
         series = series.s
 
     if agg is None:
-        agg = OHLCV_AGG.get(getattr(series, 'name', None), 'last')
+        agg = OHLCV_AGG.get(getattr(series, 'name', ''), 'last')
         if isinstance(series, pd.DataFrame):
             agg = {column: OHLCV_AGG.get(column, 'last')
                    for column in series.columns}
