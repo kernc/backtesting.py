@@ -1195,7 +1195,7 @@ class Backtest:
             )
 
         self.closed_trades = broker.closed_trades
-        
+
         return self._results
 
     def optimize(self, *,
