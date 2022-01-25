@@ -21,7 +21,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 import numpy as np
 import pandas as pd
 from numpy.random import default_rng
-
+from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union, Any
 try:
     from tqdm.auto import tqdm as _tqdm
     _tqdm = partial(_tqdm, leave=False)
@@ -1093,6 +1093,9 @@ class Backtest:
         self._strategy = strategy
         self._results: Optional[pd.Series] = None
 
+    def get_closed_trades(self, **kwargs) -> List[Any]:
+        return self.closed_trades
+
     def run(self, **kwargs) -> pd.Series:
         """
         Run the backtest. Returns `pd.Series` with results and statistics.
@@ -1191,6 +1194,8 @@ class Backtest:
                 strategy_instance=strategy,
             )
 
+        self.closed_trades = broker.closed_trades
+        
         return self._results
 
     def optimize(self, *,
