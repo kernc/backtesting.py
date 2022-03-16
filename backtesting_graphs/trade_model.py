@@ -1,5 +1,4 @@
 """ Trade Model: Trades that will be graphed in _plotting.plot."""
-
 from copy import copy
 from math import copysign
 from typing import Optional, Union
@@ -11,12 +10,12 @@ class Trade:
     """
     Trade Class
 
-    Represents a Trade object representing trades of an asset.
+    A Trade object representing trades of an asset.
 
     Class Attributes:
         size: Size of the trade
         entry_price: Price of buying a single token when entering the market
-        exit_price: Price of selling a single token when entering the market
+        exit_price: Price of selling a single token when exiting the market
         entry_time: Time at market entry
         exit_time: Time at market exit
         buy_fee: Total fees accrued through entering into the market

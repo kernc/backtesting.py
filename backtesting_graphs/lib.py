@@ -20,7 +20,6 @@ from typing import Sequence, Optional, Union, Callable
 import numpy as np
 import pandas as pd
 
-
 from ._stats import compute_stats as _compute_stats
 from ._util import _Array, _as_str
 
@@ -298,7 +297,6 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
 
     array = strategy_I(wrap_func, resampled, *args, **kwargs)
     return array
-
 
 def random_ohlc_data(example_data: pd.DataFrame, *,
                      frac=1., random_state: int = None) -> pd.DataFrame:

@@ -269,7 +269,7 @@ return this.labels[index] || "";
                   )),
                   fill_color='#ffffea', line_color='#ffcb66')
 
-        # Graphs the net position_equity_line
+        # Plots the net position over time
         net_pos_val_source_key = 'equity'
         net_pos_legend_label = "Net Value"
         source.add(equity, net_pos_val_source_key)
@@ -516,7 +516,6 @@ return this.labels[index] || "";
         merge_tools=True,
         **kwargs
     )
-    # show(fig_ohlc, browser=None if open_browser else 'none')
     html = file_html(fig, resources=CDN)
     if show_plot:
         show(fig, browser=None if open_browser else 'none')
