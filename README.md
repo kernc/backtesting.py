@@ -10,11 +10,7 @@ Backtesting.py
 
 Backtest trading strategies with Python.
 
-[**Project website**](https://kernc.github.io/backtesting.py)
-
-[Documentation]
-
-[![Star](https://i.imgur.com/LSI6p6O.png)](#top) the project if you use it.
+[**Project website**](https://kernc.github.io/backtesting.py) + [Documentation]
 
 [Documentation]: https://kernc.github.io/backtesting.py/doc/backtesting/
 
