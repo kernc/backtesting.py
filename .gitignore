@@ -1,3 +1,4 @@
+build/*
 *.py[cod]
 *.html
 *.png
