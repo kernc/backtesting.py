@@ -263,9 +263,9 @@ class Strategy(metaclass=ABCMeta):
         return self._data
 
     @property
-    def position(self) -> 'Position':
+    def positions(self) -> 'Dict[str, Position]':
         """Instance of `backtesting.backtesting.Position`."""
-        return self._broker.position
+        return self._broker.positions
 
     @property
     def orders(self) -> 'Tuple[Order, ...]':
@@ -402,9 +402,8 @@ class Order:
         return self
 
     def __repr__(self):
-        return '<Order {}>'.format(', '.join(f'{param}={round(value, 5)}'
+        return '<Order symbol={}, {}>'.format(self.__symbol, ', '.join(f'{param}={round(value, 5)}'
                                              for param, value in (
-                                                 ('symbol', self.__symbol),
                                                  ('size', self.__size),
                                                  ('limit', self.__limit_price),
                                                  ('stop', self.__stop_price),
@@ -704,11 +703,15 @@ class _Broker:
         self._equity = np.tile(np.nan, len(index))
         self.orders: List[Order] = []
         self.trades: List[Trade] = []
-        self.position = Position(self)
+        self.positions = {symbol:Position(self) for symbol in symbols}
         self.closed_trades: List[Trade] = []
 
+    @property
+    def pl(self):
+        return sum([position.pl for position in self.positions.values()])
+
     def __repr__(self):
-        return f'<Broker: {self._cash:.0f}{self.position.pl:+.1f} ({len(self.trades)} trades)>'
+        return f'<Broker: {self._cash:.0f}{self.pl:+.1f} ({len(self.trades)} trades)>'
 
     def new_order(self,
                   symbol: str,
@@ -834,7 +837,7 @@ class _Broker:
         for order in list(self.orders):  # type: Order
             open, high, low = self.last_open(order.symbol), self.last_high(order.symbol), self.last_low(order.symbol)
             prev_close = self.prev_close(order.symbol)
-
+            
             # Related SL/TP order was already removed
             if order not in self.orders:
                 continue
@@ -904,7 +907,7 @@ class _Broker:
             # Adjust price to include commission (or bid-ask spread).
             # In long positions, the adjusted price is a fraction higher, and vice versa.
             adjusted_price = self._adjusted_price(order.symbol, order.size, price)
-
+            
             # If order size was specified proportionally,
             # precompute true size in units, accounting for margin and spread/commissions
             size = order.size
@@ -917,12 +920,14 @@ class _Broker:
                     continue
             assert size == round(size)
             need_size = int(size)
-
+            
             if not self._hedging:
                 # Fill position by FIFO closing/reducing existing opposite-facing trades.
                 # Existing trades are closed at unadjusted price, because the adjustment
                 # was already made when buying.
                 for trade in list(self.trades):
+                    if trade.symbol != order.symbol:
+                        continue
                     if trade.is_long == order.is_long:
                         continue
                     assert trade.size * order.size < 0
@@ -1649,6 +1654,7 @@ class Backtest:
 
         return plot(
             results=results,
+            symbols=self._symbols,
             df=self._data,
             indicators=results._strategy._indicators,
             filename=filename,
