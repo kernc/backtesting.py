@@ -162,6 +162,7 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
 
 
 def plot(*, results: pd.Series,
+         symbols: List[str],
          df: pd.DataFrame,
          indicators: List[_Indicator],
          filename='', plot_width=None,

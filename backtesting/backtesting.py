@@ -49,6 +49,7 @@ class Strategy(metaclass=ABCMeta):
     `backtesting.backtesting.Strategy.next` to define
     your own strategy.
     """
+
     def __init__(self, broker, data, params):
         self._indicators = []
         self._broker: _Broker = broker
@@ -287,6 +288,7 @@ class _Orders(tuple):
     """
     TODO: remove this class. Only for deprecation.
     """
+
     def cancel(self):
         """Cancel all non-contingent (i.e. SL/TP) orders."""
         for order in self:
@@ -314,6 +316,7 @@ class Position:
         if self.position:
             ...  # we have a position, either long or short
     """
+
     def __init__(self, broker: '_Broker'):
         self.__broker = broker
 
@@ -378,6 +381,7 @@ class Order:
     [filled]: https://www.investopedia.com/terms/f/fill.asp
     [Good 'Til Canceled]: https://www.investopedia.com/terms/g/gtc.asp
     """
+
     def __init__(self, broker: '_Broker',
                  symbol: str,
                  size: float,
@@ -402,15 +406,17 @@ class Order:
         return self
 
     def __repr__(self):
-        return '<Order symbol={}, {}>'.format(self.__symbol, ', '.join(f'{param}={round(value, 5)}'
-                                             for param, value in (
-                                                 ('size', self.__size),
-                                                 ('limit', self.__limit_price),
-                                                 ('stop', self.__stop_price),
-                                                 ('sl', self.__sl_price),
-                                                 ('tp', self.__tp_price),
-                                                 ('contingent', self.is_contingent),
-                                             ) if value is not None))
+        return '<Order symbol={}, {}>'.format(self.__symbol, \
+                                                ', '.join(f'{param}={round(value, 5)}'
+                                                       for param, value in (
+                                                           ('size', self.__size),
+                                                           ('limit', self.__limit_price),
+                                                           ('stop', self.__stop_price),
+                                                           ('sl', self.__sl_price),
+                                                           ('tp', self.__tp_price),
+                                                           ('contingent',
+                                                            self.is_contingent),
+                                                       ) if value is not None))
 
     def cancel(self):
         """Cancel the order."""
@@ -523,6 +529,7 @@ class Trade:
     When an `Order` is filled, it results in an active `Trade`.
     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
     """
+
     def __init__(self, broker: '_Broker', symbol: str, size: int, entry_price: float, entry_bar):
         self.__broker = broker
         self.__symbol = symbol
@@ -535,7 +542,8 @@ class Trade:
         self.__tp_order: Optional[Order] = None
 
     def __repr__(self):
-        return f'<Trade symbol={self.__symbol} size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
+        return f'<Trade symbol={self.__symbol} size={self.__size} ' \
+               f'time={self.__entry_bar}-{self.__exit_bar or ""} ' \
                f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}>'
 
     def _replace(self, **kwargs):
@@ -703,7 +711,7 @@ class _Broker:
         self._equity = np.tile(np.nan, len(index))
         self.orders: List[Order] = []
         self.trades: List[Trade] = []
-        self.positions = {symbol:Position(self) for symbol in symbols}
+        self.positions = {symbol: Position(self) for symbol in symbols}
         self.closed_trades: List[Trade] = []
 
     @property
@@ -769,31 +777,30 @@ class _Broker:
 
         return order
 
-    #@property
+    # @property
     def last_price(self, symbol) -> float:
         """ Price at the last (current) close. """
         return self._data[f"{symbol}_Close"][-1]
 
-    #@property
+    # @property
     def prev_close(self, symbol) -> float:
         """ Price at the previous close. """
         return self._data[f"{symbol}_Close"][-2]
 
-    #@property
+    # @property
     def last_open(self, symbol) -> float:
         """ Price at the last open. """
         return self._data[f"{symbol}_Open"][-1]
 
-    #@property
+    # @property
     def last_high(self, symbol) -> float:
         """ Price at the last open. """
         return self._data[f"{symbol}_High"][-1]
 
-    #@property
+    # @property
     def last_low(self, symbol) -> float:
         """ Price at the last open. """
         return self._data[f"{symbol}_Low"][-1]
-
 
     def _adjusted_price(self, symbol, size=None, price=None) -> float:
         """
@@ -835,9 +842,10 @@ class _Broker:
 
         # Process orders
         for order in list(self.orders):  # type: Order
-            open, high, low = self.last_open(order.symbol), self.last_high(order.symbol), self.last_low(order.symbol)
+            open, high, low = self.last_open(order.symbol), self.last_high(
+                order.symbol), self.last_low(order.symbol)
             prev_close = self.prev_close(order.symbol)
-            
+
             # Related SL/TP order was already removed
             if order not in self.orders:
                 continue
@@ -907,7 +915,7 @@ class _Broker:
             # Adjust price to include commission (or bid-ask spread).
             # In long positions, the adjusted price is a fraction higher, and vice versa.
             adjusted_price = self._adjusted_price(order.symbol, order.size, price)
-            
+
             # If order size was specified proportionally,
             # precompute true size in units, accounting for margin and spread/commissions
             size = order.size
@@ -920,7 +928,7 @@ class _Broker:
                     continue
             assert size == round(size)
             need_size = int(size)
-            
+
             if not self._hedging:
                 # Fill position by FIFO closing/reducing existing opposite-facing trades.
                 # Existing trades are closed at unadjusted price, because the adjustment
@@ -953,7 +961,8 @@ class _Broker:
 
             # Open a new trade
             if need_size:
-                self._open_trade(order.symbol, adjusted_price, need_size, order.sl, order.tp, time_index)
+                self._open_trade(order.symbol, adjusted_price, need_size,
+                                 order.sl, order.tp, time_index)
 
                 # We need to reprocess the SL/TP orders newly added to the queue.
                 # This allows e.g. SL hitting in the same bar the order was open.
@@ -1034,6 +1043,7 @@ class Backtest:
     instance, or `backtesting.backtesting.Backtest.optimize` to
     optimize it.
     """
+
     def __init__(self,
                  symbols: List[str],
                  data: pd.DataFrame,
@@ -1095,7 +1105,8 @@ class Backtest:
         if not (isinstance(strategy, type) and issubclass(strategy, Strategy)):
             raise TypeError('`strategy` must be a Strategy sub-type')
         if not isinstance(symbols, list) or not all([isinstance(s, str) for s in symbols]) or len(symbols) == 0:
-            raise TypeError('`symbols` must be list of string with size > 0 representing symbols in data')
+            raise TypeError(
+                '`symbols` must be list of string with size > 0 representing symbols in data')
         if not isinstance(data, pd.DataFrame):
             raise TypeError("`data` must be a pandas.DataFrame with columns")
         if not isinstance(commission, Number):
@@ -1121,7 +1132,8 @@ class Backtest:
 
             if len(data) == 0:
                 raise ValueError('OHLC `data` is empty')
-            base_columns = [f"{symbol}_{column}" for column in ['Open', 'High', 'Low', 'Close', 'Volume']]
+            base_columns = [f"{symbol}_{column}" for column in [
+                'Open', 'High', 'Low', 'Close', 'Volume']]
             if len(data.columns.intersection(set(base_columns))) != 5:
                 raise ValueError("`data` must be a pandas.DataFrame with columns "
                                  "'symbol_Open', 'symbol_High', 'symbol_Low', 'symbol_Close',"

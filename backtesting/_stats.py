@@ -97,11 +97,10 @@ def compute_stats(
     r = []
     for symbol in symbols:
         c = ohlc_data[f"{symbol}_Close"].values
-        _r = (c[-1] - c[0]) / c[0] * 100 
-        s.loc[f'Buy & Hold Return for {symbol} [%]'] = _r # long-only return
+        _r = (c[-1] - c[0]) / c[0] * 100
+        s.loc[f'Buy & Hold Return for {symbol} [%]'] = _r  # long-only return
         r.append(_r)
-    s.loc[f'Avg Buy & Hold Return [%]'] = np.mean(r)
-
+    s.loc['Avg Buy & Hold Return [%]'] = np.mean(r)
 
     gmean_day_return: float = 0
     day_returns = np.array(np.nan)
