@@ -15,7 +15,7 @@ from collections import OrderedDict
 from itertools import compress
 from numbers import Number
 from inspect import currentframe
-from typing import Sequence, Optional, Union, Callable
+from typing import Sequence, Optional, Union, Callable, List
 
 import numpy as np
 import pandas as pd
@@ -167,6 +167,7 @@ def quantile(series: Sequence, quantile: Union[None, float] = None):
 
 def compute_stats(
         *,
+        symbols: List[str],
         stats: pd.Series,
         data: pd.DataFrame,
         trades: pd.DataFrame = None,
@@ -194,7 +195,7 @@ def compute_stats(
         equity[:] = stats._equity_curve.Equity.iloc[0]
         for t in trades.itertuples(index=False):
             equity.iloc[t.EntryBar:] += t.PnL
-    return _compute_stats(trades=trades, equity=equity, ohlc_data=data,
+    return _compute_stats(symbols=symbols, trades=trades, equity=equity, ohlc_data=data,
                           risk_free_rate=risk_free_rate, strategy_instance=stats._strategy)
 
 
