@@ -35,6 +35,7 @@ def geometric_mean(returns: pd.Series) -> float:
 def compute_stats(
         trades: Union[List['Trade'], pd.DataFrame],
         equity: np.ndarray,
+        symbols: List[str],
         ohlc_data: pd.DataFrame,
         strategy_instance: 'Strategy',
         risk_free_rate: float = 0,
@@ -92,8 +93,15 @@ def compute_stats(
     s.loc['Equity Final [$]'] = equity[-1]
     s.loc['Equity Peak [$]'] = equity.max()
     s.loc['Return [%]'] = (equity[-1] - equity[0]) / equity[0] * 100
-    c = ohlc_data.Close.values
-    s.loc['Buy & Hold Return [%]'] = (c[-1] - c[0]) / c[0] * 100  # long-only return
+
+    r = []
+    for symbol in symbols:
+        c = ohlc_data[f"{symbol}_Close"].values
+        _r = (c[-1] - c[0]) / c[0] * 100 
+        s.loc[f'Buy & Hold Return for {symbol} [%]'] = _r # long-only return
+        r.append(_r)
+    s.loc[f'Avg Buy & Hold Return [%]'] = np.mean(r)
+
 
     gmean_day_return: float = 0
     day_returns = np.array(np.nan)
