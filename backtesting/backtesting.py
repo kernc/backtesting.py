@@ -5,6 +5,8 @@ module directly, e.g.
 
     from backtesting import Backtest, Strategy
 """
+from __future__ import annotations
+
 import multiprocessing as mp
 import os
 import sys
@@ -24,6 +26,7 @@ from numpy.random import default_rng
 
 try:
     from tqdm.auto import tqdm as _tqdm
+
     _tqdm = partial(_tqdm, leave=False)
 except ImportError:
     def _tqdm(seq, **_):
@@ -49,11 +52,20 @@ class Strategy(metaclass=ABCMeta):
     `backtesting.backtesting.Strategy.next` to define
     your own strategy.
     """
-    def __init__(self, broker, data, params):
-        self._indicators = []
+
+    def __init__(self, broker: _Broker, data: _Data, params):
+        self._indicators: list[_Indicator] = []
         self._broker: _Broker = broker
         self._data: _Data = data
         self._params = self._check_params(params)
+
+    @property
+    def is_single_instrument(self) -> bool:
+        return self._data.is_single_instrument
+
+    @property
+    def instruments(self) -> set[str]:
+        return self._data.instruments
 
     def __repr__(self):
         return '<Strategy ' + str(self) + '>'
@@ -139,14 +151,18 @@ class Strategy(metaclass=ABCMeta):
         if is_arraylike and np.argmax(value.shape) == 0:
             value = value.T
 
-        if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data.Close):
+        if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data.index):
             raise ValueError(
                 'Indicators must return (optionally a tuple of) numpy.arrays of same '
-                f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}"'
-                f'shape: {getattr(value, "shape" , "")}, returned value: {value})')
+                f'length as `data` (data shape: {self._data.index.shape}; indicator "{name}"'
+                f'shape: {getattr(value, "shape", "")}, returned value: {value})')
 
         if plot and overlay is None and np.issubdtype(value.dtype, np.number):
-            x = value / self._data.Close
+            if self._data.is_single_instrument:
+                x = value / self._data['default_instrument'].Close
+            else:
+                # fixme: check if it is okay omit normalizing
+                x = value  # x = value / self._data.Close
             # By default, overlay if strong majority of indicator values
             # is within 30% of Close
             with np.errstate(invalid='ignore'):
@@ -192,9 +208,11 @@ class Strategy(metaclass=ABCMeta):
 
     class __FULL_EQUITY(float):
         def __repr__(self): return '.9999'
+
     _FULL_EQUITY = __FULL_EQUITY(1 - sys.float_info.epsilon)
 
     def buy(self, *,
+            instrument: str = 'default_instrument',
             size: float = _FULL_EQUITY,
             limit: float = None,
             stop: float = None,
@@ -207,9 +225,10 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(size, limit, stop, sl, tp)
+        return self._broker.new_order(size, limit, stop, sl, tp, instrument=instrument)
 
     def sell(self, *,
+             instrument: str = 'default_instrument',
              size: float = _FULL_EQUITY,
              limit: float = None,
              stop: float = None,
@@ -220,14 +239,20 @@ class Strategy(metaclass=ABCMeta):
 
         See also `Strategy.buy()`.
         """
-        assert 0 < size < 1 or round(size) == size, \
+        assert (
+            0 < size < 1 or round(size) == size,
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(-size, limit, stop, sl, tp)
+        )
+        return self._broker.new_order(-size, limit, stop, sl, tp, instrument=instrument)
 
     @property
-    def equity(self) -> float:
+    def equity(self) -> Union[float, dict[str, float]]:
         """Current account equity (cash plus assets)."""
         return self._broker.equity
+
+    @property
+    def equity_total(self) -> float:
+        return self._broker.equity_total
 
     @property
     def data(self) -> _Data:
@@ -264,25 +289,44 @@ class Strategy(metaclass=ABCMeta):
         return self._broker.position
 
     @property
-    def orders(self) -> 'Tuple[Order, ...]':
+    def orders(self) -> Tuple[Order, ...]:
         """List of orders (see `Order`) waiting for execution."""
         return _Orders(self._broker.orders)
 
     @property
-    def trades(self) -> 'Tuple[Trade, ...]':
+    def orders_by_instrument(self) -> dict[str, Tuple[Order, ...]]:
+        """List of orders (see `Order`) waiting for execution."""
+        return {instrument: _Orders([order for order in self._broker.orders if order.instrument == instrument])
+                for instrument in self.instruments}
+
+    @property
+    def trades(self) -> Tuple[Trade, ...]:
         """List of active trades (see `Trade`)."""
         return tuple(self._broker.trades)
 
     @property
-    def closed_trades(self) -> 'Tuple[Trade, ...]':
+    def trades_by_instrument(self) -> dict[str, Tuple[Trade, ...]]:
+        """List of active trades (see `Trade`)."""
+        return {instrument: tuple(trade for trade in self._broker.trades if trade.instrument == instrument)
+                for instrument in self.instruments}
+
+    @property
+    def closed_trades(self) -> Tuple[Trade, ...]:
         """List of settled trades (see `Trade`)."""
         return tuple(self._broker.closed_trades)
+
+    @property
+    def closed_trades_by_instrument(self) -> dict[str, Tuple[Trade, ...]]:
+        """List of settled trades (see `Trade`)."""
+        return {instrument: tuple(trade for trade in self._broker.closed_trades if trade.instrument == instrument)
+                for instrument in self.instruments}
 
 
 class _Orders(tuple):
     """
     TODO: remove this class. Only for deprecation.
     """
+
     def cancel(self):
         """Cancel all non-contingent (i.e. SL/TP) orders."""
         for order in self:
@@ -310,21 +354,39 @@ class Position:
         if self.position:
             ...  # we have a position, either long or short
     """
-    def __init__(self, broker: '_Broker'):
+
+    def __init__(self, broker: _Broker):
         self.__broker = broker
+
+    @property
+    def instruments(self) -> set[str]:
+        return self.__broker.instruments
+
+    @property
+    def is_single_instrument(self) -> bool:
+        return self.__broker.is_single_instrument
 
     def __bool__(self):
         return self.size != 0
 
     @property
-    def size(self) -> float:
+    def size(self) -> Union[float, dict[str, float]]:
         """Position size in units of asset. Negative if position is short."""
-        return sum(trade.size for trade in self.__broker.trades)
+        if self.is_single_instrument:
+            return sum(trade.size for trade in self.__broker.trades)
+        else:
+            return {instrument: sum(trade.size for trade in self.__broker.trades if trade.instrument == instrument)
+                    for instrument in self.instruments}
 
     @property
     def pl(self) -> float:
         """Profit (positive) or loss (negative) of the current position in cash units."""
-        return sum(trade.pl for trade in self.__broker.trades)
+        return sum(self.pl_by_instrument.values())
+
+    @property
+    def pl_by_instrument(self) -> dict[str, float]:
+        return {instrument: sum(trade.pl for trade in self.__broker.trades if trade.instrument == instrument)
+                for instrument in self.instruments}
 
     @property
     def pl_pct(self) -> float:
@@ -335,14 +397,32 @@ class Position:
         return (pl_pcts * weights).sum()
 
     @property
-    def is_long(self) -> bool:
-        """True if the position is long (position size is positive)."""
-        return self.size > 0
+    def pl_pct_by_instrument(self) -> dict[str, float]:
+        result = {}
+        for instrument in self.instruments:
+            weights = np.abs([trade.size for trade in self.__broker.trades if trade.instrument == instrument])
+            weights = weights / weights.sum()
+            pl_pcts = np.array([trade.pl_pct for trade in self.__broker.trades if trade.instrument == instrument])
+            result[instrument] = (pl_pcts * weights).sum()
+        return result
 
     @property
-    def is_short(self) -> bool:
+    def is_long(self) -> Union[bool, dict[str, bool]]:
+        """True if the position is long (position size is positive)."""
+        if self.is_single_instrument:
+            return self.size > 0
+        else:
+            return {instrument: instrument_size > 0
+                    for instrument, instrument_size in self.size.items()}
+
+    @property
+    def is_short(self) -> Union[bool, dict[str, bool]]:
         """True if the position is short (position size is negative)."""
-        return self.size < 0
+        if self.is_single_instrument:
+            return self.size < 0
+        else:
+            return {instrument: instrument_size < 0
+                    for instrument, instrument_size in self.size.items()}
 
     def close(self, portion: float = 1.):
         """
@@ -350,6 +430,11 @@ class Position:
         """
         for trade in self.__broker.trades:
             trade.close(portion)
+
+    def close_instrument(self, instrument: str, portion: float = 1.):
+        for trade in self.__broker.trades:
+            if trade.instrument == instrument:
+                trade.close(portion)
 
     def __repr__(self):
         return f'<Position: {self.size} ({len(self.__broker.trades)} trades)>'
@@ -374,21 +459,30 @@ class Order:
     [filled]: https://www.investopedia.com/terms/f/fill.asp
     [Good 'Til Canceled]: https://www.investopedia.com/terms/g/gtc.asp
     """
-    def __init__(self, broker: '_Broker',
+
+    def __init__(self, broker: _Broker,
                  size: float,
+                 instrument: str = 'default_instrument',
                  limit_price: float = None,
                  stop_price: float = None,
                  sl_price: float = None,
                  tp_price: float = None,
-                 parent_trade: 'Trade' = None):
-        self.__broker = broker
+                 parent_trade: Trade = None):
+        if not broker.is_single_instrument and instrument == 'default_instrument':
+            raise ValueError('instrument must be specified for order, when backtesting with multiple instruments')
+        self.__instrument: Optional[str] = instrument
+        self.__broker: _Broker = broker
         assert size != 0
-        self.__size = size
-        self.__limit_price = limit_price
-        self.__stop_price = stop_price
-        self.__sl_price = sl_price
-        self.__tp_price = tp_price
-        self.__parent_trade = parent_trade
+        self.__size: float = size
+        self.__limit_price: float = limit_price
+        self.__stop_price: float = stop_price
+        self.__sl_price: float = sl_price
+        self.__tp_price: float = tp_price
+        self.__parent_trade: Trade = parent_trade
+
+    @property
+    def instrument(self) -> Optional[str]:
+        return self.__instrument
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
@@ -404,6 +498,8 @@ class Order:
                                                  ('sl', self.__sl_price),
                                                  ('tp', self.__tp_price),
                                                  ('contingent', self.is_contingent),
+                                                 ('instrument',
+                                                  None if self.instrument == 'default_instrument' else self.instrument),
                                              ) if value is not None))
 
     def cancel(self):
@@ -509,7 +605,11 @@ class Trade:
     When an `Order` is filled, it results in an active `Trade`.
     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
     """
-    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar):
+
+    def __init__(self, broker: _Broker, size: int, entry_price: float, entry_bar, *, instrument: str = 'default_instrument'):
+        if not broker.is_single_instrument and instrument == 'default_instrument':
+            raise ValueError('instrument must be specified for trade, when backtesting with multiple instruments')
+        self.__instrument = instrument
         self.__broker = broker
         self.__size = size
         self.__entry_price = entry_price
@@ -519,9 +619,16 @@ class Trade:
         self.__sl_order: Optional[Order] = None
         self.__tp_order: Optional[Order] = None
 
+    @property
+    def instrument(self) -> Optional[str]:
+        return self.__instrument
+
     def __repr__(self):
-        return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
-               f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}>'
+        return (
+            f'<Trade {f"instrument={self.instrument}" if self.instrument != "default_instrument" else ""} '
+            f'size={self.size} time={self.entry_bar}-{self.exit_bar or ""} '
+            f'price={self.entry_price}-{self.exit_price or ""} pl={self.pl:.0f}>'
+        )
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
@@ -688,6 +795,14 @@ class _Broker:
     def __repr__(self):
         return f'<Broker: {self._cash:.0f}{self.position.pl:+.1f} ({len(self.trades)} trades)>'
 
+    @property
+    def is_single_instrument(self) -> bool:
+        return self._data.is_single_instrument
+
+    @property
+    def instruments(self) -> set[str]:
+        return self._data.instruments
+
     def new_order(self,
                   size: float,
                   limit: float = None,
@@ -695,10 +810,12 @@ class _Broker:
                   sl: float = None,
                   tp: float = None,
                   *,
+                  instrument: str = 'default_instrument',
                   trade: Trade = None):
         """
         Argument size indicates whether the order is long or short
         """
+        # fixme
         size = float(size)
         stop = stop and float(stop)
         limit = limit and float(limit)
@@ -739,9 +856,51 @@ class _Broker:
         return order
 
     @property
-    def last_price(self) -> float:
+    def last_price(self) -> Union[float, dict[str, float]]:
         """ Price at the last (current) close. """
-        return self._data.Close[-1]
+        if self.is_single_instrument:
+            return self.last_close['default_instrument']
+        else:
+            return self.last_close
+
+    @property
+    def last_open(self) -> Union[float, dict[str, float]]:
+        """ Price at the last (current) open. """
+        return {instrument: instrument_open[-1]
+                for instrument, instrument_open in self._data.Open.items()}
+
+    @property
+    def last_high(self) -> Union[float, dict[str, float]]:
+        """ Price at the last (current) high. """
+        return {instrument: instrument_high[-1]
+                for instrument, instrument_high in self._data.High.items()}
+
+    @property
+    def last_low(self) -> Union[float, dict[str, float]]:
+        """ Price at the last (current) low. """
+        if self.is_single_instrument:
+            return self._data.Low[-1]
+        else:
+            return {instrument: instrument_low[-1]
+                    for instrument, instrument_low in self._data.Low.items()}
+
+    @property
+    def last_close(self) -> Union[float, dict[str, float]]:
+        """ Price at the last (current) close. """
+        if self.is_single_instrument:
+            return self._data.Close[-1]
+        else:
+            return {instrument: instrument_close[-1]
+                    for instrument, instrument_close in self._data.Close.items()}
+
+    @property
+    def prev_close(self) -> Union[float, dict[str, float]]:
+        """ Price at the prev (current) close. """
+        if self.is_single_instrument:
+            return self._data.Close[-2]
+        else:
+            return {instrument: instrument_close[-2]
+                    for instrument, instrument_close in self._data.Close.items()}
 
     def _adjusted_price(self, size=None, price=None) -> float:
         """
@@ -751,8 +910,21 @@ class _Broker:
         return (price or self.last_price) * (1 + copysign(self._commission, size))
 
     @property
-    def equity(self) -> float:
-        return self._cash + sum(trade.pl for trade in self.trades)
+    def equity(self) -> Union[float, tuple[float, dict[str, float]]]:
+        result = {instrument: sum(trade.pl for trade in self.trades if trade.instrument == instrument)
+                  for instrument in self._data.instruments}
+        if self.is_single_instrument:
+            return self._cash + result['default_instrument']
+        else:
+            return self._cash, result
+
+    @property
+    def equity_total(self) -> float:
+        if self.is_single_instrument:
+            return self.equity
+        else:
+            cash, equities = self.equity
+            return cash + sum(equities.values())
 
     @property
     def margin_available(self) -> float:
@@ -772,20 +944,25 @@ class _Broker:
         if equity <= 0:
             assert self.margin_available <= 0
             for trade in self.trades:
-                self._close_trade(trade, self._data.Close[-1], i)
+                self._close_trade(trade, self.last_price, i)
             self._cash = 0
             self._equity[i:] = 0
             raise _OutOfMoneyError
 
     def _process_orders(self):
         data = self._data
-        open, high, low = data.Open[-1], data.High[-1], data.Low[-1]
-        prev_close = data.Close[-2]
+        open, high, low = self.last_open, self.last_high, self.last_low
+        prev_close = self.prev_close
+        if self.is_single_instrument:
+            open = {'default_instrument': open}
+            high = {'default_instrument': high}
+            low = {'default_instrument': low}
+            prev_close = {'default_instrument': prev_close}
         reprocess_orders = False
 
         # Process orders
         for order in list(self.orders):  # type: Order
-
+            instrument = order.instrument
             # Related SL/TP order was already removed
             if order not in self.orders:
                 continue
@@ -793,7 +970,7 @@ class _Broker:
             # Check if stop condition was hit
             stop_price = order.stop
             if stop_price:
-                is_stop_hit = ((high > stop_price) if order.is_long else (low < stop_price))
+                is_stop_hit = ((high[instrument] > stop_price) if order.is_long else (low[instrument] < stop_price))
                 if not is_stop_hit:
                     continue
 
@@ -804,7 +981,7 @@ class _Broker:
             # Determine purchase price.
             # Check if limit order can be filled.
             if order.limit:
-                is_limit_hit = low < order.limit if order.is_long else high > order.limit
+                is_limit_hit = low[instrument] < order.limit if order.is_long else high[instrument] > order.limit
                 # When stop and limit are hit within the same bar, we pessimistically
                 # assume limit was hit before the stop (i.e. "before it counts")
                 is_limit_hit_before_stop = (is_limit_hit and
@@ -821,9 +998,9 @@ class _Broker:
             else:
                 # Market-if-touched / market order
                 price = prev_close if self._trade_on_close else open
-                price = (max(price, stop_price or -np.inf)
+                price = (max(price[instrument], stop_price or -np.inf)
                          if order.is_long else
-                         min(price, stop_price or np.inf))
+                         min(price[instrument], stop_price or np.inf))
 
             # Determine entry/exit bar index
             is_market_order = not order.limit and not stop_price
@@ -907,8 +1084,8 @@ class _Broker:
                 if order.sl or order.tp:
                     if is_market_order:
                         reprocess_orders = True
-                    elif (low <= (order.sl or -np.inf) <= high or
-                          low <= (order.tp or -np.inf) <= high):
+                    elif (low[instrument] <= (order.sl or -np.inf) <= high[instrument] or
+                          low[instrument] <= (order.tp or -np.inf) <= high[instrument]):
                         warnings.warn(
                             f"({data.index[-1]}) A contingent SL/TP order would execute in the "
                             "same bar its parent stop/limit order was turned into a trade. "
@@ -947,7 +1124,7 @@ class _Broker:
 
         self._close_trade(close_trade, price, time_index)
 
-    def _close_trade(self, trade: Trade, price: float, time_index: int):
+    def _close_trade(self, trade: Trade, price: dict[str, float], time_index: int):
         self.trades.remove(trade)
         if trade._sl_order:
             self.orders.remove(trade._sl_order)
@@ -980,8 +1157,9 @@ class Backtest:
     instance, or `backtesting.backtesting.Backtest.optimize` to
     optimize it.
     """
+
     def __init__(self,
-                 data: pd.DataFrame,
+                 data: Union[pd.DataFrame, dict[str, pd.DataFrame]],
                  strategy: Type[Strategy],
                  *,
                  cash: float = 10_000,
@@ -994,17 +1172,22 @@ class Backtest:
         """
         Initialize a backtest. Requires data and a strategy to test.
 
-        `data` is a `pd.DataFrame` with columns:
+        `data` is either a `pd.DataFrame`
+         or a dictionary containing instrument names (`str`) and corresponding instrument data (`pd.DataFrame`)
+
+        The data frame(s) must have columns:
         `Open`, `High`, `Low`, `Close`, and (optionally) `Volume`.
         If any columns are missing, set them to what you have available,
         e.g.
 
             df['Open'] = df['High'] = df['Low'] = df['Close']
 
-        The passed data frame can contain additional columns that
+        The passed data frame(s) can contain additional columns that
         can be used by the strategy (e.g. sentiment info).
-        DataFrame index can be either a datetime index (timestamps)
-        or a monotonic range index (i.e. a sequence of periods).
+
+        DataFrame index must be a datetime index (timestamps)
+        If a single instrument data is being passed,
+        a monotonic range index (i.e. a sequence of periods) is also acceptable.
 
         `strategy` is a `backtesting.backtesting.Strategy`
         _subclass_ (not an instance).
@@ -1039,56 +1222,20 @@ class Backtest:
 
         if not (isinstance(strategy, type) and issubclass(strategy, Strategy)):
             raise TypeError('`strategy` must be a Strategy sub-type')
-        if not isinstance(data, pd.DataFrame):
-            raise TypeError("`data` must be a pandas.DataFrame with columns")
+
         if not isinstance(commission, Number):
             raise TypeError('`commission` must be a float value, percent of '
                             'entry order price')
 
-        data = data.copy(deep=False)
+        if isinstance(data, pd.DataFrame):
+            data = {'default_instrument': data}
 
-        # Convert index to datetime index
-        if (not isinstance(data.index, pd.DatetimeIndex) and
-            not isinstance(data.index, pd.RangeIndex) and
-            # Numeric index with most large numbers
-            (data.index.is_numeric() and
-             (data.index > pd.Timestamp('1975').timestamp()).mean() > .8)):
-            try:
-                data.index = pd.to_datetime(data.index, infer_datetime_format=True)
-            except ValueError:
-                pass
+        self._data: dict[str, pd.DataFrame] = data
 
-        if 'Volume' not in data:
-            data['Volume'] = np.nan
-
-        if len(data) == 0:
-            raise ValueError('OHLC `data` is empty')
-        if len(data.columns.intersection({'Open', 'High', 'Low', 'Close', 'Volume'})) != 5:
-            raise ValueError("`data` must be a pandas.DataFrame with columns "
-                             "'Open', 'High', 'Low', 'Close', and (optionally) 'Volume'")
-        if data[['Open', 'High', 'Low', 'Close']].isnull().values.any():
-            raise ValueError('Some OHLC values are missing (NaN). '
-                             'Please strip those lines with `df.dropna()` or '
-                             'fill them in with `df.interpolate()` or whatever.')
-        if np.any(data['Close'] > cash):
-            warnings.warn('Some prices are larger than initial cash value. Note that fractional '
-                          'trading is not supported. If you want to trade Bitcoin, '
-                          'increase initial cash, or trade μBTC or satoshis instead (GH-134).',
-                          stacklevel=2)
-        if not data.index.is_monotonic_increasing:
-            warnings.warn('Data index is not sorted in ascending order. Sorting.',
-                          stacklevel=2)
-            data = data.sort_index()
-        if not isinstance(data.index, pd.DatetimeIndex):
-            warnings.warn('Data index is not datetime. Assuming simple periods, '
-                          'but `pd.DateTimeIndex` is advised.',
-                          stacklevel=2)
-
-        self._data: pd.DataFrame = data
         self._broker = partial(
             _Broker, cash=cash, commission=commission, margin=margin,
             trade_on_close=trade_on_close, hedging=hedging,
-            exclusive_orders=exclusive_orders, index=data.index,
+            exclusive_orders=exclusive_orders,
         )
         self._strategy = strategy
         self._results: Optional[pd.Series] = None
@@ -1132,7 +1279,7 @@ class Backtest:
             _trades                       Size  EntryB...
             dtype: object
         """
-        data = _Data(self._data.copy(deep=False))
+        data = _Data(self._data)
         broker: _Broker = self._broker(data=data)
         strategy: Strategy = self._strategy(broker, data, kwargs)
 
@@ -1144,16 +1291,20 @@ class Backtest:
                            for attr, indicator in strategy.__dict__.items()
                            if isinstance(indicator, _Indicator)}.items()
 
-        # Skip first few candles where indicators are still "warming up"
-        # +1 to have at least two entries available
-        start = 1 + max((np.isnan(indicator.astype(float)).argmin(axis=-1).max()
-                         for _, indicator in indicator_attrs), default=0)
+        if data._is_single_instrument:
+            # Skip first few candles where indicators are still "warming up"
+            # +1 to have at least two entries available
+            start = 1 + max((np.isnan(indicator.astype(float)).argmin(axis=-1).max()
+                             for _, indicator in indicator_attrs), default=0)
+        else:
+            # if there are multiple instruments, there might be NaN values anyway
+            start = 0
 
         # Disable "invalid value encountered in ..." warnings. Comparison
         # np.nan >= 3 is not invalid; it's False.
         with np.errstate(invalid='ignore'):
-
-            for i in range(start, len(self._data)):
+            index = data.index.copy()
+            for i in range(start, len(index)):
                 # Prepare data and indicators for `next` call
                 data._set_length(i + 1)
                 for attr, indicator in indicator_attrs:
@@ -1180,13 +1331,13 @@ class Backtest:
 
             # Set data back to full length
             # for future `indicator._opts['data'].index` calls to work
-            data._set_length(len(self._data))
+            data._set_length(len(index))
 
             equity = pd.Series(broker._equity).bfill().fillna(broker._cash).values
             self._results = compute_stats(
                 trades=broker.closed_trades,
                 equity=equity,
-                ohlc_data=self._data,
+                data=self._data,
                 risk_free_rate=0.0,
                 strategy_instance=strategy,
             )
@@ -1507,7 +1658,8 @@ class Backtest:
              smooth_equity=False, relative_equity=True,
              superimpose: Union[bool, str] = True,
              resample=True, reverse_indicators=False,
-             show_legend=True, open_browser=True):
+             show_legend=True, open_browser=True,
+             instruments: Optional[list[str]] = None):
         """
         Plot the progression of the last backtest run.
 
@@ -1524,6 +1676,10 @@ class Backtest:
         `plot_width` is the width of the plot in pixels. If None (default),
         the plot is made to span 100% of browser width. The height is
         currently non-adjustable.
+
+        If `instruments` is provided, only the selected instruments will be plotted.
+        By default, if running for single instrument data, the instrument will be plotted.
+        If running for multiple instruments, only the instruments for which trades were taken will be plotted.
 
         If `plot_equity` is `True`, the resulting plot will contain
         an equity (initial cash plus assets) graph section. This is the same
@@ -1589,9 +1745,17 @@ class Backtest:
                 raise RuntimeError('First issue `backtest.run()` to obtain results.')
             results = self._results
 
+        if instruments is None:
+            if self._is_single_instrument:
+                instruments = ['default_instrument']
+            else:
+                # todo: find instruments for which trades were taken
+                instruments = []
+
         return plot(
             results=results,
-            df=self._data,
+            data=self._data,
+            instruments=instruments,
             indicators=results._strategy._indicators,
             filename=filename,
             plot_width=plot_width,

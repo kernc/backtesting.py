@@ -33,15 +33,16 @@ def geometric_mean(returns: pd.Series) -> float:
 
 
 def compute_stats(
-        trades: Union[List['Trade'], pd.DataFrame],
+        trades: Union[List[Trade], pd.DataFrame],
         equity: np.ndarray,
-        ohlc_data: pd.DataFrame,
-        strategy_instance: 'Strategy',
+        ohlc_data: dict[str, pd.DataFrame],
+        index: pd.Index,
+        strategy_instance: Strategy,
         risk_free_rate: float = 0,
 ) -> pd.Series:
     assert -1 < risk_free_rate < 1
+    is_single_instrument = len(ohlc_data) == 1
 
-    index = ohlc_data.index
     dd = 1 - equity / np.maximum.accumulate(equity)
     dd_dur, dd_peaks = compute_drawdown_duration_peaks(pd.Series(dd, index=index))
 
@@ -92,8 +93,10 @@ def compute_stats(
     s.loc['Equity Final [$]'] = equity[-1]
     s.loc['Equity Peak [$]'] = equity.max()
     s.loc['Return [%]'] = (equity[-1] - equity[0]) / equity[0] * 100
-    c = ohlc_data.Close.values
-    s.loc['Buy & Hold Return [%]'] = (c[-1] - c[0]) / c[0] * 100  # long-only return
+
+    if is_single_instrument:
+        c = ohlc_data['default_instrument'].Close.values
+        s.loc['Buy & Hold Return [%]'] = (c[-1] - c[0]) / c[0] * 100  # long-only return
 
     gmean_day_return: float = 0
     day_returns = np.array(np.nan)
