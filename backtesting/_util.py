@@ -1,6 +1,6 @@
 import warnings
-from typing import Dict, List, Optional, Sequence, Union, cast
 from numbers import Number
+from typing import Dict, List, Optional, Sequence, Union, cast
 
 import numpy as np
 import pandas as pd
@@ -45,6 +45,7 @@ class _Array(np.ndarray):
     ndarray extended to supply .name and other arbitrary properties
     in ._opts dict.
     """
+
     def __new__(cls, array, *, name=None, **kwargs):
         obj = np.asarray(array).view(cls)
         obj.name = name or array.name
@@ -107,13 +108,92 @@ class _Data:
     and the returned "series" are _not_ `pd.Series` but `np.ndarray`
     for performance reasons.
     """
-    def __init__(self, df: pd.DataFrame):
-        self.__df = df
-        self.__i = len(df)
+
+    def __init__(self, data: Union[pd.DataFrame, dict[str, pd.DataFrame]]):
+        self._is_single_instrument = isinstance(data, pd.DataFrame)
+        if self._is_single_instrument:
+            # internally, we will always store
+            data = {'default_instrument': data}
+        index = pd.Index()
+        for instrument, instrument_data in data.items():
+            data_name = "`data`" if self._is_single_instrument else f"`data[{instrument}]`"
+            if not isinstance(instrument_data, pd.DataFrame):
+                raise TypeError(' '.join([
+                    f"{data_name} must be a pandas.DataFrame",
+                    "or a dictionary containing instrument names (`str`) and corresponding instrument data (`pd.DataFrame`)"
+                    if self.___is_single_instrument else "",
+                    "with columns"
+                ]))
+
+            instrument_data = instrument_data.copy(deep=False)
+
+            # Convert index to datetime index
+            if (not isinstance(instrument_data.index, pd.DatetimeIndex) and
+                    not isinstance(instrument_data.index, pd.RangeIndex) and
+                    # Numeric index with most large numbers
+                    (instrument_data.index.is_numeric() and
+                     (instrument_data.index > pd.Timestamp('1975').timestamp()).mean() > .8)):
+                try:
+                    instrument_data.index = pd.to_datetime(instrument_data.index, infer_datetime_format=True)
+                except ValueError:
+                    pass
+
+            if 'Volume' not in instrument_data:
+                instrument_data['Volume'] = np.nan
+
+            if len(instrument_data) == 0:
+                raise ValueError(f'{instrument_data} OHLC is empty')
+            if len(instrument_data.columns.intersection({'Open', 'High', 'Low', 'Close', 'Volume'})) != 5:
+                raise ValueError(f"{data_name} must be a pandas.DataFrame with columns "
+                                 "'Open', 'High', 'Low', 'Close', and (optionally) 'Volume'")
+            if instrument_data[['Open', 'High', 'Low', 'Close']].isnull().values.any():
+                raise ValueError('Some OHLC values are missing (NaN). '
+                                 'Please strip those lines with `df.dropna()` or '
+                                 'fill them in with `df.interpolate()` or whatever.')
+            if not instrument_data.index.is_monotonic_increasing:
+                warnings.warn(f'{data_name} index is not sorted in ascending order. Sorting.',
+                              stacklevel=2)
+                instrument_data = instrument_data.sort_index()
+            if not isinstance(instrument_data.index, pd.DatetimeIndex):
+                if self.__is_single_instrument:
+                    warnings.warn(f'{data_name} index is not datetime. Assuming simple periods, '
+                                  'but `pd.DateTimeIndex` is advised.',
+                                  stacklevel=2)
+                else:
+                    raise ValueError(f'{data_name} index is not datetime')
+            index = self._index.union(instrument_data.index)
+            data[instrument] = instrument_data.copy(deep=False)
+
+        df = pd.DataFrame()
+        instrument_data: pd.DataFrame
+        for instrument, instrument_data in data.items():
+            instrument_data.index = index
+            # if data for some instruments is available from an earlier date than others
+            # fill 0s for the other instruments' data.
+            instrument_data = instrument_data.fillna(value=0)
+            # rename columns before join
+            instrument_data.rename(
+                columns={col: col if self._is_single_instrument else f'{instrument}-{col}'
+                         for col in 'Open Low High Close Volume'.split()},
+                inplace=True
+            )
+            df = df.join(instrument_data)
+
+        self.__instruments = set(data.keys())
+        self.__df: pd.DataFrame = df
+        self.__i = len(index)
         self.__pip: Optional[float] = None
         self.__cache: Dict[str, _Array] = {}
         self.__arrays: Dict[str, _Array] = {}
         self._update()
+
+    @property
+    def is_single_instrument(self) -> bool:
+        return self._is_single_instrument
+
+    @property
+    def instruments(self) -> set[str]:
+        return self.__instruments
 
     def __getitem__(self, item):
         return self.__get_array(item)
@@ -138,7 +218,8 @@ class _Data:
     def __repr__(self):
         i = min(self.__i, len(self.__df) - 1)
         index = self.__arrays['__index'][i]
-        items = ', '.join(f'{k}={v}' for k, v in self.__df.iloc[i].items())
+        items = ', '.join(f'{k}={v}'
+                          for k, v in self.__df.iloc[i].items())
         return f'<Data i={i} ({index}) {items}>'
 
     def __len__(self):
@@ -146,16 +227,21 @@ class _Data:
 
     @property
     def df(self) -> pd.DataFrame:
-        return (self.__df.iloc[:self.__i]
-                if self.__i < len(self.__df)
-                else self.__df)
+        return (self.__data.iloc[:self.__i]
+                if self.__i < len(self.__data)
+                else self.__data)
 
     @property
-    def pip(self) -> float:
+    def pip(self) -> Union[dict[str, float], float]:
         if self.__pip is None:
-            self.__pip = float(10**-np.median([len(s.partition('.')[-1])
-                                               for s in self.__arrays['Close'].astype(str)]))
-        return self.__pip
+            self.__pip = {instrument: float(10 ** -np.median([len(s.partition('.')[-1])
+                                                              for s in
+                                                              self.__arrays[f'{instrument}-Close'].astype(str)]))
+                          for instrument in self.instruments}
+        if self.is_single_instrument:
+            return self.__pip['default_instrument']
+        else:
+            return self.__pip
 
     def __get_array(self, key) -> _Array:
         arr = self.__cache.get(key)
@@ -164,24 +250,39 @@ class _Data:
         return arr
 
     @property
-    def Open(self) -> _Array:
-        return self.__get_array('Open')
+    def Open(self) -> Union[_Array, dict[str, _Array]]:
+        if self.is_single_instrument:
+            return self.__get_array(f'default_instrument-Open')
+        else:
+            return {instrument: self.__get_array(f'{instrument}-Open') for instrument in self.instruments}
 
     @property
-    def High(self) -> _Array:
-        return self.__get_array('High')
+    def High(self) -> Union[_Array, dict[str, _Array]]:
+        if self.is_single_instrument:
+            return self.__get_array(f'default_instrument-High')
+        else:
+            return {instrument: self.__get_array(f'{instrument}-High') for instrument in self.instruments}
 
     @property
-    def Low(self) -> _Array:
-        return self.__get_array('Low')
+    def Low(self) -> Union[_Array, dict[str, _Array]]:
+        if self.is_single_instrument:
+            return self.__get_array(f'default_instrument-Low')
+        else:
+            return {instrument: self.__get_array(f'{instrument}-Low') for instrument in self.instruments}
 
     @property
-    def Close(self) -> _Array:
-        return self.__get_array('Close')
+    def Close(self) -> Union[_Array, dict[str, _Array]]:
+        if self.is_single_instrument:
+            return self.__get_array('default_instrument-Close')
+        else:
+            return {instrument: self.__get_array(f'{instrument}-Close') for instrument in self.instruments}
 
     @property
-    def Volume(self) -> _Array:
-        return self.__get_array('Volume')
+    def Volume(self) -> Union[_Array, dict[str, _Array]]:
+        if self.is_single_instrument:
+            return self.__get_array('default_instrument-Volume')
+        else:
+            return {instrument: self.__get_array(f'{instrument}-Volume') for instrument in self.instruments}
 
     @property
     def index(self) -> pd.DatetimeIndex:

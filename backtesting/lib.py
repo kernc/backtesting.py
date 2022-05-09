@@ -72,7 +72,7 @@ def barssince(condition: Sequence[bool], default=np.inf) -> int:
     Return the number of bars since `condition` sequence was last `True`,
     or if never, return `default`.
 
-        >>> barssince(self.data.Close > self.data.Open)
+        >>> barssince(self.df.Close > self.df.Open)
         3
     """
     return next(compress(range(len(condition)), reversed(condition)), default)
@@ -83,7 +83,7 @@ def cross(series1: Sequence, series2: Sequence) -> bool:
     Return `True` if `series1` and `series2` just crossed
     (above or below) each other.
 
-        >>> cross(self.data.Close, self.sma)
+        >>> cross(self.df.Close, self.sma)
         True
 
     """
@@ -95,7 +95,7 @@ def crossover(series1: Sequence, series2: Sequence) -> bool:
     Return `True` if `series1` just crossed over (above)
     `series2`.
 
-        >>> crossover(self.data.Close, self.sma)
+        >>> crossover(self.df.Close, self.sma)
         True
     """
     series1 = (
@@ -150,9 +150,9 @@ def quantile(series: Sequence, quantile: Union[None, float] = None):
     `series` at this quantile. If used to working with percentiles, just
     divide your percentile amount with 100 to obtain quantiles.
 
-        >>> quantile(self.data.Close[-20:], .1)
+        >>> quantile(self.df.Close[-20:], .1)
         162.130
-        >>> quantile(self.data.Close)
+        >>> quantile(self.df.Close)
         0.13
     """
     if quantile is None:

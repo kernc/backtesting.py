@@ -5,11 +5,10 @@ import warnings
 from colorsys import hls_to_rgb, rgb_to_hls
 from itertools import cycle, combinations
 from functools import partial
-from typing import Callable, List, Union
+from typing import Callable, List, Union, Optional
 
 import numpy as np
 import pandas as pd
-
 from bokeh.colors import RGB
 from bokeh.colors.named import (
     lime as BULL_COLOR,
@@ -109,11 +108,11 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
             "15T": 15,
             "30T": 30,
             "1H": 60,
-            "2H": 60*2,
-            "4H": 60*4,
-            "8H": 60*8,
-            "1D": 60*24,
-            "1W": 60*24*7,
+            "2H": 60 * 2,
+            "4H": 60 * 4,
+            "8H": 60 * 8,
+            "1D": 60 * 24,
+            "1W": 60 * 24 * 7,
             "1M": np.inf,
         })
         timespan = df.index[-1] - df.index[0]
@@ -147,6 +146,7 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
                 mean_time = int(bars.loc[s.index].view(int).mean())
                 new_bar_idx = new_index.get_loc(mean_time, method='nearest')
                 return new_bar_idx
+
         return f
 
     if len(trades):  # Avoid pandas "resampling on Int64 index" error
@@ -162,7 +162,8 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
 
 
 def plot(*, results: pd.Series,
-         df: pd.DataFrame,
+         df: Union[pd.DataFrame, dict[str, pd.DataFrame]],
+         instruments: Optional[list[str]] = None,
          indicators: List[_Indicator],
          filename='', plot_width=None,
          plot_equity=True, plot_return=False, plot_pl=True,
@@ -174,6 +175,7 @@ def plot(*, results: pd.Series,
     """
     Like much of GUI code everywhere, this is a mess.
     """
+    # fixme
     # We need to reset global Bokeh state, otherwise subsequent runs of
     # plot() contain some previous run's cruft data (was noticed when
     # TestPlot.test_file_size() test was failing).
