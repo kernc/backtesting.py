@@ -518,6 +518,8 @@ return this.labels[index] || "";
         ohlc_colors = colorgen()
         indicator_figs = []
 
+        named_indicator = {}
+
         for i, value in enumerate(indicators):
             value = np.atleast_2d(value)
 
@@ -528,11 +530,17 @@ return this.labels[index] || "";
 
             is_overlay = value._opts['overlay']
             is_scatter = value._opts['scatter']
-            if is_overlay:
-                fig = fig_ohlc
+            a_name = value._opts['named']
+            if a_name in named_indicator.keys():
+                fig = named_indicator[a_name]
             else:
-                fig = new_indicator_figure()
-                indicator_figs.append(fig)
+                if is_overlay:
+                    fig = fig_ohlc
+                else:
+                    fig = new_indicator_figure()
+                    indicator_figs.append(fig)
+                    if a_name is not None: named_indicator[a_name] = fig
+
             tooltips = []
             colors = value._opts['color']
             colors = colors and cycle(_as_list(colors)) or (

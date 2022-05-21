@@ -77,7 +77,7 @@ class Strategy(metaclass=ABCMeta):
 
     def I(self,  # noqa: E741, E743
           func: Callable, *args,
-          name=None, plot=True, overlay=None, color=None, scatter=False,
+          name=None, plot=True, overlay=None, color=None, scatter=False, named=None,
           **kwargs) -> np.ndarray:
         """
         Declare indicator. An indicator is just an array of values,
