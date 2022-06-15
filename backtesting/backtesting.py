@@ -749,7 +749,7 @@ class _Broker:
 
     def _adjusted_price(self, size=None, price=None) -> float:
         """
-        Long/shortprice, adjusted for commissions (fixed or percentage).
+        Long/short `price`, adjusted for commissions (fixed or percentage).
         In long positions, the adjusted price is a fraction higher, and vice versa.
         """
         if self._use_fixed_commission:
