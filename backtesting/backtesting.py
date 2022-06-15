@@ -748,8 +748,10 @@ class _Broker:
         return self._data.Close[-1]
 
     def _adjusted_price(self, size=None, price=None) -> float:
-        """Long/shortprice, adjusted for commissions (fixed or percentage). In long positions,
-        the adjusted price is a fraction higher, and vice versa."""
+        """
+        Long/shortprice, adjusted for commissions (fixed or percentage).
+        In long positions, the adjusted price is a fraction higher, and vice versa.
+        """
         if self._use_fixed_commission:
             return ((price or self.last_price) + copysign(self._commission, size))
         else:
