@@ -179,8 +179,8 @@ class Strategy(metaclass=ABCMeta):
 
         See also `Strategy.sell()`.
         """
-        assert 0 < size < 1 or round(size) == size, \
-            "size must be a positive fraction of equity, or a positive whole number of units"
+#        assert 0 < size < 1 or round(size) == size, \
+#            "size must be a positive fraction of equity, or a positive whole number of units"
         return self._broker.new_order(size, limit, stop, sl, tp)
 
     def sell(self, *,
@@ -194,8 +194,8 @@ class Strategy(metaclass=ABCMeta):
 
         See also `Strategy.buy()`.
         """
-        assert 0 < size < 1 or round(size) == size, \
-            "size must be a positive fraction of equity, or a positive whole number of units"
+#        assert 0 < size < 1 or round(size) == size, \
+#            "size must be a positive fraction of equity, or a positive whole number of units"
         return self._broker.new_order(-size, limit, stop, sl, tp)
 
     @property

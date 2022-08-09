@@ -225,7 +225,7 @@ class Trade:
     When an `Order` is filled, it results in an active `Trade`.
     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
     """
-    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar):
+    def __init__(self, broker: '_Broker', size: float, entry_price: float, entry_bar):
         self.__broker = broker
         self.__size = size
         self.__entry_price = entry_price
@@ -576,14 +576,17 @@ class _Broker:
             # precompute true size in units, accounting for margin and spread/commissions
             size = order.size
             if -1 < size < 1:
-                size = copysign(int((self.margin_available * self._leverage * abs(size))
-                                    // adjusted_price), size)
+#                size = copysign(int((self.margin_available * self._leverage * abs(size))
+#                                    // adjusted_price), size)
+                size = copysign((self.margin_available * self._leverage * abs(size))
+                                    / adjusted_price, size)
                 # Not enough cash/margin even for a single unit
                 if not size:
                     self.orders.remove(order)
                     continue
-            assert size == round(size)
-            need_size = int(size)
+#            assert size == round(size)
+#            need_size = int(size)
+            need_size = size
 
             if not self._hedging:
                 # Fill position by FIFO closing/reducing existing opposite-facing trades.
@@ -673,7 +676,7 @@ class _Broker:
         self.closed_trades.append(trade._replace(exit_price=price, exit_bar=time_index))
         self._cash += trade.pl
 
-    def _open_trade(self, price: float, size: int, sl: float, tp: float, time_index: int):
+    def _open_trade(self, price: float, size: float, sl: float, tp: float, time_index: int):
         trade = Trade(self, size, price, time_index)
         self.trades.append(trade)
         # Create SL/TP (bracket) orders.

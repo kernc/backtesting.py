@@ -69,8 +69,16 @@ def compute_stats(
         trades_df['Duration'] = trades_df['ExitTime'] - trades_df['EntryTime']
     del trades
 
-    pl = trades_df['PnL']
-    returns = trades_df['ReturnPct']
+#    pl = trades_df['PnL']
+#    returns = trades_df['ReturnPct']
+#    durations = trades_df['Duration']
+    all_pl = trades_df[['Size', 'PnL']]
+    pl = all_pl['PnL']
+    long_pl = all_pl[all_pl.Size >= 0]['PnL']
+    short_pl = all_pl[all_pl.Size < 0]['PnL']
+    returns = trades_df[['Size', 'ReturnPct']]
+    long_returns = returns[returns.Size >= 0]
+    short_returns = returns[returns.Size < 0]
     durations = trades_df['Duration']
 
     def _round_timedelta(value, _period=_data_period(index)):
@@ -134,8 +142,18 @@ def compute_stats(
     s.loc['Avg. Trade [%]'] = mean_return * 100
     s.loc['Max. Trade Duration'] = _round_timedelta(durations.max())
     s.loc['Avg. Trade Duration'] = _round_timedelta(durations.mean())
-    s.loc['Profit Factor'] = returns[returns > 0].sum() / (abs(returns[returns < 0].sum()) or np.nan)  # noqa: E501
-    s.loc['Expectancy [%]'] = returns.mean() * 100
+    s.loc['# Long Trades'] = n_long_trades = len(trades_df[trades_df.Size >= 0])
+    s.loc['Long Win Rate [%]'] = np.nan if not n_long_trades else (long_pl > 0).sum() / n_long_trades * 100  # noqa: E501
+    s.loc['Long Best Trade [%]'] = long_returns['ReturnPct'].max() * 100
+    s.loc['Long Worst Trade [%]'] = long_returns['ReturnPct'].min() * 100
+    s.loc['Long Avg. Trade [%]'] = long_returns['ReturnPct'].mean() * 100
+    s.loc['# Short trades'] = n_short_trades = len(trades_df[trades_df.Size < 0])
+    s.loc['Short Win Rate [%]'] = np.nan if not n_short_trades else (short_pl > 0).sum() / n_short_trades * 100  # noqa: E501
+    s.loc['Short Best Trade [%]'] = short_returns['ReturnPct'].max() * 100
+    s.loc['Short Worst Trade [%]'] = short_returns['ReturnPct'].min() * 100
+    s.loc['Short Avg. Trade [%]'] = short_returns['ReturnPct'].mean() * 100
+    s.loc['Profit Factor'] = returns['ReturnPct'][returns['ReturnPct'] > 0].sum() / (abs(returns['ReturnPct'][returns['ReturnPct'] < 0].sum()) or np.nan)  # noqa: E501
+    s.loc['Expectancy [%]'] = returns['ReturnPct'].mean() * 100
     s.loc['SQN'] = np.sqrt(n_trades) * pl.mean() / (pl.std() or np.nan)
 
     s.loc['_strategy'] = strategy_instance
