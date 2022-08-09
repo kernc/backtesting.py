@@ -96,10 +96,6 @@ class _Array(np.ndarray):
         return df
 
 
-class _Indicator(_Array):
-    pass
-
-
 class _Data:
     """
     A data array accessor. Provides access to OHLCV "columns"

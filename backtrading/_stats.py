@@ -6,7 +6,7 @@ import pandas as pd
 from ._util import _data_period
 
 if TYPE_CHECKING:
-    from .backtesting import Strategy, Trade
+    from .backtrading import Strategy, Trade
 
 
 def compute_drawdown_duration_peaks(dd: pd.Series):

@@ -23,7 +23,7 @@
 # For this tutorial, we'll use almost a year's worth sample of hourly EUR/USD forex data:
 
 # +
-from backtesting.test import EURUSD, SMA
+from backtrading.test import EURUSD, SMA
 
 data = EURUSD.copy()
 data
@@ -157,7 +157,7 @@ print('Classification accuracy: ', np.mean(y_test == y_pred))
 # +
 # %%time
 
-from backtesting import Backtest, Strategy
+from backtrading import Backtest, Strategy
 
 N_TRAIN = 400
 

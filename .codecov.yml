@@ -12,4 +12,4 @@ coverage:
         threshold: 5
   # Fix for https://github.com/codecov/codecov-python/issues/136
   fixes:
-    - "__init__.py::backtesting/__init__.py"
+    - "__init__.py::backtrading/__init__.py"

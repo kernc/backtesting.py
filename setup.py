@@ -2,21 +2,21 @@ import os
 import sys
 
 if sys.version_info < (3, 6):
-    sys.exit('ERROR: Backtesting.py requires Python 3.6+')
+    sys.exit('ERROR: Backtrading.py requires Python 3.6+')
 
 
 if __name__ == '__main__':
     from setuptools import setup, find_packages
 
     setup(
-        name='Backtesting',
+        name='Backtrading',
         description="Backtest trading strategies in Python",
         license='AGPL-3.0',
-        url='https://kernc.github.io/backtesting.py/',
+        url='https://kernc.github.io/backtrading.py/',
         project_urls={
-            'Documentation': 'https://kernc.github.io/backtesting.py/doc/backtesting/',
-            'Source': 'https://github.com/kernc/backtesting.py/',
-            'Tracker': 'https://github.com/kernc/backtesting.py/issues',
+            'Documentation': 'https://kernc.github.io/backtrading.py/doc/backtrading/',
+            'Source': 'https://github.com/sjarrin/backtrading.py/',
+            'Tracker': 'https://github.com/sjarrin/backtrading.py/issues',
         },
         long_description=open(os.path.join(os.path.dirname(__file__), 'README.md'),
                               encoding='utf-8').read(),
@@ -28,7 +28,7 @@ if __name__ == '__main__':
             'setuptools_scm',
         ],
         use_scm_version={
-            'write_to': os.path.join('backtesting', '_version.py'),
+            'write_to': os.path.join('backtrading', '_version.py'),
         },
         install_requires=[
             'numpy >= 1.17.0',
@@ -55,7 +55,7 @@ if __name__ == '__main__':
                 'mypy',
             ],
         },
-        test_suite="backtesting.test",
+        test_suite="backtrading.test",
         python_requires='>=3.6',
         author='Zach Lûster',
         classifiers=[
@@ -72,7 +72,7 @@ if __name__ == '__main__':
             'algorithmic',
             'ashi',
             'backtest',
-            'backtesting',
+            'backtrading',
             'bitcoin',
             'bokeh',
             'bonds',

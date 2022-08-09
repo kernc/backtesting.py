@@ -16,9 +16,9 @@ import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal
 
-from backtesting import Backtest, Strategy
-from backtesting._stats import compute_drawdown_duration_peaks
-from backtesting.lib import (
+from backtrading import Backtest, Strategy
+from backtrading._stats import compute_drawdown_duration_peaks
+from backtrading.lib import (
     OHLCV_AGG,
     barssince,
     compute_stats,
@@ -31,8 +31,8 @@ from backtesting.lib import (
     plot_heatmaps,
     random_ohlc_data,
 )
-from backtesting.test import GOOG, EURUSD, SMA
-from backtesting._util import _Indicator, _as_str, _Array, try_
+from backtrading.test import GOOG, EURUSD, SMA
+from backtrading._util import _Indicator, _as_str, _Array, try_
 
 SHORT_DATA = GOOG.iloc[:20]  # Short data for fast tests with no indicator lag
 
@@ -733,9 +733,9 @@ class TestPlot(TestCase):
     def test_resample(self):
         bt = Backtest(GOOG, SmaCross)
         bt.run()
-        import backtesting._plotting
+        import backtrading._plotting
         with _tempfile() as f,\
-                patch.object(backtesting._plotting, '_MAX_CANDLES', 10),\
+                patch.object(backtrading._plotting, '_MAX_CANDLES', 10),\
                 self.assertWarns(UserWarning):
             bt.plot(filename=f, resample=True)
             # Give browser time to open before tempfile is removed

@@ -25,7 +25,7 @@
 #
 # Again, we'll use our helper moving average function.
 
-from backtesting.test import SMA
+from backtrading.test import SMA
 
 # Part of this software distribution is
 # [`backtesting.lib`](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html)
@@ -44,7 +44,7 @@ from backtesting.test import SMA
 
 # +
 import pandas as pd
-from backtesting.lib import SignalStrategy, TrailingStrategy
+from backtrading.lib import SignalStrategy, TrailingStrategy
 
 
 class SmaCross(SignalStrategy,
@@ -85,8 +85,8 @@ class SmaCross(SignalStrategy,
 # Let's see how the example strategy fares on historical Google data.
 
 # +
-from backtesting import Backtest
-from backtesting.test import GOOG
+from backtrading import Backtest
+from backtrading.test import GOOG
 
 bt = Backtest(GOOG, SmaCross, commission=.002)
 

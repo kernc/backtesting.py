@@ -1,33 +1,33 @@
-[![](https://i.imgur.com/E8Kj69Y.png)](https://kernc.github.io/backtesting.py/)
+[![](https://i.imgur.com/E8Kj69Y.png)](https://kernc.github.io/backtrading.py/)
 
-Backtesting.py
+Backtrading.py
 ==============
-[![Build Status](https://img.shields.io/github/workflow/status/kernc/backtesting.py/CI/master?style=for-the-badge)](https://github.com/kernc/backtesting.py/actions)
-[![Code Coverage](https://img.shields.io/codecov/c/gh/kernc/backtesting.py.svg?style=for-the-badge)](https://codecov.io/gh/kernc/backtesting.py)
-[![Backtesting on PyPI](https://img.shields.io/pypi/v/backtesting.svg?color=blue&style=for-the-badge)](https://pypi.org/project/backtesting)
-[![PyPI downloads](https://img.shields.io/pypi/dd/backtesting.svg?color=skyblue&style=for-the-badge)](https://pypi.org/project/backtesting)
+[![Build Status](https://img.shields.io/github/workflow/status/kernc/backtrading.py/CI/master?style=for-the-badge)](https://github.com/kernc/backtrading.py/actions)
+[![Code Coverage](https://img.shields.io/codecov/c/gh/kernc/backtrading.py.svg?style=for-the-badge)](https://codecov.io/gh/kernc/backtrading.py)
+[![Backtrading on PyPI](https://img.shields.io/pypi/v/backtrading.svg?color=blue&style=for-the-badge)](https://pypi.org/project/backtrading)
+[![PyPI downloads](https://img.shields.io/pypi/dd/backtrading.svg?color=skyblue&style=for-the-badge)](https://pypi.org/project/backtrading)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/kernc?color=pink&style=for-the-badge)](https://github.com/sponsors/kernc)
 
 Backtest trading strategies with Python.
 
-[**Project website**](https://kernc.github.io/backtesting.py) + [Documentation]
+[**Project website**](https://kernc.github.io/backtrading.py) + [Documentation]
 
-[Documentation]: https://kernc.github.io/backtesting.py/doc/backtesting/
+[Documentation]: https://kernc.github.io/backtrading.py/doc/backtrading/
 
 
 Installation
 ------------
 
-    $ pip install backtesting
+    $ pip install backtrading
 
 
 Usage
 -----
 ```python
-from backtesting import Backtest, Strategy
-from backtesting.lib import crossover
+from backtrading import Backtest, Strategy
+from backtrading.lib import crossover
 
-from backtesting.test import SMA, GOOG
+from backtrading.test import SMA, GOOG
 
 
 class SmaCross(Strategy):
@@ -84,7 +84,7 @@ _equity_curve                          Equ...
 _trades                       Size  EntryB...
 dtype: object
 ```
-[![plot of trading simulation](https://i.imgur.com/xRFNHfg.png)](https://kernc.github.io/backtesting.py/#example)
+[![plot of trading simulation](https://i.imgur.com/xRFNHfg.png)](https://kernc.github.io/backtrading.py/#example)
 
 Find more usage examples in the [documentation].
 
@@ -106,6 +106,6 @@ Features
 Alternatives
 ------------
 See [alternatives.md] for a list of alternative Python
-backtesting frameworks and related packages.
+backtrading frameworks and related packages.
 
-[alternatives.md]: https://github.com/kernc/backtesting.py/blob/master/doc/alternatives.md
+[alternatives.md]: https://github.com/kernc/backtrading.py/blob/master/doc/alternatives.md

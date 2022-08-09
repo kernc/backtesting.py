@@ -67,8 +67,8 @@ def RSI(array, n):
 # We need to provide bars data in the _lowest time frame_ (i.e. daily) and resample it to any higher time frame (i.e. weekly) that our strategy requires.
 
 # +
-from backtesting import Strategy, Backtest
-from backtesting.lib import resample_apply
+from backtrading import Strategy, Backtest
+from backtrading.lib import resample_apply
 
 
 class System(Strategy):
@@ -117,7 +117,7 @@ class System(Strategy):
 # Let's see how our strategy fares replayed on nine years of Google stock data.
 
 # +
-from backtesting.test import GOOG
+from backtrading.test import GOOG
 
 backtest = Backtest(GOOG, System, commission=.002)
 backtest.run()

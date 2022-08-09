@@ -36,7 +36,7 @@
 
 # +
 # Example OHLC daily data for Google Inc.
-from backtesting.test import GOOG
+from backtrading.test import GOOG
 
 GOOG.tail()
 # -
@@ -81,8 +81,8 @@ def SMA(values, n):
 # If you find yourself wishing to trade within candlesticks (e.g. daytrading), you instead need to begin with more fine-grained (e.g. hourly) data.
 
 # +
-from backtesting import Strategy
-from backtesting.lib import crossover
+from backtrading import Strategy
+from backtrading.lib import crossover
 
 
 class SmaCross(Strategy):
@@ -152,7 +152,7 @@ class SmaCross(Strategy):
 # instance is initialized with OHLC data and a strategy _class_ (see API reference for additional options), and we begin with 10,000 units of cash and set broker's commission to realistic 0.2%.
 
 # +
-from backtesting import Backtest
+from backtrading import Backtest
 
 bt = Backtest(GOOG, SmaCross, cash=10_000, commission=.002)
 stats = bt.run()
