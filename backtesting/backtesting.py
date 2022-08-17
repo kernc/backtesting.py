@@ -17,7 +17,9 @@ from itertools import repeat, product, chain, compress
 from math import copysign
 from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
-from rich.progress import track
+from rich.progress import track  # optional progress bars
+from rich.console import Console
+from contextlib import nullcontext  # status vs progress bar if multiprocessing
 
 import numpy as np
 import pandas as pd
@@ -1373,18 +1375,19 @@ class Backtest:
                 # a pool of processes to compute results in parallel.
                 # Otherwise (i.e. on Windos), sequential computation will be "faster".
                 if mp.get_start_method(allow_none=False) == 'fork':
-                    with ProcessPoolExecutor() as executor:
-                        futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
-                                   for i in range(len(param_batches))]
+                    with Console().status("Optimizing...") if show_progress else nullcontext():
+                        with ProcessPoolExecutor() as executor:
+                            futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
+                                    for i in range(len(param_batches))]
 
-                        # Optional Rich progress bar
-                        tqdm_iter = _tqdm(as_completed(futures), total=len(futures), desc='Backtest.optimize')
-                        if show_progress: tqdm_iter = track(tqdm_iter, description="Optimizing...")
-
-                        for future in tqdm_iter:
-                            batch_index, values = future.result()
-                            for value, params in zip(values, param_batches[batch_index]):
-                                heatmap[tuple(params.values())] = value
+                            for future in _tqdm(
+                                as_completed(futures), 
+                                total=len(futures), 
+                                desc='Backtest.optimize'
+                            ):
+                                batch_index, values = future.result()
+                                for value, params in zip(values, param_batches[batch_index]):
+                                    heatmap[tuple(params.values())] = value
                 else:
                     if os.name == 'posix':
                         warnings.warn("For multiprocessing support in `Backtest.optimize()` "
