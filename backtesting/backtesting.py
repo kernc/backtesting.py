@@ -18,19 +18,10 @@ from math import copysign
 from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 from rich.progress import track  # optional progress bars
-from rich.console import Console
-from contextlib import nullcontext  # status vs progress bar if multiprocessing
 
 import numpy as np
 import pandas as pd
 from numpy.random import default_rng
-
-try:
-    from tqdm.auto import tqdm as _tqdm
-    _tqdm = partial(_tqdm, leave=False)
-except ImportError:
-    def _tqdm(seq, **_):
-        return seq
 
 from ._plotting import plot
 from ._stats import compute_stats
@@ -1377,29 +1368,28 @@ class Backtest:
                 # a pool of processes to compute results in parallel.
                 # Otherwise (i.e. on Windos), sequential computation will be "faster".
                 if mp.get_start_method(allow_none=False) == 'fork':
-                    with Console().status("Optimizing...") if show_progress else nullcontext():
-                        with ProcessPoolExecutor() as executor:
-                            futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
-                                    for i in range(len(param_batches))]
+                    with ProcessPoolExecutor() as executor:
+                        futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
+                                for i in range(len(param_batches))]
 
-                            for future in _tqdm(
-                                as_completed(futures), 
-                                total=len(futures), 
-                                desc='Backtest.optimize'
-                            ):
-                                batch_index, values = future.result()
-                                for value, params in zip(values, param_batches[batch_index]):
-                                    heatmap[tuple(params.values())] = value
+                        # Optional Rich progress bar 
+                        if show_progress: futures_iter = track(as_completed(futures), "Optimizing...", len(futures))
+                        else: futures_iter = as_completed(futures)
+
+                        for future in futures_iter:
+                            batch_index, values = future.result()
+                            for value, params in zip(values, param_batches[batch_index]):
+                                heatmap[tuple(params.values())] = value
                 else:
                     if os.name == 'posix':
                         warnings.warn("For multiprocessing support in `Backtest.optimize()` "
                                       "set multiprocessing start method to 'fork'.")
 
                     # Optional Rich progress bar
-                    tqdm_iter = _tqdm(range(len(param_batches)))
-                    if show_progress: tqdm_iter = track(tqdm_iter, description="Optimizing...")
+                    batches_iter = range(len(param_batches))
+                    if show_progress: batches_iter = track(batches_iter, "Grid optimizing without multiprocessing...")
 
-                    for batch_index in tqdm_iter:
+                    for batch_index in batches_iter:
                         _, values = Backtest._mp_task(backtest_uuid, batch_index)
                         for value, params in zip(values, param_batches[batch_index]):
                             heatmap[tuple(params.values())] = value
@@ -1459,7 +1449,7 @@ class Backtest:
 
             # np.inf/np.nan breaks sklearn, np.finfo(float).max breaks skopt.plots.plot_objective
             INVALID = 1e300
-            progress = iter(_tqdm(repeat(None), total=max_tries, desc='Backtest.optimize'))
+            progress = iter(repeat(None), total=max_tries, desc='Backtest.optimize')
 
             @use_named_args(dimensions=dimensions)
             def objective_function(**params):
