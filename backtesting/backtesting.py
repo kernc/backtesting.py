@@ -18,6 +18,8 @@ from math import copysign
 from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 from rich.progress import track  # optional progress bars
+from rich.console import Console
+from contextlib import nullcontext  # optional status for param combos
 
 import numpy as np
 import pandas as pd
@@ -1332,12 +1334,15 @@ class Backtest:
             grid_frac = (1 if max_tries is None else
                          max_tries if 0 < max_tries <= 1 else
                          max_tries / _grid_size())
-            param_combos = [dict(params)  # back to dict so it pickles
-                            for params in (AttrDict(params)
-                                           for params in product(*(zip(repeat(k), _tuple(v))
-                                                                   for k, v in kwargs.items())))
-                            if constraint(params)  # type: ignore
-                            and rand() <= grid_frac]
+
+            with Console().status("Calculating parameter combinations...") if show_progress else nullcontext():
+                param_combos = [dict(params)  # back to dict so it pickles
+                                for params in (AttrDict(params)
+                                            for params in product(*(zip(repeat(k), _tuple(v))
+                                                                    for k, v in kwargs.items())))
+                                if constraint(params)  # type: ignore
+                                and rand() <= grid_frac]
+
             if not param_combos:
                 raise ValueError('No admissible parameter combinations to test')
 
