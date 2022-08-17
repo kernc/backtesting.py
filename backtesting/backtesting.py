@@ -1373,7 +1373,12 @@ class Backtest:
                                 for i in range(len(param_batches))]
 
                         # Optional Rich progress bar 
-                        if show_progress: futures_iter = track(as_completed(futures), "Optimizing...", len(futures))
+                        if show_progress: futures_iter = track(
+                            as_completed(futures), 
+                            "Grid optimizing with fork multiprocessing...", 
+                            len(futures)
+                        )
+
                         else: futures_iter = as_completed(futures)
 
                         for future in futures_iter:
@@ -1387,7 +1392,10 @@ class Backtest:
 
                     # Optional Rich progress bar
                     batches_iter = range(len(param_batches))
-                    if show_progress: batches_iter = track(batches_iter, "Grid optimizing without multiprocessing...")
+                    if show_progress: batches_iter = track(
+                        batches_iter, 
+                        "Grid optimizing without multiprocessing..."
+                    )
 
                     for batch_index in batches_iter:
                         _, values = Backtest._mp_task(backtest_uuid, batch_index)
