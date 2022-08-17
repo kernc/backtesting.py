@@ -1158,7 +1158,7 @@ class Backtest:
         with np.errstate(invalid='ignore'):
 
             data_iter = range(start, len(self._data))
-            if show_progress: data_iter = track(data_iter)
+            if show_progress: data_iter = track(data_iter, description="Backtesting...")
 
             for i in data_iter:
                 # Prepare data and indicators for `next` call
@@ -1379,7 +1379,7 @@ class Backtest:
 
                         # Optional Rich progress bar
                         tqdm_iter = _tqdm(as_completed(futures), total=len(futures), desc='Backtest.optimize')
-                        if show_progress: tqdm_iter = track(tqdm_iter)
+                        if show_progress: tqdm_iter = track(tqdm_iter, description="Optimizing...")
 
                         for future in tqdm_iter:
                             batch_index, values = future.result()
@@ -1392,7 +1392,7 @@ class Backtest:
 
                     # Optional Rich progress bar
                     tqdm_iter = _tqdm(range(len(param_batches)))
-                    if show_progress: tqdm_iter = track(tqdm_iter)
+                    if show_progress: tqdm_iter = track(tqdm_iter, description="Optimizing...")
 
                     for batch_index in tqdm_iter:
                         _, values = Backtest._mp_task(backtest_uuid, batch_index)
