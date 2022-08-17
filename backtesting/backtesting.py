@@ -17,6 +17,7 @@ from itertools import repeat, product, chain, compress
 from math import copysign
 from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
+from rich.progress import track
 
 import numpy as np
 import pandas as pd
@@ -1093,9 +1094,12 @@ class Backtest:
         self._strategy = strategy
         self._results: Optional[pd.Series] = None
 
-    def run(self, **kwargs) -> pd.Series:
+    def run(self, show_progress: bool = False, **kwargs) -> pd.Series:
         """
         Run the backtest. Returns `pd.Series` with results and statistics.
+
+        If show_progress is given as True, a progress bar is shown on console
+        with the status of the backtest, as it iterates through historical data.
 
         Keyword arguments are interpreted as strategy parameters.
 
@@ -1153,7 +1157,10 @@ class Backtest:
         # np.nan >= 3 is not invalid; it's False.
         with np.errstate(invalid='ignore'):
 
-            for i in range(start, len(self._data)):
+            data_iter = range(start, len(self._data))
+            if show_progress: data_iter = track(data_iter)
+
+            for i in data_iter:
                 # Prepare data and indicators for `next` call
                 data._set_length(i + 1)
                 for attr, indicator in indicator_attrs:
@@ -1201,6 +1208,7 @@ class Backtest:
                  return_heatmap: bool = False,
                  return_optimization: bool = False,
                  random_state: int = None,
+                 show_progress: bool = False,
                  **kwargs) -> Union[pd.Series,
                                     Tuple[pd.Series, pd.Series],
                                     Tuple[pd.Series, pd.Series, dict]]:
@@ -1248,6 +1256,9 @@ class Backtest:
         [`scipy.optimize.OptimizeResult`][OptimizeResult] for further
         inspection, e.g. with [scikit-optimize]\
         [plotting tools].
+
+        If `show_progress` is True, display and update a Rich progress bar
+        displaying optimization status across iterations.
 
         [OptimizeResult]: \
             https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.OptimizeResult.html
@@ -1365,8 +1376,12 @@ class Backtest:
                     with ProcessPoolExecutor() as executor:
                         futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
                                    for i in range(len(param_batches))]
-                        for future in _tqdm(as_completed(futures), total=len(futures),
-                                            desc='Backtest.optimize'):
+
+                        # Optional Rich progress bar
+                        tqdm_iter = _tqdm(as_completed(futures), total=len(futures), desc='Backtest.optimize')
+                        if show_progress: tqdm_iter = track(tqdm_iter)
+
+                        for future in tqdm_iter:
                             batch_index, values = future.result()
                             for value, params in zip(values, param_batches[batch_index]):
                                 heatmap[tuple(params.values())] = value
@@ -1374,7 +1389,12 @@ class Backtest:
                     if os.name == 'posix':
                         warnings.warn("For multiprocessing support in `Backtest.optimize()` "
                                       "set multiprocessing start method to 'fork'.")
-                    for batch_index in _tqdm(range(len(param_batches))):
+
+                    # Optional Rich progress bar
+                    tqdm_iter = _tqdm(range(len(param_batches)))
+                    if show_progress: tqdm_iter = track(tqdm_iter)
+
+                    for batch_index in tqdm_iter:
                         _, values = Backtest._mp_task(backtest_uuid, batch_index)
                         for value, params in zip(values, param_batches[batch_index]):
                             heatmap[tuple(params.values())] = value
