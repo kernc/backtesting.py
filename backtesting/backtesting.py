@@ -1260,7 +1260,9 @@ class Backtest:
         [plotting tools].
 
         If `show_progress` is True, display and update a Rich progress bar
-        displaying optimization status across iterations.
+        displaying optimization status across iterations (only if multiprocessing
+        if off). If multiprocessing is enabled (your start method is "fork"), 
+        a status icon is displayed instead of the progress bar.
 
         [OptimizeResult]: \
             https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.OptimizeResult.html
