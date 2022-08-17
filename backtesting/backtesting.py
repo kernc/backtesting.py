@@ -1462,7 +1462,7 @@ class Backtest:
 
             # np.inf/np.nan breaks sklearn, np.finfo(float).max breaks skopt.plots.plot_objective
             INVALID = 1e300
-            progress = iter(repeat(None), total=max_tries, desc='Backtest.optimize')
+            progress = iter(repeat(None))
 
             @use_named_args(dimensions=dimensions)
             def objective_function(**params):
@@ -1481,17 +1481,18 @@ class Backtest:
                 warnings.filterwarnings(
                     'ignore', 'The objective has been evaluated at this point before.')
 
-                res = forest_minimize(
-                    func=objective_function,
-                    dimensions=dimensions,
-                    n_calls=max_tries,
-                    base_estimator=ExtraTreesRegressor(n_estimators=20, min_samples_leaf=2),
-                    acq_func='LCB',
-                    kappa=3,
-                    n_initial_points=min(max_tries, 20 + 3 * len(kwargs)),
-                    initial_point_generator='lhs',  # 'sobel' requires n_initial_points ~ 2**N
-                    callback=DeltaXStopper(9e-7),
-                    random_state=random_state)
+                with Console().status("Optimizing with scikit...") if show_progress else nullcontext():
+                    res = forest_minimize(
+                        func=objective_function,
+                        dimensions=dimensions,
+                        n_calls=max_tries,
+                        base_estimator=ExtraTreesRegressor(n_estimators=20, min_samples_leaf=2),
+                        acq_func='LCB',
+                        kappa=3,
+                        n_initial_points=min(max_tries, 20 + 3 * len(kwargs)),
+                        initial_point_generator='lhs',  # 'sobel' requires n_initial_points ~ 2**N
+                        callback=DeltaXStopper(9e-7),
+                        random_state=random_state)
 
             stats = self.run(**dict(zip(kwargs.keys(), res.x)))
             output = [stats]
