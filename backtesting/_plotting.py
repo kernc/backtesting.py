@@ -220,11 +220,11 @@ def plot(*, results: pd.Series,
 
     pad = (index[-1] - index[0]) / 20
 
-    fig_ohlc = new_bokeh_figure(
-        x_range=Range1d(index[0], index[-1],
-                        min_interval=10,
-                        bounds=(index[0] - pad,
-                                index[-1] + pad)) if index.size > 1 else None)
+    _kwargs = dict(x_range=Range1d(index[0], index[-1],
+                                   min_interval=10,
+                                   bounds=(index[0] - pad,
+                                           index[-1] + pad))) if index.size > 1 else {}
+    fig_ohlc = new_bokeh_figure(**_kwargs)
     figs_above_ohlc, figs_below_ohlc = [], []
 
     source = ColumnDataSource(df)
