@@ -28,3 +28,5 @@ python code goes here
 <!-- screenshots, code snippets, ... -->
 
 - Backtesting version: 0.?.?   <!-- From backtesting.__version__ -->
+- `bokeh.__version__`:
+- OS:
