@@ -203,6 +203,8 @@ class Strategy(metaclass=ABCMeta):
         """
         Place a new long order. For explanation of parameters, see `Order` and its properties.
 
+        See `Position.close()` and `Trade.close()` for closing existing positions.
+
         See also `Strategy.sell()`.
         """
         assert 0 < size < 1 or round(size) == size, \
@@ -219,6 +221,10 @@ class Strategy(metaclass=ABCMeta):
         Place a new short order. For explanation of parameters, see `Order` and its properties.
 
         See also `Strategy.buy()`.
+
+        .. note::
+            If you merely want to close an existing long position,
+            use `Position.close()` or `Trade.close()`.
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
