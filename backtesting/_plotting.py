@@ -16,7 +16,7 @@ from bokeh.colors.named import (
     tomato as BEAR_COLOR
 )
 from bokeh.plotting import figure as _figure
-from bokeh.models import (
+from bokeh.models import (  # type: ignore
     CrosshairTool,
     CustomJS,
     ColumnDataSource,
@@ -625,7 +625,7 @@ return this.labels[index] || "";
     if plot_volume:
         custom_js_args.update(volume_range=fig_volume.y_range)
 
-    fig_ohlc.x_range.js_on_change('end', CustomJS(args=custom_js_args,
+    fig_ohlc.x_range.js_on_change('end', CustomJS(args=custom_js_args,  # type: ignore
                                                   code=_AUTOSCALE_JS_CALLBACK))
 
     plots = figs_above_ohlc + [fig_ohlc] + figs_below_ohlc
@@ -650,7 +650,7 @@ return this.labels[index] || "";
 
         f.add_tools(linked_crosshair)
         wheelzoom_tool = next(wz for wz in f.tools if isinstance(wz, WheelZoomTool))
-        wheelzoom_tool.maintain_focus = False
+        wheelzoom_tool.maintain_focus = False  # type: ignore
 
     kwargs = {}
     if plot_width is None:
@@ -662,7 +662,7 @@ return this.labels[index] || "";
         toolbar_location='right',
         toolbar_options=dict(logo=None),
         merge_tools=True,
-        **kwargs
+        **kwargs  # type: ignore
     )
     show(fig, browser=None if open_browser else 'none')
     return fig
@@ -719,7 +719,7 @@ def plot_heatmaps(heatmap: pd.Series, agg: Union[Callable, str], ncols: int,
         plots.append(fig)
 
     fig = gridplot(
-        plots,
+        plots,  # type: ignore
         ncols=ncols,
         toolbar_options=dict(logo=None),
         toolbar_location='above',
