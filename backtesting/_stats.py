@@ -52,7 +52,7 @@ def compute_stats(
         index=index)
 
     if isinstance(trades, pd.DataFrame):
-        trades_df = trades
+        trades_df: pd.DataFrame = trades
     else:
         # Came straight from Backtest.run()
         trades_df = pd.DataFrame({

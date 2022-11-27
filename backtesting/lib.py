@@ -202,7 +202,7 @@ def resample_apply(rule: str,
                    func: Optional[Callable[..., Sequence]],
                    series: Union[pd.Series, pd.DataFrame, _Array],
                    *args,
-                   agg: Union[str, dict] = None,
+                   agg: Optional[Union[str, dict]] = None,
                    **kwargs):
     """
     Apply `func` (such as an indicator) to `series`, resampled to
@@ -322,14 +322,14 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
                                 method='ffill').reindex(series.index)
         return result
 
-    wrap_func.__name__ = func.__name__  # type: ignore
+    wrap_func.__name__ = func.__name__
 
     array = strategy_I(wrap_func, resampled, *args, **kwargs)
     return array
 
 
 def random_ohlc_data(example_data: pd.DataFrame, *,
-                     frac=1., random_state: int = None) -> pd.DataFrame:
+                     frac=1., random_state: Optional[int] = None) -> pd.DataFrame:
     """
     OHLC data generator. The generated OHLC data has basic
     [descriptive statistics](https://en.wikipedia.org/wiki/Descriptive_statistics)
@@ -391,7 +391,7 @@ class SignalStrategy(Strategy):
     __exit_signal = (False,)
 
     def set_signal(self, entry_size: Sequence[float],
-                   exit_portion: Sequence[float] = None,
+                   exit_portion: Optional[Sequence[float]] = None,
                    *,
                    plot: bool = True):
         """
