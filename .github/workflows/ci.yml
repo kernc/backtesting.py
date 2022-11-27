@@ -8,10 +8,9 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-18.04
-
     strategy:
       matrix:
-        python-version: [3.7, 3.8]
+        python-version: [3.7, '3.10']
         include:
           - python-version: 3.9
             test-type: lint
@@ -19,51 +18,39 @@ jobs:
             test-type: docs
 
     steps:
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-
-      - uses: actions/cache@v2
-        name: Set up caches
+      - uses: actions/cache@v3
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-py${{ matrix.python-version }}
-
-      - name: Checkout repo
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v3
         with:
           fetch-depth: 3
       - name: Fetch tags
         run: git fetch --depth=1 origin +refs/tags/*:refs/tags/*
 
-      - name: Install dependencies
-        run: |
-          pip install -U pip setuptools wheel
-          pip install -U --pre .[test]
+      - run: pip install -U pip setuptools wheel
+      - if: matrix.test-type == 'lint'
+        run: pip install -U --pre bokeh pandas numpy && pip install -U .[dev]
+      - if: matrix.test-type == 'docs'
+        run: pip install -e .[doc]  # -e provides _version.py for pdoc
+      - run: pip install -U .[test]
 
-      - name: Install lint dependencies
-        if: matrix.test-type == 'lint'
-        run: pip install -U .[dev]
-
-      - name: Install docs dependencies
-        if: matrix.test-type == 'docs'
-        run: pip install -e .[doc,test]  # -e provides _version.py for pdoc
-
-      - name: Test w/ Coverage, Lint
-        if: matrix.test-type == 'lint'
+      - if: matrix.test-type == 'lint'
+        run: flake8
+      - if: matrix.test-type == 'lint'
+        run: mypy backtesting
+      - if: matrix.test-type == 'lint'
         env: { BOKEH_BROWSER: none }
-        run: |
-          flake8
-          mypy backtesting
-          time catchsegv coverage run -m backtesting.test
-          bash <(curl -s https://codecov.io/bash)
+        run: time catchsegv coverage run -m backtesting.test
+      - if: matrix.test-type == 'lint'
+        run: bash <(curl -s https://codecov.io/bash)
 
-      - name: Test
-        if: '! matrix.test-type'
+      - if: '! matrix.test-type'
         env: { BOKEH_BROWSER: none }
         run: time catchsegv python -m backtesting.test
 
-      - name: Test docs
-        if: matrix.test-type == 'docs'
+      - if: matrix.test-type == 'docs'
         run: time catchsegv doc/build.sh
