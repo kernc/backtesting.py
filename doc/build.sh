@@ -78,6 +78,7 @@ grep -PR '<a .*?href=' |
     cut -d'#' -f1 |
     sort -u -t$'\t' -k 2 |
     sort -u |
+    tee >(cat 1>&2) |
     python -c '
 import sys
 from urllib.parse import urljoin
@@ -90,9 +91,14 @@ for line in sys.stdin.readlines():
     grep -v $'\t''$' |
     while read -r line; do
         while IFS=$'\t' read -r file url; do
-            url=$(python -c 'import html, sys; print(html.unescape(sys.argv[-1]))' "$url")
-            [ -f "$url" ] ||
-                curl --silent --fail --retry 5 --retry-delay 5 --user-agent 'Mozilla/5.0 Firefox 61' "$url" >/dev/null 2>&1 ||
+            target_file="$(python -c '
+import html, sys                  # fixes &amp;
+from urllib.parse import unquote  # fixes %20
+print(html.unescape(unquote(sys.argv[-1])))' "$url")"
+            if [ -f "$target_file" ]; then continue; fi
+
+            url="${url// /%20}"
+            curl --silent --fail --retry 5 --retry-delay 5 --user-agent 'Mozilla/5.0 Firefox 101' "$url" >/dev/null 2>&1 ||
                 die "broken link in $file:  $url"
         done
     done
