@@ -33,7 +33,7 @@ jobs:
 
       - run: pip install -U pip setuptools wheel
       - if: matrix.test-type == 'lint'
-        run: pip install -U --pre bokeh pandas numpy && pip install -U .[dev]
+        run: pip install -U --pre bokeh pandas 'numpy<1.24' && pip install -U .[dev]
       - if: matrix.test-type == 'docs'
         run: pip install -e .[doc]  # -e provides _version.py for pdoc
       - run: pip install -U .[test]
