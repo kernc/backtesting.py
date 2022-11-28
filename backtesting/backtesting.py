@@ -196,12 +196,14 @@ class Strategy(metaclass=ABCMeta):
 
     def buy(self, *,
             size: float = _FULL_EQUITY,
-            limit: float = None,
-            stop: float = None,
-            sl: float = None,
-            tp: float = None):
+            limit: Optional[float] = None,
+            stop: Optional[float] = None,
+            sl: Optional[float] = None,
+            tp: Optional[float] = None):
         """
         Place a new long order. For explanation of parameters, see `Order` and its properties.
+
+        See `Position.close()` and `Trade.close()` for closing existing positions.
 
         See also `Strategy.sell()`.
         """
@@ -211,14 +213,18 @@ class Strategy(metaclass=ABCMeta):
 
     def sell(self, *,
              size: float = _FULL_EQUITY,
-             limit: float = None,
-             stop: float = None,
-             sl: float = None,
-             tp: float = None):
+             limit: Optional[float] = None,
+             stop: Optional[float] = None,
+             sl: Optional[float] = None,
+             tp: Optional[float] = None):
         """
         Place a new short order. For explanation of parameters, see `Order` and its properties.
 
         See also `Strategy.buy()`.
+
+        .. note::
+            If you merely want to close an existing long position,
+            use `Position.close()` or `Trade.close()`.
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
@@ -376,11 +382,11 @@ class Order:
     """
     def __init__(self, broker: '_Broker',
                  size: float,
-                 limit_price: float = None,
-                 stop_price: float = None,
-                 sl_price: float = None,
-                 tp_price: float = None,
-                 parent_trade: 'Trade' = None):
+                 limit_price: Optional[float] = None,
+                 stop_price: Optional[float] = None,
+                 sl_price: Optional[float] = None,
+                 tp_price: Optional[float] = None,
+                 parent_trade: Optional['Trade'] = None):
         self.__broker = broker
         assert size != 0
         self.__size = size
@@ -690,12 +696,12 @@ class _Broker:
 
     def new_order(self,
                   size: float,
-                  limit: float = None,
-                  stop: float = None,
-                  sl: float = None,
-                  tp: float = None,
+                  limit: Optional[float] = None,
+                  stop: Optional[float] = None,
+                  sl: Optional[float] = None,
+                  tp: Optional[float] = None,
                   *,
-                  trade: Trade = None):
+                  trade: Optional[Trade] = None):
         """
         Argument size indicates whether the order is long or short
         """
@@ -957,7 +963,8 @@ class _Broker:
         self.closed_trades.append(trade._replace(exit_price=price, exit_bar=time_index))
         self._cash += trade.pl
 
-    def _open_trade(self, price: float, size: int, sl: float, tp: float, time_index: int):
+    def _open_trade(self, price: float, size: int,
+                    sl: Optional[float], tp: Optional[float], time_index: int):
         trade = Trade(self, size, price, time_index)
         self.trades.append(trade)
         # Create SL/TP (bracket) orders.
@@ -1197,11 +1204,11 @@ class Backtest:
     def optimize(self, *,
                  maximize: Union[str, Callable[[pd.Series], float]] = 'SQN',
                  method: str = 'grid',
-                 max_tries: Union[int, float] = None,
-                 constraint: Callable[[dict], bool] = None,
+                 max_tries: Optional[Union[int, float]] = None,
+                 constraint: Optional[Callable[[dict], bool]] = None,
                  return_heatmap: bool = False,
                  return_optimization: bool = False,
-                 random_state: int = None,
+                 random_state: Optional[int] = None,
                  **kwargs) -> Union[pd.Series,
                                     Tuple[pd.Series, pd.Series],
                                     Tuple[pd.Series, pd.Series, dict]]:
@@ -1287,6 +1294,7 @@ class Backtest:
             raise TypeError('`maximize` must be str (a field of backtest.run() result '
                             'Series) or a function that accepts result Series '
                             'and returns a number; the higher the better')
+        assert callable(maximize), maximize
 
         have_constraint = bool(constraint)
         if constraint is None:
@@ -1298,6 +1306,7 @@ class Backtest:
             raise TypeError("`constraint` must be a function that accepts a dict "
                             "of strategy parameters and returns a bool whether "
                             "the combination of parameters is admissible or not")
+        assert callable(constraint), constraint
 
         if return_optimization and method != 'skopt':
             raise ValueError("return_optimization=True only valid if method='skopt'")
@@ -1315,7 +1324,7 @@ class Backtest:
                 return self[item]
 
         def _grid_size():
-            size = np.prod([len(_tuple(v)) for v in kwargs.values()])
+            size = int(np.prod([len(_tuple(v)) for v in kwargs.values()]))
             if size < 10_000 and have_constraint:
                 size = sum(1 for p in product(*(zip(repeat(k), _tuple(v))
                                                 for k, v in kwargs.items()))

@@ -26,13 +26,19 @@
 # [OHLC](https://en.wikipedia.org/wiki/Open-high-low-close_chart)
 # data_ (stocks, forex, futures, crypto, ...) as a
 # [pandas.DataFrame](https://pandas.pydata.org/pandas-docs/stable/10min.html)
-# with columns `'Open'`, `'High'`, `'Low'`, `'Close'` and (optionally) `'Volume'`. Such data is widely obtainable (see: 
-# [pandas-datareader](https://pandas-datareader.readthedocs.io/en/latest/),
-# [Quandl](https://www.quandl.com/tools/python),
-# [findatapy](https://github.com/cuemacro/findatapy)).
-# Besides these, your data frames can have _additional columns_ which are accessible in your strategies in a similar manner.
+# with columns `'Open'`, `'High'`, `'Low'`, `'Close'` and (optionally) `'Volume'`.
+# Such data is widely obtainable, e.g. with packages:
+# * [pandas-datareader](https://pandas-datareader.readthedocs.io/en/latest/),
+# * [Quandl](https://www.quandl.com/tools/python),
+# * [findatapy](https://github.com/cuemacro/findatapy),
+# * [yFinance](https://github.com/ranaroussi/yfinance),
+# * [investpy](https://investpy.readthedocs.io/),
+#   etc.
 #
-# DataFrame should ideally be indexed with a _datetime index_ (convert it with [`pd.to_datetime()`](https://pandas.pydata.org/pandas-docs/stable/generated/pandas.to_datetime.html)), otherwise a simple range index will do.
+# Besides these columns, **your data frames can have additional columns which are accessible in your strategies in a similar manner**.
+#
+# DataFrame should ideally be indexed with a _datetime index_ (convert it with [`pd.to_datetime()`](https://pandas.pydata.org/pandas-docs/stable/generated/pandas.to_datetime.html));
+# otherwise a simple range index will do.
 
 # +
 # Example OHLC daily data for Google Inc.

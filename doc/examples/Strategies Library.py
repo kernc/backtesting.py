@@ -17,10 +17,10 @@
 #
 # This tutorial will show how to reuse composable base trading strategies that are part of _backtesting.py_ software distribution.
 # It is, henceforth, assumed you're already familiar with
-# [basic package usage](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html).
+# [basic package usage](https://kernc.github.io/backtesting.py/doc/examples/Quick%20Start%20User%20Guide.html).
 #
 # We'll extend the same moving average cross-over strategy as in
-# [Quick Start User Guide](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html),
+# [Quick Start User Guide](https://kernc.github.io/backtesting.py/doc/examples/Quick%20Start%20User%20Guide.html),
 # but we'll rewrite it as a vectorized signal strategy and add trailing stop-loss.
 #
 # Again, we'll use our helper moving average function.
