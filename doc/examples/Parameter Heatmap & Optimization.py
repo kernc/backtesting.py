@@ -18,7 +18,7 @@
 #
 # This tutorial will show how to optimize strategies with multiple parameters and how to examine and reason about optimization results.
 # It is assumed you're already familiar with
-# [basic _backtesting.py_ usage](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html).
+# [basic _backtesting.py_ usage](https://kernc.github.io/backtesting.py/doc/examples/Quick%20Start%20User%20Guide.html).
 #
 # First, let's again import our helper moving average function.
 # In practice, one should use functions from an indicator library, such as
@@ -28,7 +28,7 @@
 from backtesting.test import SMA
 
 # Our strategy will be a similar moving average cross-over strategy to the one in
-# [Quick Start User Guide](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html),
+# [Quick Start User Guide](https://kernc.github.io/backtesting.py/doc/examples/Quick%20Start%20User%20Guide.html),
 # but we will use four moving averages in total:
 # two moving averages whose relationship determines a general trend
 # (we only trade long when the shorter MA is above the longer one, and vice versa),

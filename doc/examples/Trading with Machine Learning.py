@@ -17,7 +17,7 @@
 # This tutorial will show how to train and backtest a 
 # [machine learning](https://en.wikipedia.org/wiki/Machine_learning)
 # price forecast model with _backtesting.py_ framework. It is assumed you're already familiar with
-# [basic framework usage](https://kernc.github.io/backtesting.py/doc/examples/Quick Start User Guide.html)
+# [basic framework usage](https://kernc.github.io/backtesting.py/doc/examples/Quick%20Start%20User%20Guide.html)
 # and machine learning in general.
 #
 # For this tutorial, we'll use almost a year's worth sample of hourly EUR/USD forex data:
