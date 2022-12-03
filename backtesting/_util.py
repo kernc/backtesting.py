@@ -1,6 +1,6 @@
 import warnings
-from typing import Dict, List, Optional, Sequence, Union, cast
 from numbers import Number
+from typing import Dict, List, Optional, Sequence, Union, cast
 
 import numpy as np
 import pandas as pd

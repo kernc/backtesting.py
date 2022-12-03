@@ -1,4 +1,4 @@
-from typing import List, TYPE_CHECKING, Union
+from typing import TYPE_CHECKING, List, Union
 
 import numpy as np
 import pandas as pd

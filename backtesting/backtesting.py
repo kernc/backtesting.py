@@ -9,11 +9,11 @@ import multiprocessing as mp
 import os
 import sys
 import warnings
-from abc import abstractmethod, ABCMeta
+from abc import ABCMeta, abstractmethod
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import copy
 from functools import lru_cache, partial
-from itertools import repeat, product, chain, compress
+from itertools import chain, compress, product, repeat
 from math import copysign
 from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
@@ -29,7 +29,7 @@ except ImportError:
     def _tqdm(seq, **_):
         return seq
 
-from ._plotting import plot
+from ._plotting import plot  # noqa: I001
 from ._stats import compute_stats
 from ._util import _as_str, _Indicator, _Data, try_
 
@@ -75,7 +75,7 @@ class Strategy(metaclass=ABCMeta):
             setattr(self, k, v)
         return params
 
-    def I(self,  # noqa: E741, E743
+    def I(self,  # noqa: E743
           func: Callable, *args,
           name=None, plot=True, overlay=None, color=None, scatter=False,
           **kwargs) -> np.ndarray:
@@ -126,7 +126,7 @@ class Strategy(metaclass=ABCMeta):
         try:
             value = func(*args, **kwargs)
         except Exception as e:
-            raise RuntimeError(f'Indicator "{name}" errored with exception: {e}')
+            raise RuntimeError(f'Indicator "{name}" error') from e
 
         if isinstance(value, pd.DataFrame):
             value = value.values.T
@@ -190,7 +190,7 @@ class Strategy(metaclass=ABCMeta):
             super().next()
         """
 
-    class __FULL_EQUITY(float):
+    class __FULL_EQUITY(float):  # noqa: N801
         def __repr__(self): return '.9999'
     _FULL_EQUITY = __FULL_EQUITY(1 - sys.float_info.epsilon)
 
@@ -664,7 +664,7 @@ class Trade:
         if order:
             order.cancel()
         if price:
-            kwargs = dict(stop=price) if type == 'sl' else dict(limit=price)
+            kwargs = {'stop': price} if type == 'sl' else {'limit': price}
             order = self.__broker.new_order(-self.size, trade=self, **kwargs)
             setattr(self, attr, order)
 
@@ -1409,13 +1409,13 @@ class Backtest:
                                        Tuple[pd.Series, pd.Series, dict]]:
             try:
                 from skopt import forest_minimize
-                from skopt.space import Integer, Real, Categorical
-                from skopt.utils import use_named_args
                 from skopt.callbacks import DeltaXStopper
                 from skopt.learning import ExtraTreesRegressor
+                from skopt.space import Categorical, Integer, Real
+                from skopt.utils import use_named_args
             except ImportError:
                 raise ImportError("Need package 'scikit-optimize' for method='skopt'. "
-                                  "pip install scikit-optimize")
+                                  "pip install scikit-optimize") from None
 
             nonlocal max_tries
             max_tries = (200 if max_tries is None else

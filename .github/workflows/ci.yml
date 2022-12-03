@@ -39,7 +39,7 @@ jobs:
       - run: pip install -U .[test]
 
       - if: matrix.test-type == 'lint'
-        run: flake8
+        run: ruff backtesting
       - if: matrix.test-type == 'lint'
         run: mypy backtesting
       - if: matrix.test-type == 'lint'

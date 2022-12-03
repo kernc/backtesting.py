@@ -18,21 +18,21 @@ from pandas.testing import assert_frame_equal
 
 from backtesting import Backtest, Strategy
 from backtesting._stats import compute_drawdown_duration_peaks
+from backtesting._util import _Array, _as_str, _Indicator, try_
 from backtesting.lib import (
     OHLCV_AGG,
+    SignalStrategy,
+    TrailingStrategy,
     barssince,
     compute_stats,
     cross,
     crossover,
-    quantile,
-    SignalStrategy,
-    TrailingStrategy,
-    resample_apply,
     plot_heatmaps,
+    quantile,
     random_ohlc_data,
+    resample_apply,
 )
-from backtesting.test import GOOG, EURUSD, SMA
-from backtesting._util import _Indicator, _as_str, _Array, try_
+from backtesting.test import EURUSD, GOOG, SMA
 
 SHORT_DATA = GOOG.iloc[:20]  # Short data for fast tests with no indicator lag
 
@@ -146,7 +146,7 @@ class TestBacktest(TestCase):
 
                 assert float(self.data.Close) == self.data.Close[-1]
 
-            def next(self, FIVE_DAYS=pd.Timedelta('3 days')):
+            def next(self, _FEW_DAYS=pd.Timedelta('3 days')):  # noqa: N803
                 assert self.equity >= 0
 
                 assert isinstance(self.sma, _Indicator)
@@ -193,7 +193,7 @@ class TestBacktest(TestCase):
                     assert self.position.size < 0
 
                     trade = self.trades[0]
-                    if self.data.index[-1] - self.data.index[trade.entry_bar] > FIVE_DAYS:
+                    if self.data.index[-1] - self.data.index[trade.entry_bar] > _FEW_DAYS:
                         assert not trade.is_long
                         assert trade.is_short
                         assert trade.size < 0
@@ -290,7 +290,7 @@ class TestBacktest(TestCase):
             except TypeError:
                 return a == b
 
-        diff = {key: print(key) or value
+        diff = {key: print(key) or value  # noqa: T201
                 for key, value in stats.filter(regex='^[^_]').items()
                 if not almost_equal(value, expected[key])}
         self.assertDictEqual(diff, {})
@@ -510,7 +510,7 @@ class TestStrategy(TestCase):
 class TestOptimize(TestCase):
     def test_optimize(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
-        OPT_PARAMS = dict(fast=range(2, 5, 2), slow=[2, 5, 7, 9])
+        OPT_PARAMS = {'fast': range(2, 5, 2), 'slow': [2, 5, 7, 9]}
 
         self.assertRaises(ValueError, bt.optimize)
         self.assertRaises(ValueError, bt.optimize, maximize='missing key', **OPT_PARAMS)
@@ -556,7 +556,7 @@ class TestOptimize(TestCase):
 
     def test_max_tries(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
-        OPT_PARAMS = dict(fast=range(2, 10, 2), slow=[2, 5, 7, 9])
+        OPT_PARAMS = {'fast': range(2, 10, 2), 'slow': [2, 5, 7, 9]}
         for method, max_tries, random_state in (('grid', 5, 0),
                                                 ('grid', .3, 0),
                                                 ('skopt', 7, 0),
@@ -589,7 +589,7 @@ class TestOptimize(TestCase):
 
     def test_multiprocessing_windows_spawn(self):
         df = GOOG.iloc[:100]
-        kw = dict(fast=[10])
+        kw = {'fast': [10]}
 
         stats1 = Backtest(df, SmaCross).optimize(**kw)
         with patch('multiprocessing.get_start_method', lambda **_: 'spawn'):
@@ -633,7 +633,7 @@ class TestPlot(TestCase):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
         bt.run()
         with _tempfile() as f:
-            for p in dict(plot_volume=False,
+            for p in dict(plot_volume=False,  # noqa: C408
                           plot_equity=False,
                           plot_return=True,
                           plot_pl=False,
@@ -722,8 +722,8 @@ class TestPlot(TestCase):
         self.assertEqual(stats['Equity Final [$]'], 0)
         self.assertEqual(len(trades), 2)
         assert trades[['EntryTime', 'ExitTime']].equals(
-            pd.DataFrame(dict(EntryTime=pd.to_datetime(['2006-11-01', '2008-11-14']),
-                              ExitTime=pd.to_datetime(['2007-10-31', '2009-09-21']))))
+            pd.DataFrame({'EntryTime': pd.to_datetime(['2006-11-01', '2008-11-14']),
+                          'ExitTime': pd.to_datetime(['2007-10-31', '2009-09-21'])}))
         assert trades['PnL'].round().equals(pd.Series([23469., -34420.]))
 
         with _tempfile() as f:

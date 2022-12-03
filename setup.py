@@ -50,7 +50,7 @@ if __name__ == '__main__':
                 'scikit-optimize',
             ],
             'dev': [
-                'flake8',
+                'ruff',
                 'coverage',
                 'mypy',
             ],

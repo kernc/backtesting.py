@@ -257,7 +257,7 @@ this.labels = this.labels || formatter.doFormat(ticks
 return this.labels[index] || "";
         ''')
 
-    NBSP = '\N{NBSP}' * 4
+    NBSP = '\N{NBSP}' * 4  # noqa: E999
     ohlc_extreme_values = df[['High', 'Low']].copy(deep=False)
     ohlc_tooltips = [
         ('x, y', NBSP.join(('$index',

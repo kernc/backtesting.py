@@ -12,18 +12,18 @@ Please raise ideas for additions to this collection on the [issue tracker].
 """
 
 from collections import OrderedDict
+from inspect import currentframe
 from itertools import compress
 from numbers import Number
-from inspect import currentframe
-from typing import Sequence, Optional, Union, Callable
+from typing import Callable, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
 
-from .backtesting import Strategy
 from ._plotting import plot_heatmaps as _plot_heatmaps
 from ._stats import compute_stats as _compute_stats
 from ._util import _Array, _as_str
+from .backtesting import Strategy
 
 __pdoc__ = {}
 
@@ -461,8 +461,8 @@ class TrailingStrategy(Strategy):
         Set the lookback period for computing ATR. The default value
         of 100 ensures a _stable_ ATR.
         """
-        h, l, c_prev = self.data.High, self.data.Low, pd.Series(self.data.Close).shift(1)
-        tr = np.max([h - l, (c_prev - h).abs(), (c_prev - l).abs()], axis=0)
+        hi, lo, c_prev = self.data.High, self.data.Low, pd.Series(self.data.Close).shift(1)
+        tr = np.max([hi - lo, (c_prev - hi).abs(), (c_prev - lo).abs()], axis=0)
         atr = pd.Series(tr).rolling(periods).mean().bfill().values
         self.__atr = atr
 
