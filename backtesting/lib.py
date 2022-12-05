@@ -12,17 +12,18 @@ Please raise ideas for additions to this collection on the [issue tracker].
 """
 
 from collections import OrderedDict
+from inspect import currentframe
 from itertools import compress
 from numbers import Number
-from inspect import currentframe
-from typing import Sequence, Optional, Union, Callable
+from typing import Callable, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
 
-from .backtesting import Strategy
 from ._plotting import plot_heatmaps as _plot_heatmaps
+from ._stats import compute_stats as _compute_stats
 from ._util import _Array, _as_str
+from .backtesting import Strategy
 
 __pdoc__ = {}
 
@@ -37,7 +38,7 @@ OHLCV_AGG = OrderedDict((
 """Dictionary of rules for aggregating resampled OHLCV data frames,
 e.g.
 
-    df.resample('4H', label='right').agg(OHLCV_AGG)
+    df.resample('4H', label='right').agg(OHLCV_AGG).dropna()
 """
 
 TRADES_AGG = OrderedDict((
@@ -79,8 +80,8 @@ def barssince(condition: Sequence[bool], default=np.inf) -> int:
 
 def cross(series1: Sequence, series2: Sequence) -> bool:
     """
-    Return `True` if `series1` and `series2` just crossed (either
-    direction).
+    Return `True` if `series1` and `series2` just crossed
+    (above or below) each other.
 
         >>> cross(self.data.Close, self.sma)
         True
@@ -91,7 +92,7 @@ def cross(series1: Sequence, series2: Sequence) -> bool:
 
 def crossover(series1: Sequence, series2: Sequence) -> bool:
     """
-    Return `True` if `series1` just crossed over
+    Return `True` if `series1` just crossed over (above)
     `series2`.
 
         >>> crossover(self.data.Close, self.sma)
@@ -164,11 +165,44 @@ def quantile(series: Sequence, quantile: Union[None, float] = None):
     return np.nanpercentile(series, quantile * 100)
 
 
+def compute_stats(
+        *,
+        stats: pd.Series,
+        data: pd.DataFrame,
+        trades: pd.DataFrame = None,
+        risk_free_rate: float = 0.) -> pd.Series:
+    """
+    (Re-)compute strategy performance metrics.
+
+    `stats` is the statistics series as returned by `backtesting.backtesting.Backtest.run()`.
+    `data` is OHLC data as passed to the `backtesting.backtesting.Backtest`
+    the `stats` were obtained in.
+    `trades` can be a dataframe subset of `stats._trades` (e.g. only long trades).
+    You can also tune `risk_free_rate`, used in calculation of Sharpe and Sortino ratios.
+
+        >>> stats = Backtest(GOOG, MyStrategy).run()
+        >>> only_long_trades = stats._trades[stats._trades.Size > 0]
+        >>> long_stats = compute_stats(stats=stats, trades=only_long_trades,
+        ...                            data=GOOG, risk_free_rate=.02)
+    """
+    equity = stats._equity_curve.Equity
+    if trades is None:
+        trades = stats._trades
+    else:
+        # XXX: Is this buggy?
+        equity = equity.copy()
+        equity[:] = stats._equity_curve.Equity.iloc[0]
+        for t in trades.itertuples(index=False):
+            equity.iloc[t.EntryBar:] += t.PnL
+    return _compute_stats(trades=trades, equity=equity, ohlc_data=data,
+                          risk_free_rate=risk_free_rate, strategy_instance=stats._strategy)
+
+
 def resample_apply(rule: str,
                    func: Optional[Callable[..., Sequence]],
                    series: Union[pd.Series, pd.DataFrame, _Array],
                    *args,
-                   agg: Union[str, dict] = None,
+                   agg: Optional[Union[str, dict]] = None,
                    **kwargs):
     """
     Apply `func` (such as an indicator) to `series`, resampled to
@@ -252,7 +286,7 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
         series = series.s
 
     if agg is None:
-        agg = OHLCV_AGG.get(getattr(series, 'name', None), 'last')
+        agg = OHLCV_AGG.get(getattr(series, 'name', ''), 'last')
         if isinstance(series, pd.DataFrame):
             agg = {column: OHLCV_AGG.get(column, 'last')
                    for column in series.columns}
@@ -288,14 +322,14 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
                                 method='ffill').reindex(series.index)
         return result
 
-    wrap_func.__name__ = func.__name__  # type: ignore
+    wrap_func.__name__ = func.__name__
 
     array = strategy_I(wrap_func, resampled, *args, **kwargs)
     return array
 
 
 def random_ohlc_data(example_data: pd.DataFrame, *,
-                     frac=1., random_state: int = None) -> pd.DataFrame:
+                     frac=1., random_state: Optional[int] = None) -> pd.DataFrame:
     """
     OHLC data generator. The generated OHLC data has basic
     [descriptive statistics](https://en.wikipedia.org/wiki/Descriptive_statistics)
@@ -357,7 +391,7 @@ class SignalStrategy(Strategy):
     __exit_signal = (False,)
 
     def set_signal(self, entry_size: Sequence[float],
-                   exit_portion: Sequence[float] = None,
+                   exit_portion: Optional[Sequence[float]] = None,
                    *,
                    plot: bool = True):
         """
@@ -427,8 +461,8 @@ class TrailingStrategy(Strategy):
         Set the lookback period for computing ATR. The default value
         of 100 ensures a _stable_ ATR.
         """
-        h, l, c_prev = self.data.High, self.data.Low, pd.Series(self.data.Close).shift(1)
-        tr = np.max([h - l, (c_prev - h).abs(), (c_prev - l).abs()], axis=0)
+        hi, lo, c_prev = self.data.High, self.data.Low, pd.Series(self.data.Close).shift(1)
+        tr = np.max([hi - lo, (c_prev - hi).abs(), (c_prev - lo).abs()], axis=0)
         atr = pd.Series(tr).rolling(periods).mean().bfill().values
         self.__atr = atr
 
@@ -441,13 +475,15 @@ class TrailingStrategy(Strategy):
 
     def next(self):
         super().next()
+        # Can't use index=-1 because self.__atr is not an Indicator type
+        index = len(self.data)-1
         for trade in self.trades:
             if trade.is_long:
                 trade.sl = max(trade.sl or -np.inf,
-                               self.data.Close[-1] - self.__atr[-1] * self.__n_atr)
+                               self.data.Close[index] - self.__atr[index] * self.__n_atr)
             else:
                 trade.sl = min(trade.sl or np.inf,
-                               self.data.Close[-1] + self.__atr[-1] * self.__n_atr)
+                               self.data.Close[index] + self.__atr[index] * self.__n_atr)
 
 
 # Prevent pdoc3 documenting __init__ signature of Strategy subclasses

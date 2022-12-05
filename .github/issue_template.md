@@ -17,8 +17,16 @@
 2.
 3.
 
+```python
+
+python code goes here
+
+```
+
 ### Additional info
 
 <!-- screenshots, code snippets, ... -->
 
 - Backtesting version: 0.?.?   <!-- From backtesting.__version__ -->
+- `bokeh.__version__`:
+- OS:

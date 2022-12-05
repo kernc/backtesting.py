@@ -9,17 +9,18 @@ import multiprocessing as mp
 import os
 import sys
 import warnings
-from abc import abstractmethod, ABCMeta
+from abc import ABCMeta, abstractmethod
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import copy
 from functools import lru_cache, partial
-from itertools import repeat, product, chain, compress
+from itertools import chain, compress, product, repeat
 from math import copysign
 from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
+from numpy.random import default_rng
 
 try:
     from tqdm.auto import tqdm as _tqdm
@@ -28,8 +29,9 @@ except ImportError:
     def _tqdm(seq, **_):
         return seq
 
-from ._plotting import plot
-from ._util import _as_str, _Indicator, _Data, _data_period, try_
+from ._plotting import plot  # noqa: I001
+from ._stats import compute_stats
+from ._util import _as_str, _Indicator, _Data, try_
 
 __pdoc__ = {
     'Strategy.__init__': False,
@@ -74,7 +76,7 @@ class Strategy(metaclass=ABCMeta):
             setattr(self, k, v)
         return params
 
-    def I(self,  # noqa: E741, E743
+    def I(self,  # noqa: E743
           func: Callable, *args,
           name=None, plot=True, overlay=None, color=None, scatter=False,
           **kwargs) -> np.ndarray:
@@ -125,7 +127,7 @@ class Strategy(metaclass=ABCMeta):
         try:
             value = func(*args, **kwargs)
         except Exception as e:
-            raise RuntimeError(f'Indicator "{name}" errored with exception: {e}')
+            raise RuntimeError(f'Indicator "{name}" error') from e
 
         if isinstance(value, pd.DataFrame):
             value = value.values.T
@@ -154,7 +156,7 @@ class Strategy(metaclass=ABCMeta):
         value = _Indicator(value, name=name, plot=plot, overlay=overlay,
                            color=color, scatter=scatter,
                            # _Indicator.s Series accessor uses this:
-                           data=self.data)
+                           index=self.data.index)
         self._indicators.append(value)
         return value
 
@@ -189,15 +191,21 @@ class Strategy(metaclass=ABCMeta):
             super().next()
         """
 
+    class __FULL_EQUITY(float):  # noqa: N801
+        def __repr__(self): return '.9999'
+    _FULL_EQUITY = __FULL_EQUITY(1 - sys.float_info.epsilon)
+
     def buy(self, *,
-            size: float = 1 - sys.float_info.epsilon,
-            limit: float = None,
-            stop: float = None,
-            sl: float = None,
-            tp: float = None,
+            size: float = _FULL_EQUITY,
+            limit: Optional[float] = None,
+            stop: Optional[float] = None,
+            sl: Optional[float] = None,
+            tp: Optional[float] = None,
             tag: object = None):
         """
         Place a new long order. For explanation of parameters, see `Order` and its properties.
+
+        See `Position.close()` and `Trade.close()` for closing existing positions.
 
         See also `Strategy.sell()`.
         """
@@ -206,16 +214,20 @@ class Strategy(metaclass=ABCMeta):
         return self._broker.new_order(size, limit, stop, sl, tp, tag)
 
     def sell(self, *,
-             size: float = 1 - sys.float_info.epsilon,
-             limit: float = None,
-             stop: float = None,
-             sl: float = None,
-             tp: float = None,
+             size: float = _FULL_EQUITY,
+             limit: Optional[float] = None,
+             stop: Optional[float] = None,
+             sl: Optional[float] = None,
+             tp: Optional[float] = None,
              tag: object = None):
         """
         Place a new short order. For explanation of parameters, see `Order` and its properties.
 
         See also `Strategy.buy()`.
+
+        .. note::
+            If you merely want to close an existing long position,
+            use `Position.close()` or `Trade.close()`.
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
@@ -376,11 +388,11 @@ class Order:
 
     def __init__(self, broker: '_Broker',
                  size: float,
-                 limit_price: float = None,
-                 stop_price: float = None,
-                 sl_price: float = None,
-                 tp_price: float = None,
-                 parent_trade: 'Trade' = None,
+                 limit_price: Optional[float] = None,
+                 stop_price: Optional[float] = None,
+                 sl_price: Optional[float] = None,
+                 tp_price: Optional[float] = None,
+                 parent_trade: Optional['Trade'] = None,
                  tag: object = None):
         self.__broker = broker
         assert size != 0
@@ -419,6 +431,7 @@ class Order:
             elif self is trade._tp_order:
                 trade._replace(tp_order=None)
             else:
+                # XXX: https://github.com/kernc/backtesting.py/issues/251#issuecomment-835634984 ???
                 assert False
 
     # Fields getters
@@ -681,7 +694,7 @@ class Trade:
         if order:
             order.cancel()
         if price:
-            kwargs = dict(stop=price) if type == 'sl' else dict(limit=price)
+            kwargs = {'stop': price} if type == 'sl' else {'limit': price}
             order = self.__broker.new_order(-self.size, trade=self, tag=self.tag, **kwargs)
             setattr(self, attr, order)
 
@@ -690,7 +703,9 @@ class _Broker:
     def __init__(self, *, data, cash, commission, margin,
                  trade_on_close, hedging, exclusive_orders, index):
         assert 0 < cash, f"cash should be >0, is {cash}"
-        assert 0 <= commission < .1, f"commission should be between 0-10%, is {commission}"
+        assert -.1 <= commission < .1, \
+            ("commission should be between -10% "
+             f"(e.g. market-maker's rebates) and 10% (fees), is {commission}")
         assert 0 < margin <= 1, f"margin should be between 0 and 1, is {margin}"
         self._data: _Data = data
         self._cash = cash
@@ -711,13 +726,13 @@ class _Broker:
 
     def new_order(self,
                   size: float,
-                  limit: float = None,
-                  stop: float = None,
-                  sl: float = None,
-                  tp: float = None,
+                  limit: Optional[float] = None,
+                  stop: Optional[float] = None,
+                  sl: Optional[float] = None,
+                  tp: Optional[float] = None,
                   tag: object = None,
                   *,
-                  trade: Trade = None):
+                  trade: Optional[Trade] = None):
         """
         Argument size indicates whether the order is long or short
         """
@@ -984,8 +999,8 @@ class _Broker:
         self.closed_trades.append(trade._replace(exit_price=price, exit_bar=time_index))
         self._cash += trade.pl
 
-    def _open_trade(self, price: float, size: int, sl: float, tp: float,
-                    time_index: int, tag: object):
+    def _open_trade(self, price: float, size: int,
+                    sl: Optional[float], tp: Optional[float], time_index: int, tag):
         trade = Trade(self, size, price, time_index, tag)
         self.trades.append(trade)
         # Create SL/TP (bracket) orders.
@@ -1120,7 +1135,7 @@ class Backtest:
             exclusive_orders=exclusive_orders, index=data.index,
         )
         self._strategy = strategy
-        self._results = None
+        self._results: Optional[pd.Series] = None
 
     def run(self, **kwargs) -> pd.Series:
         """
@@ -1156,6 +1171,7 @@ class Backtest:
             Profit Factor                         2.08802
             Expectancy [%]                        8.79171
             SQN                                  0.916893
+            Kelly Criterion                        0.6134
             _strategy                            SmaCross
             _equity_curve                           Eq...
             _trades                       Size  EntryB...
@@ -1211,17 +1227,25 @@ class Backtest:
             # for future `indicator._opts['data'].index` calls to work
             data._set_length(len(self._data))
 
-            self._results = self._compute_stats(broker, strategy)
+            equity = pd.Series(broker._equity).bfill().fillna(broker._cash).values
+            self._results = compute_stats(
+                trades=broker.closed_trades,
+                equity=equity,
+                ohlc_data=self._data,
+                risk_free_rate=0.0,
+                strategy_instance=strategy,
+            )
+
         return self._results
 
     def optimize(self, *,
                  maximize: Union[str, Callable[[pd.Series], float]] = 'SQN',
                  method: str = 'grid',
-                 max_tries: Union[int, float] = None,
-                 constraint: Callable[[dict], bool] = None,
+                 max_tries: Optional[Union[int, float]] = None,
+                 constraint: Optional[Callable[[dict], bool]] = None,
                  return_heatmap: bool = False,
                  return_optimization: bool = False,
-                 random_state: int = None,
+                 random_state: Optional[int] = None,
                  **kwargs) -> Union[pd.Series,
                                     Tuple[pd.Series, pd.Series],
                                     Tuple[pd.Series, pd.Series, dict]]:
@@ -1276,7 +1300,7 @@ class Backtest:
         [plotting tools]: https://scikit-optimize.github.io/stable/modules/plots.html
 
         If you want reproducible optimization results, set `random_state`
-        to a fixed integer or a `numpy.random.RandomState` object.
+        to a fixed integer random seed.
 
         Additional keyword arguments represent strategy arguments with
         list-like collections of possible values. For example, the following
@@ -1307,6 +1331,7 @@ class Backtest:
             raise TypeError('`maximize` must be str (a field of backtest.run() result '
                             'Series) or a function that accepts result Series '
                             'and returns a number; the higher the better')
+        assert callable(maximize), maximize
 
         have_constraint = bool(constraint)
         if constraint is None:
@@ -1318,6 +1343,7 @@ class Backtest:
             raise TypeError("`constraint` must be a function that accepts a dict "
                             "of strategy parameters and returns a bool whether "
                             "the combination of parameters is admissible or not")
+        assert callable(constraint), constraint
 
         if return_optimization and method != 'skopt':
             raise ValueError("return_optimization=True only valid if method='skopt'")
@@ -1335,7 +1361,7 @@ class Backtest:
                 return self[item]
 
         def _grid_size():
-            size = np.prod([len(_tuple(v)) for v in kwargs.values()])
+            size = int(np.prod([len(_tuple(v)) for v in kwargs.values()]))
             if size < 10_000 and have_constraint:
                 size = sum(1 for p in product(*(zip(repeat(k), _tuple(v))
                                                 for k, v in kwargs.items()))
@@ -1343,7 +1369,7 @@ class Backtest:
             return size
 
         def _optimize_grid() -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
-            rand = np.random.RandomState(random_state).random
+            rand = default_rng(random_state).random
             grid_frac = (1 if max_tries is None else
                          max_tries if 0 < max_tries <= 1 else
                          max_tries / _grid_size())
@@ -1367,7 +1393,7 @@ class Backtest:
                                     names=next(iter(param_combos)).keys()))
 
             def _batch(seq):
-                n = np.clip(len(seq) // (os.cpu_count() or 1), 5, 300)
+                n = np.clip(int(len(seq) // (os.cpu_count() or 1)), 1, 300)
                 for i in range(0, len(seq), n):
                     yield seq[i:i + n]
 
@@ -1386,7 +1412,8 @@ class Backtest:
                     with ProcessPoolExecutor() as executor:
                         futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
                                    for i in range(len(param_batches))]
-                        for future in _tqdm(as_completed(futures), total=len(futures)):
+                        for future in _tqdm(as_completed(futures), total=len(futures),
+                                            desc='Backtest.optimize'):
                             batch_index, values = future.result()
                             for value, params in zip(values, param_batches[batch_index]):
                                 heatmap[tuple(params.values())] = value
@@ -1419,13 +1446,13 @@ class Backtest:
                                        Tuple[pd.Series, pd.Series, dict]]:
             try:
                 from skopt import forest_minimize
-                from skopt.space import Integer, Real, Categorical
-                from skopt.utils import use_named_args
                 from skopt.callbacks import DeltaXStopper
                 from skopt.learning import ExtraTreesRegressor
+                from skopt.space import Categorical, Integer, Real
+                from skopt.utils import use_named_args
             except ImportError:
                 raise ImportError("Need package 'scikit-optimize' for method='skopt'. "
-                                  "pip install scikit-optimize")
+                                  "pip install scikit-optimize") from None
 
             nonlocal max_tries
             max_tries = (200 if max_tries is None else
@@ -1454,9 +1481,11 @@ class Backtest:
 
             # np.inf/np.nan breaks sklearn, np.finfo(float).max breaks skopt.plots.plot_objective
             INVALID = 1e300
+            progress = iter(_tqdm(repeat(None), total=max_tries, desc='Backtest.optimize'))
 
             @use_named_args(dimensions=dimensions)
             def objective_function(**params):
+                next(progress)
                 # Check constraints
                 # TODO: Adjust after https://github.com/scikit-optimize/scikit-optimize/pull/971
                 if not constraint(AttrDict(params)):
@@ -1518,135 +1547,6 @@ class Backtest:
                                            for params in param_batches[batch_index])]
 
     _mp_backtests: Dict[float, Tuple['Backtest', List, Callable]] = {}
-
-    @staticmethod
-    def _compute_drawdown_duration_peaks(dd: pd.Series):
-        iloc = np.unique(np.r_[(dd == 0).values.nonzero()[0], len(dd) - 1])
-        iloc = pd.Series(iloc, index=dd.index[iloc])
-        df = iloc.to_frame('iloc').assign(prev=iloc.shift())
-        df = df[df['iloc'] > df['prev'] + 1].astype(int)
-        # If no drawdown since no trade, avoid below for pandas sake and return nan series
-        if not len(df):
-            return (dd.replace(0, np.nan),) * 2
-        df['duration'] = df['iloc'].map(dd.index.__getitem__) - df['prev'].map(dd.index.__getitem__)
-        df['peak_dd'] = df.apply(lambda row: dd.iloc[row['prev']:row['iloc'] + 1].max(), axis=1)
-        df = df.reindex(dd.index)
-        return df['duration'], df['peak_dd']
-
-    def _compute_stats(self, broker: _Broker, strategy: Strategy) -> pd.Series:
-        data = self._data
-        index = data.index
-
-        equity = pd.Series(broker._equity).bfill().fillna(broker._cash).values
-        dd = 1 - equity / np.maximum.accumulate(equity)
-        dd_dur, dd_peaks = self._compute_drawdown_duration_peaks(pd.Series(dd, index=index))
-
-        equity_df = pd.DataFrame({
-            'Equity': equity,
-            'DrawdownPct': dd,
-            'DrawdownDuration': dd_dur},
-            index=index)
-
-        trades = broker.closed_trades
-        trades_df = pd.DataFrame({
-            'Size': [t.size for t in trades],
-            'EntryBar': [t.entry_bar for t in trades],
-            'ExitBar': [t.exit_bar for t in trades],
-            'EntryPrice': [t.entry_price for t in trades],
-            'ExitPrice': [t.exit_price for t in trades],
-            'PnL': [t.pl for t in trades],
-            'ReturnPct': [t.pl_pct for t in trades],
-            'EntryTime': [t.entry_time for t in trades],
-            'ExitTime': [t.exit_time for t in trades],
-        })
-        trades_df['Duration'] = trades_df['ExitTime'] - trades_df['EntryTime']
-
-        pl = trades_df['PnL']
-        returns = trades_df['ReturnPct']
-        durations = trades_df['Duration']
-
-        def _round_timedelta(value, _period=_data_period(index)):
-            if not isinstance(value, pd.Timedelta):
-                return value
-            resolution = getattr(_period, 'resolution_string', None) or _period.resolution
-            return value.ceil(resolution)
-
-        s = pd.Series(dtype=object)
-        s.loc['Start'] = index[0]
-        s.loc['End'] = index[-1]
-        s.loc['Duration'] = s.End - s.Start
-
-        have_position = np.repeat(0, len(index))
-        for t in trades:
-            have_position[t.entry_bar:t.exit_bar + 1] = 1  # type: ignore
-
-        s.loc['Exposure Time [%]'] = have_position.mean() * 100  # In "n bars" time, not index time
-        s.loc['Equity Final [$]'] = equity[-1]
-        s.loc['Equity Peak [$]'] = equity.max()
-        s.loc['Return [%]'] = (equity[-1] - equity[0]) / equity[0] * 100
-        c = data.Close.values
-        s.loc['Buy & Hold Return [%]'] = (c[-1] - c[0]) / c[0] * 100  # long-only return
-
-        def geometric_mean(returns):
-            returns = returns.fillna(0) + 1
-            return (0 if np.any(returns <= 0) else
-                    np.exp(np.log(returns).sum() / (len(returns) or np.nan)) - 1)
-
-        day_returns = gmean_day_return = np.array(np.nan)
-        annual_trading_days = np.nan
-        if isinstance(index, pd.DatetimeIndex):
-            day_returns = equity_df['Equity'].resample('D').last().dropna().pct_change()
-            gmean_day_return = geometric_mean(day_returns)
-            annual_trading_days = float(
-                365 if index.dayofweek.to_series().between(5, 6).mean() > 2/7 * .6 else
-                252)
-
-        # Annualized return and risk metrics are computed based on the (mostly correct)
-        # assumption that the returns are compounded. See: https://dx.doi.org/10.2139/ssrn.3054517
-        # Our annualized return matches `empyrical.annual_return(day_returns)` whereas
-        # our risk doesn't; they use the simpler approach below.
-        annualized_return = (1 + gmean_day_return)**annual_trading_days - 1
-        s.loc['Return (Ann.) [%]'] = annualized_return * 100
-        s.loc['Volatility (Ann.) [%]'] = np.sqrt((day_returns.var(ddof=int(bool(day_returns.shape))) + (1 + gmean_day_return)**2)**annual_trading_days - (1 + gmean_day_return)**(2*annual_trading_days)) * 100  # noqa: E501
-        # s.loc['Return (Ann.) [%]'] = gmean_day_return * annual_trading_days * 100
-        # s.loc['Risk (Ann.) [%]'] = day_returns.std(ddof=1) * np.sqrt(annual_trading_days) * 100
-
-        # Our Sharpe mismatches `empyrical.sharpe_ratio()` because they use arithmetic mean return
-        # and simple standard deviation
-        s.loc['Sharpe Ratio'] = np.clip(s.loc['Return (Ann.) [%]'] / (s.loc['Volatility (Ann.) [%]'] or np.nan), 0, np.inf)  # noqa: E501
-        # Our Sortino mismatches `empyrical.sortino_ratio()` because they use arithmetic mean return
-        s.loc['Sortino Ratio'] = np.clip(annualized_return / (np.sqrt(np.mean(day_returns.clip(-np.inf, 0)**2)) * np.sqrt(annual_trading_days)), 0, np.inf)  # noqa: E501
-        max_dd = -np.nan_to_num(dd.max())
-        s.loc['Calmar Ratio'] = np.clip(annualized_return / (-max_dd or np.nan), 0, np.inf)
-        s.loc['Max. Drawdown [%]'] = max_dd * 100
-        s.loc['Avg. Drawdown [%]'] = -dd_peaks.mean() * 100
-        s.loc['Max. Drawdown Duration'] = _round_timedelta(dd_dur.max())
-        s.loc['Avg. Drawdown Duration'] = _round_timedelta(dd_dur.mean())
-        s.loc['# Trades'] = n_trades = len(trades)
-        s.loc['Win Rate [%]'] = win_rate = np.nan if not n_trades else (pl > 0).sum() / n_trades * 100  # noqa: E501
-        s.loc['Best Trade [%]'] = returns.max() * 100
-        s.loc['Worst Trade [%]'] = returns.min() * 100
-        mean_return = geometric_mean(returns)
-        s.loc['Avg. Trade [%]'] = mean_return * 100
-        s.loc['Max. Trade Duration'] = _round_timedelta(durations.max())
-        s.loc['Avg. Trade Duration'] = _round_timedelta(durations.mean())
-        s.loc['Profit Factor'] = returns[returns > 0].sum() / (abs(returns[returns < 0].sum()) or np.nan)  # noqa: E501
-        s.loc['Expectancy [%]'] = ((returns[returns > 0].mean() * win_rate +
-                                    returns[returns < 0].mean() * (100 - win_rate)))
-        s.loc['SQN'] = np.sqrt(n_trades) * pl.mean() / (pl.std() or np.nan)
-
-        s.loc['_strategy'] = strategy
-        s.loc['_equity_curve'] = equity_df
-        s.loc['_trades'] = trades_df
-
-        s = Backtest._Stats(s)
-        return s
-
-    class _Stats(pd.Series):
-        def __repr__(self):
-            # Prevent expansion due to _equity and _trades dfs
-            with pd.option_context('max_colwidth', 20):
-                return super().__repr__()
 
     def plot(self, *, results: pd.Series = None, filename=None, plot_width=None,
              plot_equity=True, plot_return=False, plot_pl=True,
@@ -1736,7 +1636,7 @@ class Backtest:
                 raise RuntimeError('First issue `backtest.run()` to obtain results.')
             results = self._results
 
-        plot(
+        return plot(
             results=results,
             df=self._data,
             indicators=results._strategy._indicators,

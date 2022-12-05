@@ -1,0 +1,37 @@
+[tool.ruff]
+exclude = [
+    '.git',
+    '.eggs',
+    '__pycache__',
+    'doc/examples',
+]
+ignore = [
+    'U006',
+    'U007',
+    'U009',
+    'N802',
+    'N806',
+    'C901',
+    'B008',
+    'B011',
+]
+line-length = 100
+select = [
+    'I',
+    'E',
+    'F',
+    'W',
+    'U',
+    'N',
+    'C',
+    'B',
+    'T',
+    'M',
+    'YTT',
+]
+
+[tool.ruff.pep8-naming]
+ignore-names = [
+    'l',
+    'h',
+]

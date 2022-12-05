@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import warnings
+from colorsys import hls_to_rgb, rgb_to_hls
 from itertools import cycle, combinations
 from functools import partial
 from typing import Callable, List, Union
@@ -9,12 +10,13 @@ from typing import Callable, List, Union
 import numpy as np
 import pandas as pd
 
+from bokeh.colors import RGB
 from bokeh.colors.named import (
     lime as BULL_COLOR,
     tomato as BEAR_COLOR
 )
 from bokeh.plotting import figure as _figure
-from bokeh.models import (
+from bokeh.models import (  # type: ignore
     CrosshairTool,
     CustomJS,
     ColumnDataSource,
@@ -23,10 +25,13 @@ from bokeh.models import (
     HoverTool,
     Range1d,
     DatetimeTickFormatter,
-    FuncTickFormatter,
     WheelZoomTool,
     LinearColorMapper,
 )
+try:
+    from bokeh.models import CustomJSTickFormatter
+except ImportError:  # Bokeh < 3.0
+    from bokeh.models import FuncTickFormatter as CustomJSTickFormatter  # type: ignore
 from bokeh.io import output_notebook, output_file, show
 from bokeh.io.state import curstate
 from bokeh.layouts import gridplot
@@ -81,9 +86,10 @@ def colorgen():
 
 
 def lightness(color, lightness=.94):
-    color = color.to_hsl()
-    color.l = lightness  # noqa
-    return color.to_rgb()
+    rgb = np.array([color.r, color.g, color.b]) / 255
+    h, _, s = rgb_to_hls(*rgb)
+    rgb = np.array(hls_to_rgb(h, lightness, s)) * 255.
+    return RGB(*rgb)
 
 
 _MAX_CANDLES = 10_000
@@ -96,11 +102,23 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
         if resample_rule is False or len(df) <= _MAX_CANDLES:
             return df, indicators, equity_data, trades
 
-        from_index = dict(day=-2, hour=-6, minute=1, second=0, millisecond=0,
-                          microsecond=0, nanosecond=0)[df.index.resolution]
-        FREQS = ('1T', '5T', '10T', '15T', '30T', '1H', '2H', '4H', '8H', '1D', '1W', '1M')
-        freq = next((f for f in FREQS[from_index:]
-                     if len(df.resample(f)) <= _MAX_CANDLES), FREQS[-1])
+        freq_minutes = pd.Series({
+            "1T": 1,
+            "5T": 5,
+            "10T": 10,
+            "15T": 15,
+            "30T": 30,
+            "1H": 60,
+            "2H": 60*2,
+            "4H": 60*4,
+            "8H": 60*8,
+            "1D": 60*24,
+            "1W": 60*24*7,
+            "1M": np.inf,
+        })
+        timespan = df.index[-1] - df.index[0]
+        require_minutes = (timespan / _MAX_CANDLES).total_seconds() // 60
+        freq = freq_minutes.where(freq_minutes >= require_minutes).first_valid_index()
         warnings.warn(f"Data contains too many candlesticks to plot; downsampling to {freq!r}. "
                       "See `Backtest.plot(resample=...)`")
 
@@ -110,8 +128,8 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
     indicators = [_Indicator(i.df.resample(freq, label='right').mean()
                              .dropna().reindex(df.index).values.T,
                              **dict(i._opts, name=i.name,
-                                    # HACK: override `data` for its index
-                                    data=pd.Series(np.nan, index=df.index)))
+                                    # Replace saved index with the resampled one
+                                    index=df.index))
                   for i in indicators]
     assert not indicators or indicators[0].df.index.equals(df.index)
 
@@ -123,10 +141,10 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
         return ((df['Size'].abs() * df['ReturnPct']) / df['Size'].abs().sum()).sum()
 
     def _group_trades(column):
-        def f(s, new_index=df.index.astype(np.int64), bars=trades[column]):
+        def f(s, new_index=pd.Index(df.index.view(int)), bars=trades[column]):
             if s.size:
                 # Via int64 because on pandas recently broken datetime
-                mean_time = int(bars.loc[s.index].view('i8').mean())
+                mean_time = int(bars.loc[s.index].view(int).mean())
                 new_bar_idx = new_index.get_loc(mean_time, method='nearest')
                 return new_bar_idx
         return f
@@ -194,19 +212,19 @@ def plot(*, results: pd.Series,
     new_bokeh_figure = partial(
         _figure,
         x_axis_type='linear',
-        plot_width=plot_width,
-        plot_height=400,
+        width=plot_width,
+        height=400,
         tools="xpan,xwheel_zoom,box_zoom,undo,redo,reset,save",
         active_drag='xpan',
         active_scroll='xwheel_zoom')
 
     pad = (index[-1] - index[0]) / 20
 
-    fig_ohlc = new_bokeh_figure(
-        x_range=Range1d(index[0], index[-1],
-                        min_interval=10,
-                        bounds=(index[0] - pad,
-                                index[-1] + pad)) if index.size > 1 else None)
+    _kwargs = dict(x_range=Range1d(index[0], index[-1],
+                                   min_interval=10,
+                                   bounds=(index[0] - pad,
+                                           index[-1] + pad))) if index.size > 1 else {}
+    fig_ohlc = new_bokeh_figure(**_kwargs)
     figs_above_ohlc, figs_below_ohlc = [], []
 
     source = ColumnDataSource(df)
@@ -227,10 +245,10 @@ def plot(*, results: pd.Series,
     trades_cmap = factor_cmap('returns_positive', colors_darker, ['0', '1'])
 
     if is_datetime_index:
-        fig_ohlc.xaxis.formatter = FuncTickFormatter(
+        fig_ohlc.xaxis.formatter = CustomJSTickFormatter(
             args=dict(axis=fig_ohlc.xaxis[0],
-                      formatter=DatetimeTickFormatter(days=['%d %b', '%a %d'],
-                                                      months=['%m/%Y', "%b'%y"]),
+                      formatter=DatetimeTickFormatter(days='%a, %d %b',
+                                                      months='%m/%Y'),
                       source=source),
             code='''
 this.labels = this.labels || formatter.doFormat(ticks
@@ -239,7 +257,7 @@ this.labels = this.labels || formatter.doFormat(ticks
 return this.labels[index] || "";
         ''')
 
-    NBSP = '\N{NBSP}' * 4
+    NBSP = '\N{NBSP}' * 4  # noqa: E999
     ohlc_extreme_values = df[['High', 'Low']].copy(deep=False)
     ohlc_tooltips = [
         ('x, y', NBSP.join(('$index',
@@ -251,7 +269,7 @@ return this.labels[index] || "";
         ('Volume', '@Volume{0,0}')]
 
     def new_indicator_figure(**kwargs):
-        kwargs.setdefault('plot_height', 90)
+        kwargs.setdefault('height', 90)
         fig = new_bokeh_figure(x_range=fig_ohlc.x_range,
                                active_scroll='xwheel_zoom',
                                active_drag='xpan',
@@ -316,7 +334,7 @@ return this.labels[index] || "";
         source.add(equity, source_key)
         fig = new_indicator_figure(
             y_axis_label=yaxis_label,
-            **({} if plot_drawdown else dict(plot_height=110)))
+            **({} if plot_drawdown else dict(height=110)))
 
         # High-watermark drawdown dents
         fig.patch('index', 'equity_dd',
@@ -607,7 +625,7 @@ return this.labels[index] || "";
     if plot_volume:
         custom_js_args.update(volume_range=fig_volume.y_range)
 
-    fig_ohlc.x_range.js_on_change('end', CustomJS(args=custom_js_args,
+    fig_ohlc.x_range.js_on_change('end', CustomJS(args=custom_js_args,  # type: ignore
                                                   code=_AUTOSCALE_JS_CALLBACK))
 
     plots = figs_above_ohlc + [fig_ohlc] + figs_below_ohlc
@@ -615,7 +633,8 @@ return this.labels[index] || "";
 
     for f in plots:
         if f.legend:
-            f.legend.location = 'top_left' if show_legend else None
+            f.legend.visible = show_legend
+            f.legend.location = 'top_left'
             f.legend.border_line_width = 1
             f.legend.border_line_color = '#333333'
             f.legend.padding = 5
@@ -631,7 +650,7 @@ return this.labels[index] || "";
 
         f.add_tools(linked_crosshair)
         wheelzoom_tool = next(wz for wz in f.tools if isinstance(wz, WheelZoomTool))
-        wheelzoom_tool.maintain_focus = False
+        wheelzoom_tool.maintain_focus = False  # type: ignore
 
     kwargs = {}
     if plot_width is None:
@@ -643,7 +662,7 @@ return this.labels[index] || "";
         toolbar_location='right',
         toolbar_options=dict(logo=None),
         merge_tools=True,
-        **kwargs
+        **kwargs  # type: ignore
     )
     show(fig, browser=None if open_browser else 'none')
     return fig
@@ -678,8 +697,8 @@ def plot_heatmaps(heatmap: pd.Series, agg: Union[Callable, str], ncols: int,
                       y_range=level2,
                       x_axis_label=name1,
                       y_axis_label=name2,
-                      plot_width=plot_width // ncols,
-                      plot_height=plot_width // ncols,
+                      width=plot_width // ncols,
+                      height=plot_width // ncols,
                       tools='box_zoom,reset,save',
                       tooltips=[(name1, '@' + name1),
                                 (name2, '@' + name2),
@@ -700,7 +719,7 @@ def plot_heatmaps(heatmap: pd.Series, agg: Union[Callable, str], ncols: int,
         plots.append(fig)
 
     fig = gridplot(
-        plots,
+        plots,  # type: ignore
         ncols=ncols,
         toolbar_options=dict(logo=None),
         toolbar_location='above',

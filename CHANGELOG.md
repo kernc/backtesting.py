@@ -3,8 +3,33 @@ What's New
 
 These were the major changes contributing to each release:
 
-
 ### 0.x.x
+
+
+### 0.3.3
+(2021-12-13)
+
+* Fix random generation with recent NumPy.
+* Fix Pandas deprecation warnings.
+* Replace Bokeh 3.0 deprecations.
+
+
+### 0.3.2
+(2021-08-03)
+
+* New strategy performance method [`backtesting.lib.compute_stats`](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html#backtesting.lib.compute_stats) (#281)
+* Improve plotting speed (#329) and optimization performance (#295) on large datasets.
+* Commission constraints now allow for market-maker's rebates.
+* [`Backtest.plot`](https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Backtest.plot)
+  now returns the bokeh figure object for further processing.
+* Other small bugs and fixes.
+
+
+### 0.3.1
+(2021-01-25)
+
+* Avoid some `pandas.Index` deprecations
+* Fix `Backtest.plot(show_legend=False)` for recent Bokeh
 
 
 ### 0.3.0
