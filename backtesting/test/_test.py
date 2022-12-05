@@ -304,7 +304,7 @@ class TestBacktest(TestCase):
         self.assertSequenceEqual(
             sorted(stats['_trades'].columns),
             sorted(['Size', 'EntryBar', 'ExitBar', 'EntryPrice', 'ExitPrice',
-                    'PnL', 'ReturnPct', 'EntryTime', 'ExitTime', 'Duration']))
+                    'PnL', 'ReturnPct', 'EntryTime', 'ExitTime', 'Duration', 'Tag']))
 
     def test_compute_stats_bordercase(self):
 
@@ -505,6 +505,18 @@ class TestStrategy(TestCase):
 
         stats = self._Backtest(coroutine).run()
         self.assertEqual(len(stats._trades), 1)
+
+    def test_order_tag(self):
+        def coroutine(self):
+            yield self.buy(size=2, tag=1)
+            yield self.sell(size=1, tag='s')
+            yield self.sell(size=1)
+
+            yield self.buy(tag=2)
+            yield self.position.close()
+
+        stats = self._Backtest(coroutine).run()
+        self.assertEqual(list(stats._trades.Tag), [1, 1, 2])
 
 
 class TestOptimize(TestCase):
