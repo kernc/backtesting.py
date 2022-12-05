@@ -6,14 +6,15 @@ exclude = [
     'doc/examples',
 ]
 ignore = [
-    'U006',
-    'U007',
-    'U009',
+    'UP006',
+    'UP007',
+    'UP009',
     'N802',
     'N806',
     'C901',
     'B008',
     'B011',
+    'RUF002',
 ]
 line-length = 100
 select = [
@@ -21,12 +22,12 @@ select = [
     'E',
     'F',
     'W',
-    'U',
+    'UP',
     'N',
     'C',
     'B',
     'T',
-    'M',
+    'RUF',
     'YTT',
 ]
 
