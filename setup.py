@@ -31,7 +31,7 @@ if __name__ == '__main__':
             'write_to': os.path.join('backtesting', '_version.py'),
         },
         install_requires=[
-            'numpy',
+            'numpy >= 1.17.0',
             'pandas >= 0.25.0, != 0.25.0',
             'bokeh >= 1.4.0',
         ],
@@ -50,7 +50,7 @@ if __name__ == '__main__':
                 'scikit-optimize',
             ],
             'dev': [
-                'flake8',
+                'ruff',
                 'coverage',
                 'mypy',
             ],
@@ -61,6 +61,7 @@ if __name__ == '__main__':
         classifiers=[
             'Intended Audience :: Financial and Insurance Industry',
             'Intended Audience :: Science/Research',
+            'Framework :: Jupyter',
             'License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)',
             'Operating System :: OS Independent',
             'Programming Language :: Python :: 3 :: Only',
@@ -120,6 +121,7 @@ if __name__ == '__main__':
             'quantitative',
             'rsi',
             'silver',
+            'simulation',
             'stocks',
             'strategy',
             'ticker',

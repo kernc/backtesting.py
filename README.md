@@ -10,11 +10,7 @@ Backtesting.py
 
 Backtest trading strategies with Python.
 
-[**Project website**](https://kernc.github.io/backtesting.py)
-
-[Documentation]
-
-[![Star](https://i.imgur.com/LSI6p6O.png)](#top) the project if you use it.
+[**Project website**](https://kernc.github.io/backtesting.py) + [Documentation]
 
 [Documentation]: https://kernc.github.io/backtesting.py/doc/backtesting/
 
@@ -83,6 +79,7 @@ Avg. Trade Duration          32 days 00:00:00
 Profit Factor                            2.13
 Expectancy [%]                           6.91
 SQN                                      1.78
+Kelly Criterion                        0.6134
 _strategy              SmaCross(n1=10, n2=20)
 _equity_curve                          Equ...
 _trades                       Size  EntryB...
@@ -91,6 +88,7 @@ dtype: object
 [![plot of trading simulation](https://i.imgur.com/xRFNHfg.png)](https://kernc.github.io/backtesting.py/#example)
 
 Find more usage examples in the [documentation].
+
 
 Features
 --------
@@ -102,6 +100,17 @@ Features
 * Supports _any_ financial instrument with candlestick data
 * Detailed results
 * Interactive visualizations
+
+![xkcd.com/1570](https://imgs.xkcd.com/comics/engineer_syllogism.png)
+
+
+Bugs
+----
+Before reporting bugs or posting to the
+[discussion board](https://github.com/kernc/backtesting.py/discussions),
+please read [contributing guidelines](CONTRIBUTING.md), particularly the section
+about crafting useful bug reports and ```` ``` ````-fencing your code. We thank you!
+
 
 Alternatives
 ------------
