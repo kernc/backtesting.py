@@ -79,6 +79,7 @@ Avg. Trade Duration          32 days 00:00:00
 Profit Factor                            2.13
 Expectancy [%]                           6.91
 SQN                                      1.78
+Kelly Criterion                        0.6134
 _strategy              SmaCross(n1=10, n2=20)
 _equity_curve                          Equ...
 _trades                       Size  EntryB...

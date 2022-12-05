@@ -1134,6 +1134,7 @@ class Backtest:
             Profit Factor                         2.08802
             Expectancy [%]                        8.79171
             SQN                                  0.916893
+            Kelly Criterion                        0.6134
             _strategy                            SmaCross
             _equity_curve                           Eq...
             _trades                       Size  EntryB...
