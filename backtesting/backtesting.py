@@ -49,7 +49,6 @@ class Strategy(metaclass=ABCMeta):
     `backtesting.backtesting.Strategy.next` to define
     your own strategy.
     """
-
     def __init__(self, broker, data, params):
         self._indicators = []
         self._broker: _Broker = broker
@@ -292,7 +291,6 @@ class _Orders(tuple):
     """
     TODO: remove this class. Only for deprecation.
     """
-
     def cancel(self):
         """Cancel all non-contingent (i.e. SL/TP) orders."""
         for order in self:
@@ -320,7 +318,6 @@ class Position:
         if self.position:
             ...  # we have a position, either long or short
     """
-
     def __init__(self, broker: '_Broker'):
         self.__broker = broker
 
@@ -385,7 +382,6 @@ class Order:
     [filled]: https://www.investopedia.com/terms/f/fill.asp
     [Good 'Til Canceled]: https://www.investopedia.com/terms/g/gtc.asp
     """
-
     def __init__(self, broker: '_Broker',
                  size: float,
                  limit_price: Optional[float] = None,
@@ -491,11 +487,10 @@ class Order:
         return self.__parent_trade
 
     @property
-    def tag(self) -> Optional[object]:
+    def tag(self):
         """
-        An attribute which, if set, persists to enable tracking of this order
-        by an external identifier if it becomes a trade in `Strategy.trades`
-        and when closed in `Strategy.closed_trades`.
+        Arbitrary value (such as a string) which, if set, enables tracking
+        of this order and the associated `Trade` (see `Trade.tag`).
         """
         return self.__tag
 
@@ -533,8 +528,7 @@ class Trade:
     When an `Order` is filled, it results in an active `Trade`.
     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
     """
-
-    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar, tag: object):
+    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar, tag):
         self.__broker = broker
         self.__size = size
         self.__entry_price = entry_price
@@ -596,11 +590,15 @@ class Trade:
         return self.__exit_bar
 
     @property
-    def tag(self) -> Optional[object]:
+    def tag(self):
         """
-        A tag attribute optionally set when placing an order with
-        `Strategy.buy()` or `Strategy.sell()`.
-        See `Order.tag`.
+        A tag value inherited from the `Order` that opened
+        this trade.
+
+        This can be used to track trades and apply conditional
+        logic / subgroup analysis.
+
+        See also `Order.tag`.
         """
         return self.__tag
 
@@ -1023,7 +1021,6 @@ class Backtest:
     instance, or `backtesting.backtesting.Backtest.optimize` to
     optimize it.
     """
-
     def __init__(self,
                  data: pd.DataFrame,
                  strategy: Type[Strategy],
