@@ -133,7 +133,7 @@ class Strategy(metaclass=ABCMeta):
 
         if value is not None:
             value = try_(lambda: np.asarray(value, order='C'), None)
-        is_arraylike = value is not None
+        is_arraylike = bool(value is not None and value.shape)
 
         # Optionally flip the array if the user returned e.g. `df.values`
         if is_arraylike and np.argmax(value.shape) == 0:
