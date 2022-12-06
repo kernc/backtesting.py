@@ -80,7 +80,7 @@ class Strategy(metaclass=ABCMeta):
           name=None, plot=True, overlay=None, color=None, scatter=False,
           **kwargs) -> np.ndarray:
         """
-        Declare indicator. An indicator is just an array of values,
+        Declare an indicator. An indicator is just an array of values,
         but one that is revealed gradually in
         `backtesting.backtesting.Strategy.next` much like
         `backtesting.backtesting.Strategy.data` is.
@@ -1173,6 +1173,13 @@ class Backtest:
             _equity_curve                           Eq...
             _trades                       Size  EntryB...
             dtype: object
+
+        .. warning::
+            You may obtain different results for different strategy parameters.
+            E.g. if you use 50- and 200-bar SMA, the trading simulation will
+            begin on bar 201. The actual length of delay is equal to the lookback
+            period of the `Strategy.I` indicator which lags the most.
+            Obviously, this can affect results.
         """
         data = _Data(self._data.copy(deep=False))
         broker: _Broker = self._broker(data=data)
