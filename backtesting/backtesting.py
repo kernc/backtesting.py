@@ -9,11 +9,11 @@ import multiprocessing as mp
 import os
 import sys
 import warnings
-from abc import abstractmethod, ABCMeta
+from abc import ABCMeta, abstractmethod
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import copy
 from functools import lru_cache, partial
-from itertools import repeat, product, chain, compress
+from itertools import chain, compress, product, repeat
 from math import copysign
 from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
@@ -29,7 +29,7 @@ except ImportError:
     def _tqdm(seq, **_):
         return seq
 
-from ._plotting import plot
+from ._plotting import plot  # noqa: I001
 from ._stats import compute_stats
 from ._util import _as_str, _Indicator, _Data, try_
 
@@ -75,12 +75,12 @@ class Strategy(metaclass=ABCMeta):
             setattr(self, k, v)
         return params
 
-    def I(self,  # noqa: E741, E743
+    def I(self,  # noqa: E743
           func: Callable, *args,
           name=None, plot=True, overlay=None, color=None, scatter=False,
           **kwargs) -> np.ndarray:
         """
-        Declare indicator. An indicator is just an array of values,
+        Declare an indicator. An indicator is just an array of values,
         but one that is revealed gradually in
         `backtesting.backtesting.Strategy.next` much like
         `backtesting.backtesting.Strategy.data` is.
@@ -126,14 +126,14 @@ class Strategy(metaclass=ABCMeta):
         try:
             value = func(*args, **kwargs)
         except Exception as e:
-            raise RuntimeError(f'Indicator "{name}" errored with exception: {e}')
+            raise RuntimeError(f'Indicator "{name}" error') from e
 
         if isinstance(value, pd.DataFrame):
             value = value.values.T
 
         if value is not None:
             value = try_(lambda: np.asarray(value, order='C'), None)
-        is_arraylike = value is not None
+        is_arraylike = bool(value is not None and value.shape)
 
         # Optionally flip the array if the user returned e.g. `df.values`
         if is_arraylike and np.argmax(value.shape) == 0:
@@ -142,7 +142,7 @@ class Strategy(metaclass=ABCMeta):
         if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data.Close):
             raise ValueError(
                 'Indicators must return (optionally a tuple of) numpy.arrays of same '
-                f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}"'
+                f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}" '
                 f'shape: {getattr(value, "shape" , "")}, returned value: {value})')
 
         if plot and overlay is None and np.issubdtype(value.dtype, np.number):
@@ -190,7 +190,7 @@ class Strategy(metaclass=ABCMeta):
             super().next()
         """
 
-    class __FULL_EQUITY(float):
+    class __FULL_EQUITY(float):  # noqa: N801
         def __repr__(self): return '.9999'
     _FULL_EQUITY = __FULL_EQUITY(1 - sys.float_info.epsilon)
 
@@ -199,7 +199,8 @@ class Strategy(metaclass=ABCMeta):
             limit: Optional[float] = None,
             stop: Optional[float] = None,
             sl: Optional[float] = None,
-            tp: Optional[float] = None):
+            tp: Optional[float] = None,
+            tag: object = None):
         """
         Place a new long order. For explanation of parameters, see `Order` and its properties.
 
@@ -209,14 +210,15 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(size, limit, stop, sl, tp)
+        return self._broker.new_order(size, limit, stop, sl, tp, tag)
 
     def sell(self, *,
              size: float = _FULL_EQUITY,
              limit: Optional[float] = None,
              stop: Optional[float] = None,
              sl: Optional[float] = None,
-             tp: Optional[float] = None):
+             tp: Optional[float] = None,
+             tag: object = None):
         """
         Place a new short order. For explanation of parameters, see `Order` and its properties.
 
@@ -228,7 +230,7 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(-size, limit, stop, sl, tp)
+        return self._broker.new_order(-size, limit, stop, sl, tp, tag)
 
     @property
     def equity(self) -> float:
@@ -386,7 +388,8 @@ class Order:
                  stop_price: Optional[float] = None,
                  sl_price: Optional[float] = None,
                  tp_price: Optional[float] = None,
-                 parent_trade: Optional['Trade'] = None):
+                 parent_trade: Optional['Trade'] = None,
+                 tag: object = None):
         self.__broker = broker
         assert size != 0
         self.__size = size
@@ -395,6 +398,7 @@ class Order:
         self.__sl_price = sl_price
         self.__tp_price = tp_price
         self.__parent_trade = parent_trade
+        self.__tag = tag
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
@@ -410,6 +414,7 @@ class Order:
                                                  ('sl', self.__sl_price),
                                                  ('tp', self.__tp_price),
                                                  ('contingent', self.is_contingent),
+                                                 ('tag', self.__tag),
                                              ) if value is not None))
 
     def cancel(self):
@@ -481,6 +486,14 @@ class Order:
     def parent_trade(self):
         return self.__parent_trade
 
+    @property
+    def tag(self):
+        """
+        Arbitrary value (such as a string) which, if set, enables tracking
+        of this order and the associated `Trade` (see `Trade.tag`).
+        """
+        return self.__tag
+
     __pdoc__['Order.parent_trade'] = False
 
     # Extra properties
@@ -515,7 +528,7 @@ class Trade:
     When an `Order` is filled, it results in an active `Trade`.
     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
     """
-    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar):
+    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar, tag):
         self.__broker = broker
         self.__size = size
         self.__entry_price = entry_price
@@ -524,10 +537,12 @@ class Trade:
         self.__exit_bar: Optional[int] = None
         self.__sl_order: Optional[Order] = None
         self.__tp_order: Optional[Order] = None
+        self.__tag = tag
 
     def __repr__(self):
         return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
-               f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}>'
+               f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}' \
+               f'{" tag="+str(self.__tag) if self.__tag is not None else ""}>'
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
@@ -541,7 +556,7 @@ class Trade:
         """Place new `Order` to close `portion` of the trade at next market price."""
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
         size = copysign(max(1, round(abs(self.__size) * portion)), -self.__size)
-        order = Order(self.__broker, size, parent_trade=self)
+        order = Order(self.__broker, size, parent_trade=self, tag=self.__tag)
         self.__broker.orders.insert(0, order)
 
     # Fields getters
@@ -573,6 +588,19 @@ class Trade:
         (or None if the trade is still active).
         """
         return self.__exit_bar
+
+    @property
+    def tag(self):
+        """
+        A tag value inherited from the `Order` that opened
+        this trade.
+
+        This can be used to track trades and apply conditional
+        logic / subgroup analysis.
+
+        See also `Order.tag`.
+        """
+        return self.__tag
 
     @property
     def _sl_order(self):
@@ -664,8 +692,8 @@ class Trade:
         if order:
             order.cancel()
         if price:
-            kwargs = dict(stop=price) if type == 'sl' else dict(limit=price)
-            order = self.__broker.new_order(-self.size, trade=self, **kwargs)
+            kwargs = {'stop': price} if type == 'sl' else {'limit': price}
+            order = self.__broker.new_order(-self.size, trade=self, tag=self.tag, **kwargs)
             setattr(self, attr, order)
 
 
@@ -700,6 +728,7 @@ class _Broker:
                   stop: Optional[float] = None,
                   sl: Optional[float] = None,
                   tp: Optional[float] = None,
+                  tag: object = None,
                   *,
                   trade: Optional[Trade] = None):
         """
@@ -725,7 +754,7 @@ class _Broker:
                     "Short orders require: "
                     f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})")
 
-        order = Order(self, size, limit, stop, sl, tp, trade)
+        order = Order(self, size, limit, stop, sl, tp, trade, tag)
         # Put the new order in the order queue,
         # inserting SL/TP/trade-closing orders in-front
         if trade:
@@ -905,7 +934,12 @@ class _Broker:
 
             # Open a new trade
             if need_size:
-                self._open_trade(adjusted_price, need_size, order.sl, order.tp, time_index)
+                self._open_trade(adjusted_price,
+                                 need_size,
+                                 order.sl,
+                                 order.tp,
+                                 time_index,
+                                 order.tag)
 
                 # We need to reprocess the SL/TP orders newly added to the queue.
                 # This allows e.g. SL hitting in the same bar the order was open.
@@ -964,8 +998,8 @@ class _Broker:
         self._cash += trade.pl
 
     def _open_trade(self, price: float, size: int,
-                    sl: Optional[float], tp: Optional[float], time_index: int):
-        trade = Trade(self, size, price, time_index)
+                    sl: Optional[float], tp: Optional[float], time_index: int, tag):
+        trade = Trade(self, size, price, time_index, tag)
         self.trades.append(trade)
         # Create SL/TP (bracket) orders.
         # Make sure SL order is created first so it gets adversarially processed before TP order
@@ -1139,6 +1173,13 @@ class Backtest:
             _equity_curve                           Eq...
             _trades                       Size  EntryB...
             dtype: object
+
+        .. warning::
+            You may obtain different results for different strategy parameters.
+            E.g. if you use 50- and 200-bar SMA, the trading simulation will
+            begin on bar 201. The actual length of delay is equal to the lookback
+            period of the `Strategy.I` indicator which lags the most.
+            Obviously, this can affect results.
         """
         data = _Data(self._data.copy(deep=False))
         broker: _Broker = self._broker(data=data)
@@ -1409,13 +1450,13 @@ class Backtest:
                                        Tuple[pd.Series, pd.Series, dict]]:
             try:
                 from skopt import forest_minimize
-                from skopt.space import Integer, Real, Categorical
-                from skopt.utils import use_named_args
                 from skopt.callbacks import DeltaXStopper
                 from skopt.learning import ExtraTreesRegressor
+                from skopt.space import Categorical, Integer, Real
+                from skopt.utils import use_named_args
             except ImportError:
                 raise ImportError("Need package 'scikit-optimize' for method='skopt'. "
-                                  "pip install scikit-optimize")
+                                  "pip install scikit-optimize") from None
 
             nonlocal max_tries
             max_tries = (200 if max_tries is None else
@@ -1513,7 +1554,7 @@ class Backtest:
 
     def plot(self, *, results: pd.Series = None, filename=None, plot_width=None,
              plot_equity=True, plot_return=False, plot_pl=True,
-             plot_volume=True, plot_drawdown=False,
+             plot_volume=True, plot_drawdown=False, plot_trades=True,
              smooth_equity=False, relative_equity=True,
              superimpose: Union[bool, str] = True,
              resample=True, reverse_indicators=False,
@@ -1551,6 +1592,9 @@ class Backtest:
 
         If `plot_drawdown` is `True`, the resulting plot will contain
         a separate drawdown graph section.
+
+        If `plot_trades` is `True`, the stretches between trade entries
+        and trade exits are marked by hash-marked tractor beams.
 
         If `smooth_equity` is `True`, the equity graph will be
         interpolated between fixed points at trade closing times,
@@ -1610,6 +1654,7 @@ class Backtest:
             plot_pl=plot_pl,
             plot_volume=plot_volume,
             plot_drawdown=plot_drawdown,
+            plot_trades=plot_trades,
             smooth_equity=smooth_equity,
             relative_equity=relative_equity,
             superimpose=superimpose,
