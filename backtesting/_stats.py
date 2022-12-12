@@ -128,7 +128,8 @@ def compute_stats(
     s.loc['Max. Drawdown Duration'] = _round_timedelta(dd_dur.max())
     s.loc['Avg. Drawdown Duration'] = _round_timedelta(dd_dur.mean())
     s.loc['# Trades'] = n_trades = len(trades_df)
-    s.loc['Win Rate [%]'] = np.nan if not n_trades else (pl > 0).sum() / n_trades * 100  # noqa: E501
+    win_rate = np.nan if not n_trades else (pl > 0).mean()
+    s.loc['Win Rate [%]'] = win_rate * 100
     s.loc['Best Trade [%]'] = returns.max() * 100
     s.loc['Worst Trade [%]'] = returns.min() * 100
     mean_return = geometric_mean(returns)
@@ -138,8 +139,7 @@ def compute_stats(
     s.loc['Profit Factor'] = returns[returns > 0].sum() / (abs(returns[returns < 0].sum()) or np.nan)  # noqa: E501
     s.loc['Expectancy [%]'] = returns.mean() * 100
     s.loc['SQN'] = np.sqrt(n_trades) * pl.mean() / (pl.std() or np.nan)
-    win_prob = (pl > 0).sum() / n_trades
-    s.loc['Kelly Criterion'] = win_prob - (1 - win_prob) / (pl[pl > 0].mean() / pl[pl < 0].mean())  # noqa: E501
+    s.loc['Kelly Criterion'] = win_rate - (1 - win_rate) / (pl[pl > 0].mean() / -pl[pl < 0].mean())
 
     s.loc['_strategy'] = strategy_instance
     s.loc['_equity_curve'] = equity_df

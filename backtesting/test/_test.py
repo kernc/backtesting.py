@@ -276,7 +276,7 @@ class TestBacktest(TestCase):
                 'Return [%]': 414.2298999999996,
                 'Volatility (Ann.) [%]': 36.49390889140787,
                 'SQN': 1.0766187356697705,
-                'Kelly Criterion': 0.7875234266909678,
+                'Kelly Criterion': 0.1518705127029717,
                 'Sharpe Ratio': 0.5803778344714113,
                 'Sortino Ratio': 1.0847880675854096,
                 'Start': pd.Timestamp('2004-08-19 00:00:00'),
