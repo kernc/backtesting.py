@@ -50,7 +50,7 @@ if __name__ == '__main__':
                 'scikit-optimize',
             ],
             'dev': [
-                'ruff',
+                'ruff==0.0.160',
                 'coverage',
                 'mypy',
             ],
