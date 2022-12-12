@@ -166,7 +166,7 @@ def plot(*, results: pd.Series,
          indicators: List[_Indicator],
          filename='', plot_width=None,
          plot_equity=True, plot_return=False, plot_pl=True,
-         plot_volume=True, plot_drawdown=False,
+         plot_volume=True, plot_drawdown=False, plot_trades=True,
          smooth_equity=False, relative_equity=True,
          superimpose=True, resample=True,
          reverse_indicators=True,
@@ -609,7 +609,8 @@ return this.labels[index] || "";
         _plot_superimposed_ohlc()
 
     ohlc_bars = _plot_ohlc()
-    _plot_ohlc_trades()
+    if plot_trades:
+        _plot_ohlc_trades()
     indicator_figs = _plot_indicators()
     if reverse_indicators:
         indicator_figs = indicator_figs[::-1]

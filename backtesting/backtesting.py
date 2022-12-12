@@ -1554,7 +1554,7 @@ class Backtest:
 
     def plot(self, *, results: pd.Series = None, filename=None, plot_width=None,
              plot_equity=True, plot_return=False, plot_pl=True,
-             plot_volume=True, plot_drawdown=False,
+             plot_volume=True, plot_drawdown=False, plot_trades=True,
              smooth_equity=False, relative_equity=True,
              superimpose: Union[bool, str] = True,
              resample=True, reverse_indicators=False,
@@ -1592,6 +1592,9 @@ class Backtest:
 
         If `plot_drawdown` is `True`, the resulting plot will contain
         a separate drawdown graph section.
+
+        If `plot_trades` is `True`, the stretches between trade entries
+        and trade exits are marked by hash-marked tractor beams.
 
         If `smooth_equity` is `True`, the equity graph will be
         interpolated between fixed points at trade closing times,
@@ -1651,6 +1654,7 @@ class Backtest:
             plot_pl=plot_pl,
             plot_volume=plot_volume,
             plot_drawdown=plot_drawdown,
+            plot_trades=plot_trades,
             smooth_equity=smooth_equity,
             relative_equity=relative_equity,
             superimpose=superimpose,

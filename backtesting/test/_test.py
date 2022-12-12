@@ -650,6 +650,7 @@ class TestPlot(TestCase):
                           plot_return=True,
                           plot_pl=False,
                           plot_drawdown=True,
+                          plot_trades=False,
                           superimpose=False,
                           resample='1W',
                           smooth_equity=False,
