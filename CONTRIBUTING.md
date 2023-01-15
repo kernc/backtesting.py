@@ -33,7 +33,7 @@ first [fork the project]. Then:
 
     git clone git@github.com:YOUR_USERNAME/backtesting.py
     cd backtesting.py
-    pip3 install -e .[doc,test,dev]
+    pip3 install -e '.[doc,test,dev]'
 
 [fork the project]: https://help.github.com/articles/fork-a-repo/
 
