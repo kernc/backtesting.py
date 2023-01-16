@@ -222,8 +222,39 @@ class TestBacktest(TestCase):
 
     def test_broker_params(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross,
-                      cash=1000, commission=.01, margin=.1, trade_on_close=True)
+                      cash=1000, spread=.01, margin=.1, trade_on_close=True)
         bt.run()
+
+    def test_spread_commission(self):
+        class S(Strategy):
+            def init(self):
+                self.done = False
+
+            def next(self):
+                if not self.position:
+                    self.buy()
+                else:
+                    self.position.close()
+                    self.next = lambda: None  # Done
+
+        SPREAD = .01
+        COMMISSION = .01
+        CASH = 10_000
+        ORDER_BAR = 2
+        stats = Backtest(SHORT_DATA, S, cash=CASH, spread=SPREAD, commission=COMMISSION).run()
+        trade_open_price = SHORT_DATA['Open'].iloc[ORDER_BAR]
+        self.assertEqual(stats['_trades']['EntryPrice'].iloc[0], trade_open_price * (1 + SPREAD))
+        self.assertEqual(stats['_equity_curve']['Equity'].iloc[2:4].round(2).tolist(),
+                         [9685.31, 9749.33])
+
+        stats = Backtest(SHORT_DATA, S, cash=CASH, commission=(100, COMMISSION)).run()
+        self.assertEqual(stats['_equity_curve']['Equity'].iloc[2:4].round(2).tolist(),
+                         [9784.50, 9718.69])
+
+        commission_func = lambda size, price: size * price * COMMISSION  # noqa: E731
+        stats = Backtest(SHORT_DATA, S, cash=CASH, commission=commission_func).run()
+        self.assertEqual(stats['_equity_curve']['Equity'].iloc[2:4].round(2).tolist(),
+                         [9781.28, 9846.04])
 
     def test_dont_overwrite_data(self):
         df = EURUSD.copy()
@@ -388,7 +419,7 @@ class TestBacktest(TestCase):
                 if self.position and crossover(self.sma2, self.sma1):
                     self.position.close(portion=.5)
 
-        bt = Backtest(GOOG, SmaCross, commission=.002)
+        bt = Backtest(GOOG, SmaCross, spread=.002)
         bt.run()
 
     def test_close_orders_from_last_strategy_iteration(self):
@@ -410,7 +441,7 @@ class TestBacktest(TestCase):
             def next(self):
                 self.buy(tp=self.data.Close * 1.01)
 
-        self.assertRaises(ValueError, Backtest(SHORT_DATA, S, commission=.02).run)
+        self.assertRaises(ValueError, Backtest(SHORT_DATA, S, spread=.02).run)
 
 
 class TestStrategy(TestCase):

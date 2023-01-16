@@ -538,6 +538,7 @@ class Trade:
         self.__sl_order: Optional[Order] = None
         self.__tp_order: Optional[Order] = None
         self.__tag = tag
+        self._commissions = 0
 
     def __repr__(self):
         return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
@@ -698,16 +699,27 @@ class Trade:
 
 
 class _Broker:
-    def __init__(self, *, data, cash, commission, margin,
+    def __init__(self, *, data, cash, spread, commission, margin,
                  trade_on_close, hedging, exclusive_orders, index):
         assert 0 < cash, f"cash should be >0, is {cash}"
-        assert -.1 <= commission < .1, \
-            ("commission should be between -10% "
-             f"(e.g. market-maker's rebates) and 10% (fees), is {commission}")
         assert 0 < margin <= 1, f"margin should be between 0 and 1, is {margin}"
         self._data: _Data = data
         self._cash = cash
-        self._commission = commission
+
+        if callable(commission):
+            self._commission = commission
+        else:
+            try:
+                self._commission_fixed, self._commission_relative = commission
+            except TypeError:
+                self._commission_fixed, self._commission_relative = 0, commission
+            assert self._commission_fixed >= 0, 'Need fixed cash commission in $ >= 0'
+            assert -.1 <= self._commission_relative < .1, \
+                ("commission should be between -10% "
+                 f"(e.g. market-maker's rebates) and 10% (fees), is {self._commission_relative}")
+            self._commission = self._commission_func
+
+        self._spread = spread
         self._leverage = 1 / margin
         self._trade_on_close = trade_on_close
         self._hedging = hedging
@@ -718,6 +730,9 @@ class _Broker:
         self.trades: List[Trade] = []
         self.position = Position(self)
         self.closed_trades: List[Trade] = []
+
+    def _commission_func(self, order_size, price):
+        return self._commission_fixed + abs(order_size) * price * self._commission_relative
 
     def __repr__(self):
         return f'<Broker: {self._cash:.0f}{self.position.pl:+.1f} ({len(self.trades)} trades)>'
@@ -780,10 +795,10 @@ class _Broker:
 
     def _adjusted_price(self, size=None, price=None) -> float:
         """
-        Long/short `price`, adjusted for commisions.
+        Long/short `price`, adjusted for spread.
         In long positions, the adjusted price is a fraction higher, and vice versa.
         """
-        return (price or self.last_price) * (1 + copysign(self._commission, size))
+        return (price or self.last_price) * (1 + copysign(self._spread, size))
 
     @property
     def equity(self) -> float:
@@ -890,15 +905,17 @@ class _Broker:
             # Adjust price to include commission (or bid-ask spread).
             # In long positions, the adjusted price is a fraction higher, and vice versa.
             adjusted_price = self._adjusted_price(order.size, price)
+            adjusted_price_plus_commission = adjusted_price + self._commission(order.size, price)
 
             # If order size was specified proportionally,
             # precompute true size in units, accounting for margin and spread/commissions
             size = order.size
             if -1 < size < 1:
                 size = copysign(int((self.margin_available * self._leverage * abs(size))
-                                    // adjusted_price), size)
+                                    // adjusted_price_plus_commission), size)
                 # Not enough cash/margin even for a single unit
                 if not size:
+                    # XXX: The order is canceled by the broker?
                     self.orders.remove(order)
                     continue
             assert size == round(size)
@@ -927,8 +944,9 @@ class _Broker:
                     if not need_size:
                         break
 
-            # If we don't have enough liquidity to cover for the order, cancel it
-            if abs(need_size) * adjusted_price > self.margin_available * self._leverage:
+            # If we don't have enough liquidity to cover for the order, the broker CANCELS it
+            if abs(need_size) * adjusted_price_plus_commission > \
+                    self.margin_available * self._leverage:
                 self.orders.remove(order)
                 continue
 
@@ -994,13 +1012,23 @@ class _Broker:
         if trade._tp_order:
             self.orders.remove(trade._tp_order)
 
-        self.closed_trades.append(trade._replace(exit_price=price, exit_bar=time_index))
-        self._cash += trade.pl
+        closed_trade = trade._replace(exit_price=price, exit_bar=time_index)
+        self.closed_trades.append(closed_trade)
+        # Apply commission one more time at trade exit
+        commission = self._commission(trade.size, price)
+        self._cash += trade.pl - commission
+        # Save commissions on Trade instance for stats
+        trade_open_commission = self._commission(closed_trade.size, closed_trade.entry_price)
+        # applied here instead of on Trade open because size could have changed
+        # by way of _reduce_trade()
+        closed_trade._commissions = commission + trade_open_commission
 
     def _open_trade(self, price: float, size: int,
                     sl: Optional[float], tp: Optional[float], time_index: int, tag):
         trade = Trade(self, size, price, time_index, tag)
         self.trades.append(trade)
+        # Apply broker commission at trade open
+        self._cash -= self._commission(size, price)
         # Create SL/TP (bracket) orders.
         # Make sure SL order is created first so it gets adversarially processed before TP order
         # in case of an ambiguous tie (both hit within a single bar).
@@ -1026,7 +1054,8 @@ class Backtest:
                  strategy: Type[Strategy],
                  *,
                  cash: float = 10_000,
-                 commission: float = .0,
+                 spread: float = .0,
+                 commission: Union[float, Tuple[float, float]] = .0,
                  margin: float = 1.,
                  trade_on_close=False,
                  hedging=False,
@@ -1052,11 +1081,25 @@ class Backtest:
 
         `cash` is the initial cash to start with.
 
-        `commission` is the commission ratio. E.g. if your broker's commission
-        is 1% of trade value, set commission to `0.01`. Note, if you wish to
-        account for bid-ask spread, you can approximate doing so by increasing
-        the commission, e.g. set it to `0.0002` for commission-less forex
-        trading where the average spread is roughly 0.2‰ of asking price.
+        `spread` is the the constant bid-ask spread rate (relative to the price).
+        E.g. set it to `0.0002` for commission-less forex
+        trading where the average spread is roughly 0.2‰ of the asking price.
+
+        `commission` is the commission rate. E.g. if your broker's commission
+        is 1% of order value, set commission to `0.01`.
+        The commission is applied twice: at trade entry and at trade exit.
+        Besides one single floating value, `commission` can also be a tuple of floating
+        values `(fixed, relative)`. E.g. set it to `(100, .01)`
+        if your broker charges minimum $100 + 1%.
+        Additionally, `commission` can be a callable
+        `func(order_size: int, price: float) -> float`
+        (note, order size is negative for short orders),
+        which can be used to model more complex commission structures.
+        Negative commission values are interpreted as market-maker's rebates.
+
+        .. note::
+            Before v0.4.0, the commission was only applied once, like `spread` is now.
+            If you want to keep the old behavior, simply set `spread` instead.
 
         `margin` is the required margin (ratio) of a leveraged account.
         No difference is made between initial and maintenance margins.
@@ -1082,9 +1125,14 @@ class Backtest:
             raise TypeError('`strategy` must be a Strategy sub-type')
         if not isinstance(data, pd.DataFrame):
             raise TypeError("`data` must be a pandas.DataFrame with columns")
-        if not isinstance(commission, Number):
-            raise TypeError('`commission` must be a float value, percent of '
+        if not isinstance(spread, Number):
+            raise TypeError('`spread` must be a float value, percent of '
                             'entry order price')
+        if not isinstance(commission, (Number, tuple)) and not callable(commission):
+            raise TypeError('`commission` must be a float percent of order value, '
+                            'a tuple of `(fixed, relative)` commission, '
+                            'or a function that takes `(order_size, price)`'
+                            'and returns commission dollar value')
 
         data = data.copy(deep=False)
 
@@ -1127,7 +1175,7 @@ class Backtest:
 
         self._data: pd.DataFrame = data
         self._broker = partial(
-            _Broker, cash=cash, commission=commission, margin=margin,
+            _Broker, cash=cash, spread=spread, commission=commission, margin=margin,
             trade_on_close=trade_on_close, hedging=hedging,
             exclusive_orders=exclusive_orders, index=data.index,
         )
