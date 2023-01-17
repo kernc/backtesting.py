@@ -698,12 +698,15 @@ class Trade:
 
 
 class _Broker:
-    def __init__(self, *, data, cash, commission, margin,
-                 trade_on_close, hedging, exclusive_orders, index):
+    def __init__(self, *, data, cash, commission, margin, trade_on_close,
+                 hedging, exclusive_orders, use_fixed_commission, index):
         assert 0 < cash, f"cash should be >0, is {cash}"
-        assert -.1 <= commission < .1, \
-            ("commission should be between -10% "
-             f"(e.g. market-maker's rebates) and 10% (fees), is {commission}")
+        if use_fixed_commission:
+            assert commission >= 0, f"fixed commission should be be >0, is {commission}"
+        else:
+            assert -.1 <= commission < .1, \
+                ("commission should be between -10% "
+                 f"(e.g. market-maker's rebates) and 10% (fees), is {commission}")
         assert 0 < margin <= 1, f"margin should be between 0 and 1, is {margin}"
         self._data: _Data = data
         self._cash = cash
@@ -712,6 +715,7 @@ class _Broker:
         self._trade_on_close = trade_on_close
         self._hedging = hedging
         self._exclusive_orders = exclusive_orders
+        self._use_fixed_commission = use_fixed_commission
 
         self._equity = np.tile(np.nan, len(index))
         self.orders: List[Order] = []
@@ -780,10 +784,13 @@ class _Broker:
 
     def _adjusted_price(self, size=None, price=None) -> float:
         """
-        Long/short `price`, adjusted for commisions.
+        Long/short `price`, adjusted for commissions (fixed or percentage).
         In long positions, the adjusted price is a fraction higher, and vice versa.
         """
-        return (price or self.last_price) * (1 + copysign(self._commission, size))
+        if self._use_fixed_commission:
+            return ((price or self.last_price) + copysign(self._commission, size))
+        else:
+            return ((price or self.last_price) * (1 + copysign(self._commission, size)))
 
     @property
     def equity(self) -> float:
@@ -1030,7 +1037,8 @@ class Backtest:
                  margin: float = 1.,
                  trade_on_close=False,
                  hedging=False,
-                 exclusive_orders=False
+                 exclusive_orders=False,
+                 use_fixed_commission=False
                  ):
         """
         Initialize a backtest. Requires data and a strategy to test.
@@ -1052,11 +1060,13 @@ class Backtest:
 
         `cash` is the initial cash to start with.
 
-        `commission` is the commission ratio. E.g. if your broker's commission
-        is 1% of trade value, set commission to `0.01`. Note, if you wish to
-        account for bid-ask spread, you can approximate doing so by increasing
-        the commission, e.g. set it to `0.0002` for commission-less forex
-        trading where the average spread is roughly 0.2‰ of asking price.
+        `commission` is the commission ratio, a percentage by default.E.g.
+        if your broker's commission is 1% of trade value, set commission to `0.01`.
+        Note, if you wish to account for bid-ask spread, you can approximate
+        doing so by increasing the commission, e.g. set it to `0.0002` for
+        commission-less forex trading where the average spread is roughly
+        0.2‰ of asking price. If you want to use a fixed commission in dollar
+        value, set the `use_fixed_commission` parameter as `True`.
 
         `margin` is the required margin (ratio) of a leveraged account.
         No difference is made between initial and maintenance margins.
@@ -1075,6 +1085,9 @@ class Backtest:
         trade/position, making at most a single trade (long or short) in effect
         at each time.
 
+        If `use_fixed_commission` is `True`, the commission won't be considered
+        as a percentage, but as a flat fee on every order.
+
         [FIFO]: https://www.investopedia.com/terms/n/nfa-compliance-rule-2-43b.asp
         """
 
@@ -1083,8 +1096,9 @@ class Backtest:
         if not isinstance(data, pd.DataFrame):
             raise TypeError("`data` must be a pandas.DataFrame with columns")
         if not isinstance(commission, Number):
-            raise TypeError('`commission` must be a float value, percent of '
-                            'entry order price')
+            raise TypeError('`commission` must be a number, percent of '
+                            'entry order price. Set `use_fixed_commission` to `True` '
+                            'if you want to use a flat fee instead')
 
         data = data.copy(deep=False)
 
@@ -1128,8 +1142,8 @@ class Backtest:
         self._data: pd.DataFrame = data
         self._broker = partial(
             _Broker, cash=cash, commission=commission, margin=margin,
-            trade_on_close=trade_on_close, hedging=hedging,
-            exclusive_orders=exclusive_orders, index=data.index,
+            trade_on_close=trade_on_close, hedging=hedging, exclusive_orders=exclusive_orders,
+            use_fixed_commission=use_fixed_commission, index=data.index
         )
         self._strategy = strategy
         self._results: Optional[pd.Series] = None
