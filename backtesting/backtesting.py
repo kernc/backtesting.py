@@ -77,7 +77,7 @@ class Strategy(metaclass=ABCMeta):
 
     def I(self,  # noqa: E743
           func: Callable, *args,
-          name=None, plot=True, overlay=None, color=None, scatter=False,
+          name=None, plot=True, overlay=None, color=None, scatter=False, histogram=False,
           **kwargs) -> np.ndarray:
         """
         Declare an indicator. An indicator is just an array of values,
@@ -106,6 +106,10 @@ class Strategy(metaclass=ABCMeta):
 
         If `scatter` is `True`, the plotted indicator marker will be a
         circle instead of a connected line segment (default).
+
+        If `histogram` is `True`, the indicator values will be plotted
+        as a histogram instead of line or circle. When `histogram` is
+        `True`, 'scatter' value will be ignored even if it's set.
 
         Additional `*args` and `**kwargs` are passed to `func` and can
         be used for parameters.
@@ -153,7 +157,7 @@ class Strategy(metaclass=ABCMeta):
                 overlay = ((x < 1.4) & (x > .6)).mean() > .6
 
         value = _Indicator(value, name=name, plot=plot, overlay=overlay,
-                           color=color, scatter=scatter,
+                           color=color, scatter=scatter, histogram=histogram,
                            # _Indicator.s Series accessor uses this:
                            index=self.data.index)
         self._indicators.append(value)
