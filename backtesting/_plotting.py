@@ -35,7 +35,7 @@ except ImportError:  # Bokeh < 3.0
     from bokeh.models import FuncTickFormatter as CustomJSTickFormatter  # type: ignore
 from bokeh.io import output_notebook, output_file, show
 from bokeh.io.state import curstate
-from bokeh.layouts import gridplot, column, row
+from bokeh.layouts import gridplot, column
 from bokeh.palettes import Category10
 from bokeh.transform import factor_cmap
 
