@@ -27,6 +27,7 @@ from bokeh.models import (  # type: ignore
     DatetimeTickFormatter,
     WheelZoomTool,
     LinearColorMapper,
+    Div
 )
 try:
     from bokeh.models import CustomJSTickFormatter
@@ -34,7 +35,7 @@ except ImportError:  # Bokeh < 3.0
     from bokeh.models import FuncTickFormatter as CustomJSTickFormatter  # type: ignore
 from bokeh.io import output_notebook, output_file, show
 from bokeh.io.state import curstate
-from bokeh.layouts import gridplot
+from bokeh.layouts import gridplot, column
 from bokeh.palettes import Category10
 from bokeh.transform import factor_cmap
 
@@ -76,7 +77,8 @@ def _bokeh_reset(filename=None):
     if filename:
         if not filename.endswith('.html'):
             filename += '.html'
-        output_file(filename, title=filename)
+        title = os.path.splitext(os.path.basename(filename))[0]
+        output_file(filename, title=title)
     elif IS_JUPYTER_NOTEBOOK:
         curstate().output_notebook()
 
@@ -164,7 +166,7 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
 def plot(*, results: pd.Series,
          df: pd.DataFrame,
          indicators: List[_Indicator],
-         filename='', plot_width=None,
+         filename='', title='', plot_width=None,
          plot_equity=True, plot_return=False, plot_pl=True,
          plot_volume=True, plot_drawdown=False, plot_trades=True,
          smooth_equity=False, relative_equity=True,
@@ -665,7 +667,11 @@ return this.labels[index] || "";
         merge_tools=True,
         **kwargs  # type: ignore
     )
-    show(fig, browser=None if open_browser else 'none')
+
+    if title:
+        show(column(Div(text=f'<h1>{title}</h1>'), fig, sizing_mode=kwargs['sizing_mode']), browser=None if open_browser else 'none')
+    else:
+        show(fig, browser=None if open_browser else 'none')
     return fig
 
 

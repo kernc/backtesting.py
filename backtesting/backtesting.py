@@ -1552,7 +1552,7 @@ class Backtest:
 
     _mp_backtests: Dict[float, Tuple['Backtest', List, Callable]] = {}
 
-    def plot(self, *, results: pd.Series = None, filename=None, plot_width=None,
+    def plot(self, *, results: pd.Series = None, filename=None, title='', plot_width=None,
              plot_equity=True, plot_return=False, plot_pl=True,
              plot_volume=True, plot_drawdown=False, plot_trades=True,
              smooth_equity=False, relative_equity=True,
@@ -1648,6 +1648,7 @@ class Backtest:
             df=self._data,
             indicators=results._strategy._indicators,
             filename=filename,
+            title=title,
             plot_width=plot_width,
             plot_equity=plot_equity,
             plot_return=plot_return,
