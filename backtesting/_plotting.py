@@ -29,6 +29,10 @@ from bokeh.models import (  # type: ignore
     LinearColorMapper,
     Div
 )
+from bokeh.models.widgets import (
+    TableColumn, 
+    DataTable
+)
 try:
     from bokeh.models import CustomJSTickFormatter
 except ImportError:  # Bokeh < 3.0
@@ -169,6 +173,7 @@ def plot(*, results: pd.Series,
          filename='', title='', plot_width=None,
          plot_equity=True, plot_return=False, plot_pl=True,
          plot_volume=True, plot_drawdown=False, plot_trades=True,
+         show_trades=False,
          smooth_equity=False, relative_equity=True,
          superimpose=True, resample=True,
          reverse_indicators=True,
@@ -668,8 +673,30 @@ return this.labels[index] || "";
         **kwargs  # type: ignore
     )
 
+    def _show_trades(fig):
+        """trades section"""
+        trades = results['_trades']
+        trades.insert(0, '#', trades.index+1)
+        trades['ReturnPct'] *= 100.0
+        numeric_columns = ['Size', 'EntryPrice', 'ExitPrice', 'PnL', 'ReturnPct']
+        for col in numeric_columns:
+            trades[col] = trades[col].map('{:,.2f}'.format)
+        trades = trades.astype(str)
+        src = ColumnDataSource(trades)
+        tc = [TableColumn(field=c, title=c) for c in trades.columns]
+        data_table = DataTable(source=src, columns=tc, fit_columns=True, index_position=None)
+        return column(fig, data_table, sizing_mode=kwargs['sizing_mode'])
+
+    # show trades
+    if show_trades:
+        fig = _show_trades(fig)
+
     if title:
-        show(column(Div(text=f'<h1>{title}</h1>'), fig, sizing_mode=kwargs['sizing_mode']), browser=None if open_browser else 'none')
+        col = column(
+            Div(text=f'<h1>{title}</h1>'),
+            fig,
+            sizing_mode=kwargs['sizing_mode'])
+        show(col, browser=None if open_browser else 'none')
     else:
         show(fig, browser=None if open_browser else 'none')
     return fig
