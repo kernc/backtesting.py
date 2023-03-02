@@ -721,6 +721,16 @@ class _Broker:
 
     def __repr__(self):
         return f'<Broker: {self._cash:.0f}{self.position.pl:+.1f} ({len(self.trades)} trades)>'
+    
+    def deposit_cash(self, amount: float):
+        self._cash += amount
+        return self._cash
+    
+    def withdraw_cash(self, amount: float):
+        if amount > self._cash:
+            return self._cash
+        self.cash -= amount
+        return self._cash
 
     def new_order(self,
                   size: float,
