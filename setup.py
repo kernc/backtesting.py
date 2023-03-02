@@ -33,7 +33,7 @@ if __name__ == '__main__':
         install_requires=[
             'numpy >= 1.17.0',
             'pandas >= 0.25.0, != 0.25.0',
-            'bokeh >= 1.4.0',
+            'bokeh >= 1.4.0, != 3.0.*',
         ],
         extras_require={
             'doc': [
