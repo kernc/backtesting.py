@@ -208,7 +208,7 @@ class Strategy(metaclass=ABCMeta):
 
         See also `Strategy.sell()`.
         """
-        assert 0 < size < 1 or round(size) == size, \
+        assert 0 < size < 1 or round(size) == size >= 1, \
             "size must be a positive fraction of equity, or a positive whole number of units"
         return self._broker.new_order(size, limit, stop, sl, tp, tag)
 
@@ -228,7 +228,7 @@ class Strategy(metaclass=ABCMeta):
             If you merely want to close an existing long position,
             use `Position.close()` or `Trade.close()`.
         """
-        assert 0 < size < 1 or round(size) == size, \
+        assert 0 < size < 1 or round(size) == size >= 1, \
             "size must be a positive fraction of equity, or a positive whole number of units"
         return self._broker.new_order(-size, limit, stop, sl, tp, tag)
 
@@ -741,6 +741,7 @@ class _Broker:
         tp = tp and float(tp)
 
         is_long = size > 0
+        assert size != 0, size
         adjusted_price = self._adjusted_price(size)
 
         if is_long:
