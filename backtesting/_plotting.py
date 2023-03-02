@@ -675,6 +675,9 @@ def plot_heatmaps(heatmap: pd.Series, agg: Union[Callable, str], ncols: int,
             isinstance(heatmap.index, pd.MultiIndex)):
         raise ValueError('heatmap must be heatmap Series as returned by '
                          '`Backtest.optimize(..., return_heatmap=True)`')
+    if len(heatmap.index.levels) < 2:
+        raise ValueError('`plot_heatmap()` requires at least two optimization '
+                         'variables to plot')
 
     _bokeh_reset(filename)
 
