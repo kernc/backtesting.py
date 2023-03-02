@@ -278,10 +278,11 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
     if func is None:
         def func(x, *_, **__):
             return x
+    assert callable(func), 'resample_apply(func=) must be callable'
 
     if not isinstance(series, (pd.Series, pd.DataFrame)):
         assert isinstance(series, _Array), \
-            'resample_apply() takes either a `pd.Series`, `pd.DataFrame`, ' \
+            'resample_apply(series=) must be `pd.Series`, `pd.DataFrame`, ' \
             'or a `Strategy.data.*` array'
         series = series.s
 

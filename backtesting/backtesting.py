@@ -126,7 +126,7 @@ class Strategy(metaclass=ABCMeta):
         try:
             value = func(*args, **kwargs)
         except Exception as e:
-            raise RuntimeError(f'Indicator "{name}" error') from e
+            raise RuntimeError(f'Indicator "{name}" error. See traceback above.') from e
 
         if isinstance(value, pd.DataFrame):
             value = value.values.T
