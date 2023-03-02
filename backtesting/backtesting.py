@@ -74,6 +74,12 @@ class Strategy(metaclass=ABCMeta):
                     "can be optimized or run with.")
             setattr(self, k, v)
         return params
+    
+    def deposit_cash(self, amount):
+        return self._broker.deposit_cash(amount)
+    
+    def withdraw_cash(self, amount):
+        return self._broker.withdraw_cash(amount)
 
     def I(self,  # noqa: E743
           func: Callable, *args,
