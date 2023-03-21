@@ -16,9 +16,6 @@ kindly have a look at some similar alternative Python backtesting frameworks:
   output detailed statistics and useful charts.
 - [vectorbt](https://polakowo.io/vectorbt/) -
   a pandas-based library for quickly analyzing trading strategies at scale.
-- [Backtrader](https://www.backtrader.com/) -
-  a pure-python feature-rich framework for backtesting
-  and live algotrading with a few brokers.
 - [PyAlgoTrade](https://gbeced.github.io/pyalgotrade/) -
   event-driven algorithmic trading library with focus on
   backtesting and support for live trading.
@@ -93,3 +90,6 @@ abandoned, and here for posterity reference only:
   a library to construct, backtest, analyze, and evaluate portfolios
   and their benchmarks, with comprehensive documentation illustrating
   all underlying methodologies and statistics.
+- [Backtrader](https://www.backtrader.com/) -
+  a pure-python feature-rich framework for backtesting
+  and live algotrading with a few brokers.
