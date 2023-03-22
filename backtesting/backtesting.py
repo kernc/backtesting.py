@@ -199,7 +199,7 @@ class Strategy(metaclass=ABCMeta):
             limit: float = None,
             stop: float = None,
             sl: float = None,
-            tp: float = None):
+            tp: float = None)   :
         """
         Place a new long order. For explanation of parameters, see `Order` and its properties.
 
@@ -518,6 +518,14 @@ class Trade:
         self.__exit_bar: Optional[int] = None
         self.__sl_order: Optional[Order] = None
         self.__tp_order: Optional[Order] = None
+        self.__indicator_type: Optional[str] = None
+        self.__indicator_order_type: Optional[str] = None
+
+    def set_indicator_type(self, indicator_type: str):
+        self.__indicator_type = indicator_type
+
+    def set_indicator_order_type(self, order_type: str):
+        self.__indicator_order_type = order_type
 
     def __repr__(self):
         return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
@@ -617,6 +625,16 @@ class Trade:
         """Trade total value in cash (volume × price)."""
         price = self.__exit_price or self.__broker.last_price
         return abs(self.__size) * price
+
+    @property
+    def indicator_type(self):
+        """Trade total value in cash (volume × price)."""
+        return self.__indicator_type
+
+    @property
+    def indicator_order_type(self):
+        """Trade total value in cash (volume × price)."""
+        return self.__indicator_order_type
 
     # SL/TP management API
 
@@ -1049,10 +1067,10 @@ class Backtest:
 
         # Convert index to datetime index
         if (not isinstance(data.index, pd.DatetimeIndex) and
-            not isinstance(data.index, pd.RangeIndex) and
-            # Numeric index with most large numbers
-            (data.index.is_numeric() and
-             (data.index > pd.Timestamp('1975').timestamp()).mean() > .8)):
+                not isinstance(data.index, pd.RangeIndex) and
+                # Numeric index with most large numbers
+                (data.index.is_numeric() and
+                 (data.index > pd.Timestamp('1975').timestamp()).mean() > .8)):
             try:
                 data.index = pd.to_datetime(data.index, infer_datetime_format=True)
             except ValueError:
