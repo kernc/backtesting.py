@@ -199,7 +199,9 @@ class Strategy(metaclass=ABCMeta):
             limit: float = None,
             stop: float = None,
             sl: float = None,
-            tp: float = None)   :
+            tp: float = None,
+            indicator: str = None,
+            ):
         """
         Place a new long order. For explanation of parameters, see `Order` and its properties.
 
@@ -207,14 +209,16 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(size, limit, stop, sl, tp)
+        return self._broker.new_order(size, limit, stop, sl, tp, indicator)
 
     def sell(self, *,
              size: float = _FULL_EQUITY,
              limit: float = None,
              stop: float = None,
              sl: float = None,
-             tp: float = None):
+             tp: float = None,
+             indicator: str = None,
+             ):
         """
         Place a new short order. For explanation of parameters, see `Order` and its properties.
 
@@ -222,7 +226,7 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(-size, limit, stop, sl, tp)
+        return self._broker.new_order(-size, limit, stop, sl, tp, indicator)
 
     @property
     def equity(self) -> float:
@@ -344,12 +348,12 @@ class Position:
         """True if the position is short (position size is negative)."""
         return self.size < 0
 
-    def close(self, portion: float = 1.):
+    def close(self, portion: float = 1., indicator: str = None):
         """
         Close portion of position by closing `portion` of each active trade. See `Trade.close`.
         """
         for trade in self.__broker.trades:
-            trade.close(portion)
+            trade.close(portion, indicator)
 
     def __repr__(self):
         return f'<Position: {self.size} ({len(self.__broker.trades)} trades)>'
@@ -374,13 +378,17 @@ class Order:
     [filled]: https://www.investopedia.com/terms/f/fill.asp
     [Good 'Til Canceled]: https://www.investopedia.com/terms/g/gtc.asp
     """
-    def __init__(self, broker: '_Broker',
+    def __init__(self,
+                 broker: '_Broker',
                  size: float,
                  limit_price: float = None,
                  stop_price: float = None,
                  sl_price: float = None,
                  tp_price: float = None,
-                 parent_trade: 'Trade' = None):
+                 parent_trade: 'Trade' = None,
+                 open_indicator: str = None,
+                 close_indicator: str = None
+                 ):
         self.__broker = broker
         assert size != 0
         self.__size = size
@@ -389,6 +397,8 @@ class Order:
         self.__sl_price = sl_price
         self.__tp_price = tp_price
         self.__parent_trade = parent_trade
+        self.__open_indicator = open_indicator
+        self.__close_indicator = close_indicator
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
@@ -471,6 +481,18 @@ class Order:
         """
         return self.__tp_price
 
+    def open_indicator(self) -> Optional[str]:
+        """
+        The indicator that triggered the order
+        """
+        return self.__open_indicator
+
+    def close_indicator(self) -> Optional[str]:
+        """
+        The indicator that triggered the order
+        """
+        return self.__close_indicator
+
     @property
     def parent_trade(self):
         return self.__parent_trade
@@ -518,14 +540,14 @@ class Trade:
         self.__exit_bar: Optional[int] = None
         self.__sl_order: Optional[Order] = None
         self.__tp_order: Optional[Order] = None
-        self.__indicator_type: Optional[str] = None
-        self.__indicator_order_type: Optional[str] = None
+        self.__open_indicator: Optional[str] = None
+        self.__close_indicator: Optional[str] = None
 
-    def set_indicator_type(self, indicator_type: str):
-        self.__indicator_type = indicator_type
+    def set_open_indicator(self, open_indicator: str):
+        self.__open_indicator = open_indicator
 
-    def set_indicator_order_type(self, order_type: str):
-        self.__indicator_order_type = order_type
+    def set_close_indicator(self, order_type: str):
+        self.__close_indicator = order_type
 
     def __repr__(self):
         return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
@@ -539,11 +561,12 @@ class Trade:
     def _copy(self, **kwargs):
         return copy(self)._replace(**kwargs)
 
-    def close(self, portion: float = 1.):
+    def close(self, portion: float = 1., indicator: str = None):
         """Place new `Order` to close `portion` of the trade at next market price."""
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
         size = copysign(max(1, round(abs(self.__size) * portion)), -self.__size)
-        order = Order(self.__broker, size, parent_trade=self)
+        order = Order(self.__broker, size, parent_trade=self, close_indicator=indicator)
+        self.set_close_indicator(indicator)
         self.__broker.orders.insert(0, order)
 
     # Fields getters
@@ -627,14 +650,14 @@ class Trade:
         return abs(self.__size) * price
 
     @property
-    def indicator_type(self):
+    def open_indicator(self):
         """Trade total value in cash (volume × price)."""
-        return self.__indicator_type
+        return self.__open_indicator
 
     @property
-    def indicator_order_type(self):
+    def close_indicator(self):
         """Trade total value in cash (volume × price)."""
-        return self.__indicator_order_type
+        return self.__close_indicator
 
     # SL/TP management API
 
@@ -712,6 +735,7 @@ class _Broker:
                   stop: float = None,
                   sl: float = None,
                   tp: float = None,
+                  indicator: str = None,
                   *,
                   trade: Trade = None):
         """
@@ -737,7 +761,7 @@ class _Broker:
                     "Short orders require: "
                     f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})")
 
-        order = Order(self, size, limit, stop, sl, tp, trade)
+        order = Order(self, size, limit, stop, sl, tp, trade, open_indicator=indicator)
         # Put the new order in the order queue,
         # inserting SL/TP/trade-closing orders in-front
         if trade:
@@ -817,7 +841,7 @@ class _Broker:
 
                 # > When the stop price is reached, a stop order becomes a market/limit order.
                 # https://www.sec.gov/fast-answers/answersstopordhtm.html
-                order._replace(stop_price=None)
+                order._replace(stop_price=None, close_indicator='stop')
 
             # Determine purchase price.
             # Check if limit order can be filled.
@@ -917,7 +941,7 @@ class _Broker:
 
             # Open a new trade
             if need_size:
-                self._open_trade(adjusted_price, need_size, order.sl, order.tp, time_index)
+                self._open_trade(adjusted_price, need_size, order.sl, order.tp, time_index, indicator=order.open_indicator())
 
                 # We need to reprocess the SL/TP orders newly added to the queue.
                 # This allows e.g. SL hitting in the same bar the order was open.
@@ -972,11 +996,14 @@ class _Broker:
         if trade._tp_order:
             self.orders.remove(trade._tp_order)
 
+        # trade._replace(close_indicator=price)
+
         self.closed_trades.append(trade._replace(exit_price=price, exit_bar=time_index))
         self._cash += trade.pl
 
-    def _open_trade(self, price: float, size: int, sl: float, tp: float, time_index: int):
+    def _open_trade(self, price: float, size: int, sl: float, tp: float, time_index: int, indicator: str = None):
         trade = Trade(self, size, price, time_index)
+        trade.set_open_indicator(indicator)
         self.trades.append(trade)
         # Create SL/TP (bracket) orders.
         # Make sure SL order is created first so it gets adversarially processed before TP order
