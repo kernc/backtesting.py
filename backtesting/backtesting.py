@@ -700,7 +700,7 @@ class Trade:
 class _Broker:
     def __init__(self, *, data, cash, commission, margin,
                  trade_on_close, hedging, exclusive_orders, index):
-        assert 0 < cash, f"cash should be >0, is {cash}"
+        assert cash > 0, f"cash should be > 0, is {cash}"
         assert -.1 <= commission < .1, \
             ("commission should be between -10% "
              f"(e.g. market-maker's rebates) and 10% (fees), is {commission}")
