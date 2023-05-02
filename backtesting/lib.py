@@ -11,6 +11,8 @@ Please raise ideas for additions to this collection on the [issue tracker].
 [issue tracker]: https://github.com/kernc/backtesting.py
 """
 
+from __future__ import annotations
+
 from collections import OrderedDict
 from inspect import currentframe
 from itertools import compress
