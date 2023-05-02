@@ -5,6 +5,9 @@ module directly, e.g.
 
     from backtesting import Backtest, Strategy
 """
+
+from __future__ import annotations
+
 import multiprocessing as mp
 import os
 import sys
