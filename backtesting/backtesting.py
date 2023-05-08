@@ -90,7 +90,9 @@ class Strategy(metaclass=ABCMeta):
         same length as `backtesting.backtesting.Strategy.data`.
 
         In the plot legend, the indicator is labeled with
-        function name, unless `name` overrides it.
+        function name, unless `name` overrides it. If `func` returns
+        multiple arrays, `name` can be a sequence of strings, and
+        its size must agree with the number of arrays returned.
 
         If `plot` is `True`, the indicator is plotted on the resulting
         `backtesting.backtesting.Backtest.plot`.
@@ -115,13 +117,21 @@ class Strategy(metaclass=ABCMeta):
             def init():
                 self.sma = self.I(ta.SMA, self.data.Close, self.n_sma)
         """
+        def _format_name(name: str) -> str:
+            return name.format(*map(_as_str, args),
+                               **dict(zip(kwargs.keys(), map(_as_str, kwargs.values()))))
+
         if name is None:
             params = ','.join(filter(None, map(_as_str, chain(args, kwargs.values()))))
             func_name = _as_str(func)
             name = (f'{func_name}({params})' if params else f'{func_name}')
+        elif isinstance(name, str):
+            name = _format_name(name)
+        elif try_(lambda: all(isinstance(item, str) for item in name), False):
+            name = [_format_name(item) for item in name]
         else:
-            name = name.format(*map(_as_str, args),
-                               **dict(zip(kwargs.keys(), map(_as_str, kwargs.values()))))
+            raise TypeError(f'Unexpected `name=` type {type(name)}; expected `str` or '
+                            '`Sequence[str]`')
 
         try:
             value = func(*args, **kwargs)
@@ -138,6 +148,11 @@ class Strategy(metaclass=ABCMeta):
         # Optionally flip the array if the user returned e.g. `df.values`
         if is_arraylike and np.argmax(value.shape) == 0:
             value = value.T
+
+        if isinstance(name, list) and (np.atleast_2d(value).shape[0] != len(name)):
+            raise ValueError(
+                f'Length of `name=` ({len(name)}) must agree with the number '
+                f'of arrays the indicator returns ({value.shape[0]}).')
 
         if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data.Close):
             raise ValueError(
