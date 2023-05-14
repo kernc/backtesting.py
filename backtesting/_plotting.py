@@ -3,7 +3,7 @@ import re
 import sys
 import warnings
 from colorsys import hls_to_rgb, rgb_to_hls
-from itertools import cycle, combinations, repeat
+from itertools import cycle, combinations
 from functools import partial
 from typing import Callable, List, Union
 
