@@ -405,17 +405,19 @@ class Order:
             setattr(self, f'_{self.__class__.__qualname__}__{k}', v)
         return self
 
+    
     def __repr__(self):
-        return '<Order {}>'.format(', '.join(f'{param}={round(value, 5)}'
+        return '<Order {}>'.format(', '.join(f'{param}={value}'
                                              for param, value in (
-                                                 ('size', self.__size),
-                                                 ('limit', self.__limit_price),
-                                                 ('stop', self.__stop_price),
-                                                 ('sl', self.__sl_price),
-                                                 ('tp', self.__tp_price),
+                                                 ('size', round(self.__size,5)),
+                                                 ('limit', round(self.__limit_price,5) if self.__limit_price is not None else None),
+                                                 ('stop', round(self.__stop_price,5) if self.__stop_price is not None else None),
+                                                 ('sl', round(self.__sl_price,5) if self.__sl_price is not None else None),
+                                                 ('tp', round(self.__tp_price,0) if self.__tp_price is not None else None),
                                                  ('contingent', self.is_contingent),
                                                  ('tag', self.__tag),
                                              ) if value is not None))
+
 
     def cancel(self):
         """Cancel the order."""
