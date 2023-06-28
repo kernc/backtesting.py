@@ -34,7 +34,10 @@ if __name__ == '__main__':
             'numpy >= 1.17.0',
             'pandas >= 0.25.0, != 0.25.0',
             'bokeh >= 1.4.0',
-        ],
+            'configloader >= 1.0.1',
+            'websocket-client >= 1.6.0',
+            'urllib3 >= 2.0.3'
+    ],
         extras_require={
             'doc': [
                 'pdoc3',
