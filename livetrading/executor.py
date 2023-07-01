@@ -108,7 +108,6 @@ class EventDispatcher:
 
         while not self._stopped:
             dispatched_dt = self._dispatch_next(last_dt)
-            print('dispatched_dt', dispatched_dt)
             if dispatched_dt is None:
                 time.sleep(0.01)
             else:

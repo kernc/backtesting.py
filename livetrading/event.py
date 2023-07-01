@@ -141,7 +141,7 @@ class ChannelEventSource(EventSource):
         super().__init__(producer=producer)
 
     @abc.abstractmethod
-    async def push_to_queue(self, message: dict):
+    def push_to_queue(self, message: dict):
         raise NotImplementedError()
 
 

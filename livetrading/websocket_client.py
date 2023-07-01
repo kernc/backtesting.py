@@ -57,7 +57,6 @@ class WSClient(EventProducer, websocket.WebSocketApp):
         logger.info(f"Subscribed to channels: {channels}")
 
     def handle_message(self, message: dict) -> None:
-        print(message)
         channel = message.get("type")
         event_source = self.event_sources.get(channel)
         if event_source:
