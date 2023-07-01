@@ -1,5 +1,5 @@
 {
 "ws_url": "wss://ws-feed.exchange.coinbase.com",
 "api_url": "https://api.exchange.coinbase.com/",
-"ws_timeout": 5}
+"ws_timeout": 5
 }

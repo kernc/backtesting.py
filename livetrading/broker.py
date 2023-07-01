@@ -23,14 +23,16 @@ class Broker:
         self._cached_pairs: Dict[Pair] = {}
 
     def subscribe_to_ticker_events(
-            self, pair: Pair, event_handler
+            self, pair: Pair, interval: str, event_handler
     ):
         """Registers a callable that will be called every ticker.
 
+        :param bar_duration: The bar duration. One of 1s, 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 6h, 8h, 12h, 1d, 3d, 1w, 1M.
         :param pair: The trading pair.
         :param event_handler: A callable that receives an TickerEvent.
         """
-        event_source = TickersEventSource(pair, self.ws_cli)
+
+        event_source = TickersEventSource(pair, interval, self.ws_cli)
         channel = "ticker"
 
         self._subscribe_to_ws_channel_events(
@@ -78,7 +80,6 @@ class Broker:
     ):
         # Set the event source for the channel.
         self.ws_cli.set_channel_event_source(channel, event_source)
-        # self.ws_cli.subscribe_to_channels()
 
         # Subscribe the event handler to the event source.
         self.dispatcher.subscribe(event_source, event_handler)

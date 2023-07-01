@@ -1,9 +1,11 @@
 import time
 import datetime
 import logging
-
+from functools import partial
 from typing import Any, Dict, List, Set, Optional
 
+from backtesting import Backtest
+from .converter import ohlcv_to_dataframe
 from .event import Event, EventSource, EventProducer
 
 logger = logging.getLogger(__name__)
@@ -13,7 +15,7 @@ class EventDispatcher:
     """Responsible for connecting event sources to event handlers and dispatching events
     in the right order.
     """
-    def __init__(self):
+    def __init__(self, strategy):
         self._event_handlers: Dict[EventSource, List[Any]] = {}
         self._prefetched_events: Dict[EventSource, Optional[Event]] = {}
         self._prev_events: Dict[EventSource, datetime.datetime] = {}
@@ -21,9 +23,21 @@ class EventDispatcher:
         self._running = False
         self._stopped = False
         self._current_event_dt = None
+        self.strategy = strategy
+        self.backtesting = None
 
     def set_strategy(self, strategy):
-        self.strategy = strategy
+        self._strategy = strategy
+
+    def set_backtesting_partial(self, cash: float = 10_000,
+                                commission: float = .0,
+                                margin: float = 1.,
+                                trade_on_close=False,
+                                hedging=False,
+                                exclusive_orders=False):
+        self.backtesting = partial(Backtest, strategy=self.strategy, cash=cash, commission=commission,
+                                   margin=margin, trade_on_close=trade_on_close,
+                                   hedging=hedging, exclusive_orders=exclusive_orders)
 
     def subscribe(self, source: EventSource, event_handler: Any):
         """Registers an callable that will be called when an event source has new events.
@@ -64,6 +78,10 @@ class EventDispatcher:
         ]
         for source in sources_to_pop:
             if source.events:
+                df = ohlcv_to_dataframe([event.data for event in source.events])
+                bt = self.backtesting(data=df)
+                bt.run()
+
                 event = source.events.pop()
                 # Check that events from the same source are returned in order.
                 prev_event = self._prev_events.get(source)
@@ -92,8 +110,6 @@ class EventDispatcher:
                 self._prefetched_events[source] = None
 
         self._current_event_dt = None
-        self.strategy.next()
-        self.strategy.init()
         return next_dt
 
     def stop(self):

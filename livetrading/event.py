@@ -7,6 +7,26 @@ from dateutil.parser import isoparse
 from typing import Optional
 
 
+intervals = {
+            "1s": 1,
+            "1m": 60,
+            "3m": 3 * 60,
+            "5m": 5 * 60,
+            "15m": 15 * 60,
+            "30m": 30 * 60,
+            "1h": 3600,
+            "2h": 2 * 3600,
+            "4h": 4 * 3600,
+            "6h": 6 * 3600,
+            "8h": 8 * 3600,
+            "12h": 12 * 3600,
+            "1d": 86400,
+            "3d": 3 * 86400,
+            "1w": 7 * 86400,
+            "1M": 31 * 86400
+}
+
+
 @dataclasses.dataclass
 class Bar:
     """A Bar, aka candlestick, is the summary of the trading activity in a given period.
@@ -150,14 +170,16 @@ class TickersEventSource(ChannelEventSource):
 
     :param pair: The trading pair.
     """
-    def __init__(self, pair: Pair, producer: EventProducer):
+    def __init__(self, pair: Pair, when: datetime, producer: EventProducer):
         super().__init__(producer=producer)
         self.pair: Pair = pair
+        self.when = intervals.get(when)
 
     def push_to_queue(self, message: dict):
         timestamp = message["time"]
+        dt = isoparse(timestamp) + datetime.timedelta(seconds=self.when)
         self.events.append(TickerEvent(
-            isoparse(timestamp),
+            dt,
             Ticker(self.pair, message)))
 
 
@@ -199,7 +221,7 @@ class BarEvent(Event):
     def __init__(self, when, bar: Bar):
         super().__init__(when)
 
-        self.bar = bar
+        self.data = bar
 
 
 class TickerEvent(Event):
@@ -211,4 +233,4 @@ class TickerEvent(Event):
     def __init__(self, when, ticker: Ticker):
         super().__init__(when)
 
-        self.ticker = ticker
+        self.data = ticker
