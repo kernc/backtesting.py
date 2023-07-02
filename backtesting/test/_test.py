@@ -218,7 +218,7 @@ class TestBacktest(TestCase):
         bt = Backtest(GOOG, Assertive)
         with self.assertWarns(UserWarning):
             stats = bt.run()
-        self.assertEqual(stats['# Trades'], 144)
+        self.assertEqual(stats['# Trades'], 131)
 
     def test_broker_params(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross,

@@ -875,7 +875,7 @@ class _Broker:
             # Check if stop condition was hit
             stop_price = order.stop
             if stop_price:
-                is_stop_hit = ((high > stop_price) if order.is_long else (low < stop_price))
+                is_stop_hit = ((high >= stop_price) if order.is_long else (low <= stop_price))
                 if not is_stop_hit:
                     continue
 
@@ -886,13 +886,13 @@ class _Broker:
             # Determine purchase price.
             # Check if limit order can be filled.
             if order.limit:
-                is_limit_hit = low < order.limit if order.is_long else high > order.limit
+                is_limit_hit = low <= order.limit if order.is_long else high >= order.limit
                 # When stop and limit are hit within the same bar, we pessimistically
                 # assume limit was hit before the stop (i.e. "before it counts")
                 is_limit_hit_before_stop = (is_limit_hit and
-                                            (order.limit < (stop_price or -np.inf)
+                                            (order.limit <= (stop_price or -np.inf)
                                              if order.is_long
-                                             else order.limit > (stop_price or np.inf)))
+                                             else order.limit >= (stop_price or np.inf)))
                 if not is_limit_hit or is_limit_hit_before_stop:
                     continue
 
@@ -905,9 +905,8 @@ class _Broker:
                 # Contingent orders always on next open
                 prev_close = data.Close[-2]
                 price = prev_close if self._trade_on_close and not order.is_contingent else open
-                price = (max(price, stop_price or -np.inf)
-                         if order.is_long else
-                         min(price, stop_price or np.inf))
+                if stop_price:
+                    price = max(price, stop_price) if order.is_long else min(price, stop_price)
 
             # Determine entry/exit bar index
             is_market_order = not order.limit and not stop_price
