@@ -68,11 +68,11 @@ class Strategy(metaclass=ABCMeta):
     def _check_params(self, params):
         for k, v in params.items():
             if not hasattr(self, k):
-                raise AttributeError(
-                    f"Strategy '{self.__class__.__name__}' is missing parameter '{k}'."
-                    "Strategy class should define parameters as class variables before they "
-                    "can be optimized or run with.")
-            setattr(self, k, v)
+                message = f"Strategy '{self.__class__.__name__}' is missing parameter '{k}'."
+                print(message)
+                # raise AttributeError(message)
+            else:
+                setattr(self, k, v)
         return params
 
     def I(self,  # noqa: E741, E743
