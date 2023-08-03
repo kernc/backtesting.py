@@ -138,6 +138,7 @@ def plot_heatmaps(heatmap: pd.Series,
     [plot_objective]: \
         https://scikit-optimize.github.io/stable/modules/plots.html#plot-objective
     """
+    assert heatmap.index.nlevels >= 2, "Heatmap plots requires at least 2 optimized parameters."
     return _plot_heatmaps(heatmap, agg, ncols, filename, plot_width, open_browser)
 
 
