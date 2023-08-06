@@ -65,6 +65,8 @@ def compute_stats(
             'ReturnPct': [t.pl_pct for t in trades],
             'EntryTime': [t.entry_time for t in trades],
             'ExitTime': [t.exit_time for t in trades],
+            'SL': [t.sl for t in trades],
+            'TP': [t.tp for t in trades],
             'Tag': [t.tag for t in trades],
         })
         trades_df['Duration'] = trades_df['ExitTime'] - trades_df['EntryTime']
