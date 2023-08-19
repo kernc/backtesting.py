@@ -21,3 +21,15 @@ doc/build/*
 *~*
 
 .venv/
+build/lib/backtesting/__init__.py
+build/lib/backtesting/_plotting.py
+build/lib/backtesting/_stats.py
+build/lib/backtesting/_util.py
+build/lib/backtesting/autoscale_cb.js
+build/lib/backtesting/backtesting.py
+build/lib/backtesting/lib.py
+build/lib/backtesting/test/__init__.py
+build/lib/backtesting/test/__main__.py
+build/lib/backtesting/test/_test.py
+build/lib/backtesting/test/EURUSD.csv
+build/lib/backtesting/test/GOOG.csv

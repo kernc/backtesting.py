@@ -5,6 +5,7 @@ module directly, e.g.
 
     from backtesting import Backtest, Strategy
 """
+from enum import Enum
 import multiprocessing as mp
 import os
 import sys
@@ -40,6 +41,10 @@ __pdoc__ = {
     'Trade.__init__': False,
 }
 
+class SizeType(Enum):
+    AbsouteUnit            = 1  # absoute unit
+    FractionOfLiquidity    = 2  # fraction of current available liquidity (cash plus `Position.pl` minus used margin)
+    FractionOfUnit         = 3  # fraction of unit
 
 class Strategy(metaclass=ABCMeta):
     """
@@ -196,6 +201,7 @@ class Strategy(metaclass=ABCMeta):
 
     def buy(self, *,
             size: float = _FULL_EQUITY,
+            size_type: SizeType = SizeType.AbsouteUnit,
             limit: Optional[float] = None,
             stop: Optional[float] = None,
             sl: Optional[float] = None,
@@ -210,10 +216,11 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(size, limit, stop, sl, tp, tag)
+        return self._broker.new_order(size, size_type, limit, stop, sl, tp, tag)
 
     def sell(self, *,
              size: float = _FULL_EQUITY,
+             size_type: SizeType = SizeType.AbsouteUnit,
              limit: Optional[float] = None,
              stop: Optional[float] = None,
              sl: Optional[float] = None,
@@ -230,7 +237,7 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(-size, limit, stop, sl, tp, tag)
+        return self._broker.new_order(-size, size_type, limit, stop, sl, tp, tag)
 
     @property
     def equity(self) -> float:
@@ -367,6 +374,7 @@ class _OutOfMoneyError(Exception):
     pass
 
 
+
 class Order:
     """
     Place new orders through `Strategy.buy()` and `Strategy.sell()`.
@@ -384,6 +392,7 @@ class Order:
     """
     def __init__(self, broker: '_Broker',
                  size: float,
+                 size_type: SizeType,
                  limit_price: Optional[float] = None,
                  stop_price: Optional[float] = None,
                  sl_price: Optional[float] = None,
@@ -393,6 +402,7 @@ class Order:
         self.__broker = broker
         assert size != 0
         self.__size = size
+        self.__size_type = size_type
         self.__limit_price = limit_price
         self.__stop_price = stop_price
         self.__sl_price = sl_price
@@ -436,12 +446,15 @@ class Order:
     def size(self) -> float:
         """
         Order size (negative for short orders).
-
-        If size is a value between 0 and 1, it is interpreted as a fraction of current
-        available liquidity (cash plus `Position.pl` minus used margin).
-        A value greater than or equal to 1 indicates an absolute number of units.
         """
         return self.__size
+    
+    @property
+    def size_type(self) -> SizeType:
+        """
+        Order size (negative for short orders).
+        """
+        return self.__size_type
 
     @property
     def limit(self) -> Optional[float]:
@@ -528,9 +541,10 @@ class Trade:
     When an `Order` is filled, it results in an active `Trade`.
     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
     """
-    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar, tag):
+    def __init__(self, broker: '_Broker', size: int, size_type: SizeType, entry_price: float, entry_bar, tag):
         self.__broker = broker
         self.__size = size
+        self.__size_type = size_type
         self.__entry_price = entry_price
         self.__exit_price: Optional[float] = None
         self.__entry_bar: int = entry_bar
@@ -556,7 +570,7 @@ class Trade:
         """Place new `Order` to close `portion` of the trade at next market price."""
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
         size = copysign(max(1, round(abs(self.__size) * portion)), -self.__size)
-        order = Order(self.__broker, size, parent_trade=self, tag=self.__tag)
+        order = Order(self.__broker, size, self.__size_type, parent_trade=self, tag=self.__tag)
         self.__broker.orders.insert(0, order)
 
     # Fields getters
@@ -693,7 +707,7 @@ class Trade:
             order.cancel()
         if price:
             kwargs = {'stop': price} if type == 'sl' else {'limit': price}
-            order = self.__broker.new_order(-self.size, trade=self, tag=self.tag, **kwargs)
+            order = self.__broker.new_order(-self.size, self.__size_type, trade=self, tag=self.tag, **kwargs)
             setattr(self, attr, order)
 
 
@@ -724,6 +738,7 @@ class _Broker:
 
     def new_order(self,
                   size: float,
+                  size_type: SizeType,
                   limit: Optional[float] = None,
                   stop: Optional[float] = None,
                   sl: Optional[float] = None,
@@ -754,7 +769,7 @@ class _Broker:
                     "Short orders require: "
                     f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})")
 
-        order = Order(self, size, limit, stop, sl, tp, trade, tag)
+        order = Order(self, size, size_type, limit, stop, sl, tp, trade, tag)
         # Put the new order in the order queue,
         # inserting SL/TP/trade-closing orders in-front
         if trade:
@@ -881,7 +896,7 @@ class _Broker:
                     assert order not in self.orders  # Removed when trade was closed
                 else:
                     # It's a trade.close() order, now done
-                    assert abs(_prev_size) >= abs(size) >= 1
+                    assert abs(_prev_size) >= abs(size) # >= 1 need to support fractions of a unit trades.
                     self.orders.remove(order)
                 continue
 
@@ -894,15 +909,23 @@ class _Broker:
             # If order size was specified proportionally,
             # precompute true size in units, accounting for margin and spread/commissions
             size = order.size
-            if -1 < size < 1:
+            if order.size_type == SizeType.FractionOfLiquidity:
                 size = copysign(int((self.margin_available * self._leverage * abs(size))
                                     // adjusted_price), size)
                 # Not enough cash/margin even for a single unit
                 if not size:
                     self.orders.remove(order)
                     continue
-            assert size == round(size)
-            need_size = int(size)
+                assert size == int(round(size))
+            elif order.size_type == SizeType.FractionOfUnit:
+                assert -1 < size < 1
+                # Not enought money to buy fraction of unit
+                if self.margin_available * self._leverage < adjusted_price* abs(size):
+                    self.orders.remove(order)
+                    continue
+            elif order.size_type == SizeType.AbsouteUnit:
+                assert size == int(round(size))
+            need_size = size
 
             if not self._hedging:
                 # Fill position by FIFO closing/reducing existing opposite-facing trades.
@@ -936,6 +959,7 @@ class _Broker:
             if need_size:
                 self._open_trade(adjusted_price,
                                  need_size,
+                                 order.size_type,
                                  order.sl,
                                  order.tp,
                                  time_index,
@@ -997,9 +1021,9 @@ class _Broker:
         self.closed_trades.append(trade._replace(exit_price=price, exit_bar=time_index))
         self._cash += trade.pl
 
-    def _open_trade(self, price: float, size: int,
+    def _open_trade(self, price: float, size: int, size_type: SizeType,
                     sl: Optional[float], tp: Optional[float], time_index: int, tag):
-        trade = Trade(self, size, price, time_index, tag)
+        trade = Trade(self, size, size_type, price, time_index, tag)
         self.trades.append(trade)
         # Create SL/TP (bracket) orders.
         # Make sure SL order is created first so it gets adversarially processed before TP order
