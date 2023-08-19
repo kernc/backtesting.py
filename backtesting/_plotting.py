@@ -170,7 +170,8 @@ def plot(*, results: pd.Series,
          smooth_equity=False, relative_equity=True,
          superimpose=True, resample=True,
          reverse_indicators=True,
-         show_legend=True, open_browser=True):
+         show_legend=True, open_browser=True,
+         show_output:bool = True):
     """
     Like much of GUI code everywhere, this is a mess.
     """
@@ -665,7 +666,7 @@ return this.labels[index] || "";
         merge_tools=True,
         **kwargs  # type: ignore
     )
-    show(fig, browser=None if open_browser else 'none')
+    if show_output: show(fig, browser=None if open_browser else 'none')
     return fig
 
 
