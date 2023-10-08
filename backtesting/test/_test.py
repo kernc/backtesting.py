@@ -275,6 +275,7 @@ class TestBacktest(TestCase):
                 'Return (Ann.) [%]': 21.180255813792282,
                 'Return [%]': 414.2298999999996,
                 'Volatility (Ann.) [%]': 36.49390889140787,
+                'CAGR [%]': 14.159843619607383,
                 'SQN': 1.0766187356697705,
                 'Kelly Criterion': 0.1518705127029717,
                 'Sharpe Ratio': 0.5803778344714113,
