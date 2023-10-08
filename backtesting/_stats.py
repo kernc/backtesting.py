@@ -155,6 +155,10 @@ def compute_stats(
 
 class _Stats(pd.Series):
     def __repr__(self):
-        # Prevent expansion due to _equity and _trades dfs
-        with pd.option_context('max_colwidth', 20):
+        with pd.option_context(
+            'display.max_colwidth', 20,  # Prevent expansion due to _equity and _trades dfs
+            'display.max_rows', len(self),  # Reveal self whole
+            'display.precision', 5,  # Enough for my eyes at least
+            # 'format.na_rep', '--',  # TODO: Enable once it works
+        ):
             return super().__repr__()
