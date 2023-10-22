@@ -1662,3 +1662,85 @@ class Backtest:
             reverse_indicators=reverse_indicators,
             show_legend=show_legend,
             open_browser=open_browser)
+
+    def initialize(self, **kwargs):
+        """
+        Initialize the backtest with the given parameters. Keyword arguments are interpreted as strategy parameters.
+
+        :param kwargs: Strategy parameters
+        """
+        data = _Data(self._data.copy(deep=False))
+        broker: _Broker = self._broker(data=data)
+        strategy: Strategy = self._strategy(broker, data, kwargs)
+        
+        strategy.init()
+        data._update()  # Strategy.init might have changed/added to data.df
+
+        # Indicators used in Strategy.next()
+        indicator_attrs = {attr: indicator
+                        for attr, indicator in strategy.__dict__.items()
+                        if isinstance(indicator, _Indicator)}.items()
+
+        # Skip first few candles where indicators are still "warming up"
+        # +1 to have at least two entries available
+        start = 1 + max((np.isnan(indicator.astype(float)).argmin(axis=-1).max()
+                        for _, indicator in indicator_attrs), default=0)
+
+        self._step_data = data
+        self._step_broker = broker
+        self._step_strategy = strategy
+        self._step_time = start
+        self._step_indicator_attrs = indicator_attrs
+
+    def next(self):
+        """
+        Move the backtest one time step forward and return the results for the current step.
+
+        :return: Results and statistics for the current time step
+        :rtype: pd.Series
+        """
+        
+        # Disable "invalid value encountered in ..." warnings. Comparison
+        # np.nan >= 3 is not invalid; it's False.
+        # with np.errstate(invalid='ignore'):
+        
+        if self._step_time < len(self._data):
+            # Prepare data and indicators for `next` call
+            self._step_data._set_length(self._step_time + 1)
+            for attr, indicator in self._step_indicator_attrs:
+                # Slice indicator on the last dimension (case of 2d indicator)
+                setattr(self._step_strategy, attr, indicator[..., :self._step_time + 1])
+
+            # Handle orders processing and broker stuff
+            try:
+                self._step_broker.next()
+            except _OutOfMoneyError:
+                pass
+
+            # Next tick, a moment before bar close
+            self._step_strategy.next()
+            self._step_time += 1
+        else:
+            # Close any remaining open trades so they produce some stats
+            for trade in self._step_broker.trades:
+                trade.close()
+
+            # Re-run broker one last time to handle orders placed in the last strategy
+            # iteration. Use the same OHLC values as in the last broker iteration.
+            if self._step_time < len(self._data):
+                try_(self._step_broker.next, exception=_OutOfMoneyError)
+
+            # Set data back to full length
+            # for future `indicator._opts['data'].index` calls to work
+            self._step_data._set_length(len(self._data))
+            
+
+            equity = pd.Series(self._step_broker._equity).bfill().fillna(self._step_broker._cash).values
+            results = compute_stats(
+                trades=self._step_broker.closed_trades,
+                equity=equity,
+                ohlc_data=self._data,
+                risk_free_rate=0.0,
+                strategy_instance=self._step_strategy,
+            )
+            return results
