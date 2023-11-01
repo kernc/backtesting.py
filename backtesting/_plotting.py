@@ -537,10 +537,23 @@ return this.labels[index] || "";
             colors = value._opts['color']
             colors = colors and cycle(_as_list(colors)) or (
                 cycle([next(ohlc_colors)]) if is_overlay else colorgen())
-            legend_label = LegendStr(value.name)
-            for j, arr in enumerate(value, 1):
+
+            if isinstance(value.name, str):
+                tooltip_label = value.name
+                if len(value) == 1:
+                    legend_labels = [LegendStr(value.name)]
+                else:
+                    legend_labels = [
+                        LegendStr(f"{value.name}[{i}]")
+                        for i in range(len(value))
+                    ]
+            else:
+                tooltip_label = ", ".join(value.name)
+                legend_labels = [LegendStr(item) for item in value.name]
+
+            for j, arr in enumerate(value):
                 color = next(colors)
-                source_name = f'{legend_label}_{i}_{j}'
+                source_name = f'{legend_labels[j]}_{i}_{j}'
                 if arr.dtype == bool:
                     arr = arr.astype(int)
                 source.add(arr, source_name)
@@ -550,24 +563,24 @@ return this.labels[index] || "";
                     if is_scatter:
                         fig.scatter(
                             'index', source_name, source=source,
-                            legend_label=legend_label, color=color,
+                            legend_label=legend_labels[j], color=color,
                             line_color='black', fill_alpha=.8,
                             marker='circle', radius=BAR_WIDTH / 2 * 1.5)
                     else:
                         fig.line(
                             'index', source_name, source=source,
-                            legend_label=legend_label, line_color=color,
+                            legend_label=legend_labels[j], line_color=color,
                             line_width=1.3)
                 else:
                     if is_scatter:
                         r = fig.scatter(
                             'index', source_name, source=source,
-                            legend_label=LegendStr(legend_label), color=color,
+                            legend_label=legend_labels[j], color=color,
                             marker='circle', radius=BAR_WIDTH / 2 * .9)
                     else:
                         r = fig.line(
                             'index', source_name, source=source,
-                            legend_label=LegendStr(legend_label), line_color=color,
+                            legend_label=legend_labels[j], line_color=color,
                             line_width=1.3)
                     # Add dashed centerline just because
                     mean = float(pd.Series(arr).mean())
@@ -578,9 +591,9 @@ return this.labels[index] || "";
                                             line_color='#666666', line_dash='dashed',
                                             line_width=.5))
             if is_overlay:
-                ohlc_tooltips.append((legend_label, NBSP.join(tooltips)))
+                ohlc_tooltips.append((tooltip_label, NBSP.join(tooltips)))
             else:
-                set_tooltips(fig, [(legend_label, NBSP.join(tooltips))], vline=True, renderers=[r])
+                set_tooltips(fig, [(tooltip_label, NBSP.join(tooltips))], vline=True, renderers=[r])
                 # If the sole indicator line on this figure,
                 # have the legend only contain text without the glyph
                 if len(value) == 1:

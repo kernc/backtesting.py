@@ -755,6 +755,37 @@ class TestPlot(TestCase):
             # Give browser time to open before tempfile is removed
             time.sleep(1)
 
+    def test_indicator_name(self):
+        test_self = self
+
+        class S(Strategy):
+            def init(self):
+                def _SMA():
+                    return SMA(self.data.Close, 5), SMA(self.data.Close, 10)
+
+                test_self.assertRaises(TypeError, self.I, _SMA, name=42)
+                test_self.assertRaises(ValueError, self.I, _SMA, name=("SMA One",))
+                test_self.assertRaises(
+                    ValueError, self.I, _SMA, name=("SMA One", "SMA Two", "SMA Three"))
+
+                for overlay in (True, False):
+                    self.I(SMA, self.data.Close, 5, overlay=overlay)
+                    self.I(SMA, self.data.Close, 5, name="My SMA", overlay=overlay)
+                    self.I(SMA, self.data.Close, 5, name=("My SMA",), overlay=overlay)
+                    self.I(_SMA, overlay=overlay)
+                    self.I(_SMA, name="My SMA", overlay=overlay)
+                    self.I(_SMA, name=("SMA One", "SMA Two"), overlay=overlay)
+
+            def next(self):
+                pass
+
+        bt = Backtest(GOOG, S)
+        bt.run()
+        with _tempfile() as f:
+            bt.plot(filename=f,
+                    plot_drawdown=False, plot_equity=False, plot_pl=False, plot_volume=False,
+                    open_browser=False)
+
     def test_indicator_color(self):
         class S(Strategy):
             def init(self):
