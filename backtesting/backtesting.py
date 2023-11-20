@@ -24,6 +24,7 @@ from numpy.random import default_rng
 
 try:
     from tqdm.auto import tqdm as _tqdm
+
     _tqdm = partial(_tqdm, leave=False)
 except ImportError:
     def _tqdm(seq, **_):
@@ -31,7 +32,7 @@ except ImportError:
 
 from ._plotting import plot
 from ._stats import compute_stats
-from ._util import _as_str, _Indicator, _Data, try_
+from ._util import _as_str, _Indicator, _Data, try_, static_indicator
 
 __pdoc__ = {
     'Strategy.__init__': False,
@@ -49,6 +50,7 @@ class Strategy(metaclass=ABCMeta):
     `backtesting.backtesting.Strategy.next` to define
     your own strategy.
     """
+
     def __init__(self, broker, data, params):
         self._indicators = []
         self._broker: _Broker = broker
@@ -68,11 +70,10 @@ class Strategy(metaclass=ABCMeta):
     def _check_params(self, params):
         for k, v in params.items():
             if not hasattr(self, k):
-                message = f"Strategy '{self.__class__.__name__}' is missing parameter '{k}'."
+                message = f"Strategy '{self.__class__.__name__}' is missing parameter '{k}', set from config!."
                 print(message)
                 # raise AttributeError(message)
-            else:
-                setattr(self, k, v)
+            setattr(self, k, v)
         return params
 
     def I(self,  # noqa: E741, E743
@@ -115,48 +116,12 @@ class Strategy(metaclass=ABCMeta):
             def init():
                 self.sma = self.I(ta.SMA, self.data.Close, self.n_sma)
         """
-        if name is None:
-            params = ','.join(filter(None, map(_as_str, chain(args, kwargs.values()))))
-            func_name = _as_str(func)
-            name = (f'{func_name}({params})' if params else f'{func_name}')
-        else:
-            name = name.format(*map(_as_str, args),
-                               **dict(zip(kwargs.keys(), map(_as_str, kwargs.values()))))
+        value = static_indicator(func, *args,
+                                 name=name, plot=plot, overlay=overlay, color=color, scatter=scatter,
+                                 data=self.data, _data=self._data, **kwargs)
 
-        try:
-            value = func(*args, **kwargs)
-        except Exception as e:
-            raise RuntimeError(f'Indicator "{name}" errored with exception: {e}')
-
-        if isinstance(value, pd.DataFrame):
-            value = value.values.T
-
-        if value is not None:
-            value = try_(lambda: np.asarray(value, order='C'), None)
-        is_arraylike = value is not None
-
-        # Optionally flip the array if the user returned e.g. `df.values`
-        if is_arraylike and np.argmax(value.shape) == 0:
-            value = value.T
-
-        if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data.Close):
-            raise ValueError(
-                'Indicators must return (optionally a tuple of) numpy.arrays of same '
-                f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}"'
-                f'shape: {getattr(value, "shape" , "")}, returned value: {value})')
-
-        if plot and overlay is None and np.issubdtype(value.dtype, np.number):
-            x = value / self._data.Close
-            # By default, overlay if strong majority of indicator values
-            # is within 30% of Close
-            with np.errstate(invalid='ignore'):
-                overlay = ((x < 1.4) & (x > .6)).mean() > .6
-
-        value = _Indicator(value, name=name, plot=plot, overlay=overlay,
-                           color=color, scatter=scatter,
-                           # _Indicator.s Series accessor uses this:
-                           index=self.data.index)
         self._indicators.append(value)
+
         return value
 
     @abstractmethod
@@ -192,6 +157,7 @@ class Strategy(metaclass=ABCMeta):
 
     class __FULL_EQUITY(float):
         def __repr__(self): return '.9999'
+
     _FULL_EQUITY = __FULL_EQUITY(1 - sys.float_info.epsilon)
 
     def buy(self, *,
@@ -287,6 +253,7 @@ class _Orders(tuple):
     """
     TODO: remove this class. Only for deprecation.
     """
+
     def cancel(self):
         """Cancel all non-contingent (i.e. SL/TP) orders."""
         for order in self:
@@ -314,6 +281,7 @@ class Position:
         if self.position:
             ...  # we have a position, either long or short
     """
+
     def __init__(self, broker: '_Broker'):
         self.__broker = broker
 
@@ -378,6 +346,7 @@ class Order:
     [filled]: https://www.investopedia.com/terms/f/fill.asp
     [Good 'Til Canceled]: https://www.investopedia.com/terms/g/gtc.asp
     """
+
     def __init__(self,
                  broker: '_Broker',
                  size: float,
@@ -531,6 +500,7 @@ class Trade:
     When an `Order` is filled, it results in an active `Trade`.
     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
     """
+
     def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar):
         self.__broker = broker
         self.__size = size
@@ -941,7 +911,8 @@ class _Broker:
 
             # Open a new trade
             if need_size:
-                self._open_trade(adjusted_price, need_size, order.sl, order.tp, time_index, indicator=order.open_indicator())
+                self._open_trade(adjusted_price, need_size, order.sl, order.tp, time_index,
+                                 indicator=order.open_indicator())
 
                 # We need to reprocess the SL/TP orders newly added to the queue.
                 # This allows e.g. SL hitting in the same bar the order was open.
@@ -1025,6 +996,7 @@ class Backtest:
     instance, or `backtesting.backtesting.Backtest.optimize` to
     optimize it.
     """
+
     def __init__(self,
                  data: pd.DataFrame,
                  strategy: Type[Strategy],
@@ -1245,10 +1217,11 @@ class Backtest:
                  constraint: Callable[[dict], bool] = None,
                  return_heatmap: bool = False,
                  return_optimization: bool = False,
+                 return_multiple_results: int = False,
                  random_state: int = None,
                  **kwargs) -> Union[pd.Series,
-                                    Tuple[pd.Series, pd.Series],
-                                    Tuple[pd.Series, pd.Series, dict]]:
+    Tuple[pd.Series, pd.Series],
+    Tuple[pd.Series, pd.Series, dict]]:
         """
         Optimize strategy parameters to an optimal combination.
         Returns result `pd.Series` of the best run.
@@ -1346,8 +1319,14 @@ class Backtest:
         if return_optimization and method != 'skopt':
             raise ValueError("return_optimization=True only valid if method='skopt'")
 
-        def _tuple(x):
-            return x if isinstance(x, Sequence) and not isinstance(x, str) else (x,)
+        def _tuple(v):
+            #return x if isinstance(x, Sequence) and not isinstance(x, str) else (x,)
+            if isinstance(v, range) or isinstance(v, list) or isinstance(v, np.ndarray):
+                return tuple(v)
+            elif isinstance(v, dict):
+                return (v,)
+            else:
+                return (v,)
 
         for k, v in kwargs.items():
             if len(_tuple(v)) == 0:
@@ -1426,22 +1405,39 @@ class Backtest:
             finally:
                 del Backtest._mp_backtests[backtest_uuid]
 
-            best_params = heatmap.idxmax()
+            if return_multiple_results:
+                # NEW Find the best parameters and get the best results
+                best_params_set = heatmap.nlargest(min(return_multiple_results, len(heatmap)))
+                stats = []
+                for best_params, value in best_params_set.items():
+                    if pd.isnull(best_params):
+                        # No trade was made in any of the runs. Just make a random
+                        # run so we get some, if empty, results
+                        stats.append(self.run(**param_combos[0]))
+                    else:
+                        stats.append(self.run(**dict(zip(heatmap.index.names, best_params))))
 
-            if pd.isnull(best_params):
-                # No trade was made in any of the runs. Just make a random
-                # run so we get some, if empty, results
-                stats = self.run(**param_combos[0])
+                if return_heatmap:
+                    return stats, heatmap
+                return stats
             else:
-                stats = self.run(**dict(zip(heatmap.index.names, best_params)))
+                # ORIGINAL Find the best parameters and get the best results
+                best_params = heatmap.idxmax()
 
-            if return_heatmap:
-                return stats, heatmap
-            return stats
+                if pd.isnull(best_params):
+                    # No trade was made in any of the runs. Just make a random
+                    # run so we get some, if empty, results
+                    stats = self.run(**param_combos[0])
+                else:
+                    stats = self.run(**dict(zip(heatmap.index.names, best_params)))
+
+                if return_heatmap:
+                    return stats, heatmap
+                return stats
 
         def _optimize_skopt() -> Union[pd.Series,
-                                       Tuple[pd.Series, pd.Series],
-                                       Tuple[pd.Series, pd.Series, dict]]:
+        Tuple[pd.Series, pd.Series],
+        Tuple[pd.Series, pd.Series, dict]]:
             try:
                 from skopt import forest_minimize
                 from skopt.space import Integer, Real, Categorical
@@ -1466,6 +1462,9 @@ class Backtest:
                     values = values.astype(int)
 
                 if values.dtype.kind in 'iumM':
+                    lv = values.min()
+                    mv = values.max()
+
                     dimensions.append(Integer(low=values.min(), high=values.max(), name=key))
                 elif values.dtype.kind == 'f':
                     dimensions.append(Real(low=values.min(), high=values.max(), name=key))

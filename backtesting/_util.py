@@ -1,5 +1,6 @@
 import warnings
-from typing import Dict, List, Optional, Sequence, Union, cast
+from typing import Callable, Dict, List, Optional, Sequence, Union, cast
+from itertools import chain
 from numbers import Number
 
 import numpy as np
@@ -11,6 +12,93 @@ def try_(lazy_func, default=None, exception=Exception):
         return lazy_func()
     except exception:
         return default
+
+
+def static_indicator(func: Callable, *args,
+                     name=None, plot=True, overlay=None, color=None, scatter=False, _data=None, data=None,
+                     **kwargs) -> np.ndarray:
+    """
+    Declare indicator. An indicator is just an array of values,
+    but one that is revealed gradually in
+    `backtesting.backtesting.Strategy.next` much like
+    `backtesting.backtesting.Strategy.data` is.
+    Returns `np.ndarray` of indicator values.
+
+    `func` is a function that returns the indicator array(s) of
+    same length as `backtesting.backtesting.Strategy.data`.
+
+    In the plot legend, the indicator is labeled with
+    function name, unless `name` overrides it.
+
+    If `plot` is `True`, the indicator is plotted on the resulting
+    `backtesting.backtesting.Backtest.plot`.
+
+    If `overlay` is `True`, the indicator is plotted overlaying the
+    price candlestick chart (suitable e.g. for moving averages).
+    If `False`, the indicator is plotted standalone below the
+    candlestick chart. By default, a heuristic is used which decides
+    correctly most of the time.
+
+    `color` can be string hex RGB triplet or X11 color name.
+    By default, the next available color is assigned.
+
+    If `scatter` is `True`, the plotted indicator marker will be a
+    circle instead of a connected line segment (default).
+
+    Additional `*args` and `**kwargs` are passed to `func` and can
+    be used for parameters.
+
+    For example, using simple moving average function from TA-Lib:
+
+        def init():
+            self.sma = utils._static_I(ta.SMA, self.data.Close, self.n_sma)
+
+    Do not forget to update the backtesting self indicators property
+    """
+
+    if name is None:
+        params = ','.join(filter(None, map(_as_str, chain(args, kwargs.values()))))
+        func_name = _as_str(func)
+        name = (f'{func_name}({params})' if params else f'{func_name}')
+    else:
+        name = name.format(*map(_as_str, args),
+                           **dict(zip(kwargs.keys(), map(_as_str, kwargs.values()))))
+
+    try:
+        value = func(*args, **kwargs)
+    except Exception as e:
+        raise RuntimeError(f'Indicator "{name}" errored with exception: {e}')
+
+    if isinstance(value, pd.DataFrame):
+        value = value.values.T
+
+    if value is not None:
+        value = try_(lambda: np.asarray(value, order='C'), None)
+    is_arraylike = value is not None
+
+    # Optionally flip the array if the user returned e.g. `df.values`
+    if is_arraylike and np.argmax(value.shape) == 0:
+        value = value.T
+
+    if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(_data.Close):
+        raise ValueError(
+            'Indicators must return (optionally a tuple of) numpy.arrays of same '
+            f'length as `data` (data shape: {_data.Close.shape}; indicator "{name}"'
+            f'shape: {getattr(value, "shape" , "")}, returned value: {value})')
+
+    if plot and overlay is None and np.issubdtype(value.dtype, np.number):
+        x = value / _data.Close
+        # By default, overlay if strong majority of indicator values
+        # is within 30% of Close
+        with np.errstate(invalid='ignore'):
+            overlay = ((x < 1.4) & (x > .6)).mean() > .6
+
+    value = _Indicator(value, name=name, plot=plot, overlay=overlay,
+                       color=color, scatter=scatter,
+                       # _Indicator.s Series accessor uses this:
+                       index=data.index)
+
+    return value
 
 
 def _as_str(value) -> str:
@@ -38,7 +126,6 @@ def _data_period(index) -> Union[pd.Timedelta, Number]:
     """Return data index period as pd.Timedelta"""
     values = pd.Series(index[-100:])
     return values.diff().dropna().median()
-
 
 class _Array(np.ndarray):
     """
