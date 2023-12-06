@@ -280,3 +280,52 @@ class _Data:
 
     def __setstate__(self, state):
         self.__dict__ = state
+
+class _MarketDepthData:
+    def __init__(self, market_depth_df: pd.DataFrame):
+        self.__df = market_depth_df
+        self.__i = len(market_depth_df)
+        self.__cache: Dict[str, _Array] = {}
+        self.__arrays: Dict[str, _Array] = {}
+        self._update()
+
+    def __getitem__(self, item):
+        return self.__get_array(item)
+
+    def __getattr__(self, item):
+        try:
+            return self.__get_array(item)
+        except KeyError:
+            raise AttributeError(f"Column '{item}' not in market depth data") from None
+
+    def _set_length(self, i):
+        self.__i = i
+        self.__cache.clear()
+
+    def _update(self):
+        index = self.__df.index.copy()
+        self.__arrays = {col: _Array(arr, index=index)
+                         for col, arr in self.__df.items()}
+        self.__arrays['__index'] = index  # Keep index as Series
+
+    def __repr__(self):
+        i = min(self.__i, len(self.__df) - 1)
+        index = self.__arrays['__index'][i]
+        items = ', '.join(f'{k}={v}' for k, v in self.__df.iloc[i].items())
+        return f'<MarketDepthData i={i} ({index}) {items}>'
+
+    def __len__(self):
+        return self.__i
+
+    @property
+    def df(self) -> pd.DataFrame:
+        return (self.__df.iloc[:self.__i]
+                if self.__i < len(self.__df)
+                else self.__df)
+
+    def __get_array(self, key) -> _Array:
+        arr = self.__cache.get(key)
+        if arr is None:
+            arr = self.__cache[key] = self.__arrays[key][:self.__i]
+        return arr
+

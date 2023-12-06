@@ -32,7 +32,7 @@ except ImportError:
 
 from ._plotting import plot
 from ._stats import compute_stats
-from ._util import _as_str, _Indicator, _Data, try_, static_indicator
+from ._util import _as_str, _Indicator, _Data, try_, static_indicator, _MarketDepthData
 
 __pdoc__ = {
     'Strategy.__init__': False,
@@ -676,13 +676,14 @@ class Trade:
 
 class _Broker:
     def __init__(self, *, data, cash, commission, margin,
-                 trade_on_close, hedging, exclusive_orders, index):
+                 trade_on_close, hedging, exclusive_orders, index, market_depth_data):
         assert 0 < cash, f"cash should be >0, is {cash}"
         assert -.1 <= commission < .1, \
             ("commission should be between -10% "
              f"(e.g. market-maker's rebates) and 10% (fees), is {commission}")
         assert 0 < margin <= 1, f"margin should be between 0 and 1, is {margin}"
         self._data: _Data = data
+        self._market_depth_data: _MarketDepthData = market_depth_data if market_depth_data is not None else None
         self._cash = cash
         self._commission = commission
         self._leverage = 1 / margin
@@ -774,6 +775,10 @@ class _Broker:
 
     def next(self):
         i = self._i = len(self._data) - 1
+
+        if self._market_depth_data is not None:
+            self._market_depth_data._set_length(len(self._data))
+
         self._process_orders()
 
         # Log account equity for the equity curve
@@ -791,6 +796,7 @@ class _Broker:
 
     def _process_orders(self):
         data = self._data
+        market_depth_data = self._market_depth_data
         open, high, low = data.Open[-1], data.High[-1], data.Low[-1]
         prev_close = data.Close[-2]
         reprocess_orders = False
@@ -836,6 +842,44 @@ class _Broker:
                 price = (max(price, stop_price or -np.inf)
                          if order.is_long else
                          min(price, stop_price or np.inf))
+
+            if market_depth_data is not None:
+                # TODO NEED TO VERIFY THAT WE FETCH CORRECT DATA INDEX
+                current_time_index = data.index[self._i]
+                current_market_depth = market_depth_data.df.loc[current_time_index]
+
+                market_side = 'buy' if order.is_long else 'sell'
+                avg_price_key = f'{market_side}_average_price'
+                volume_key = f'{market_side}_total_volume'
+                high_price_key = f'{market_side}_high_price'
+                low_price_key = f'{market_side}_low_price'
+
+                avg_price = current_market_depth[avg_price_key]
+                volume = current_market_depth[volume_key]
+                high_price = current_market_depth[high_price_key]
+                low_price = current_market_depth[low_price_key]
+
+                # Define your thresholds as percentages
+                price_threshold = 0.05  # 5% deviation from high/low prices
+                volume_threshold = 0.1   # 10% deviation from total volume
+                price_difference_limit = 0.02  # 2% deviation from average price
+
+                # Calculate percentage differences
+                price_diff_from_avg = abs(price - avg_price) / avg_price
+                # price_diff_from_high = abs(price - high_price) / high_price
+                # price_diff_from_low = abs(price - low_price) / low_price
+
+                # TBD Check if the order price is within the thresholds
+                # if price_diff_from_high > price_threshold or price_diff_from_low > price_threshold:
+                #     continue  # Skip this order due to unrealistic price compared to high/low market depth
+
+                # Check if the order price is realistic compared to market depth average price
+                if price_diff_from_avg > price_difference_limit:
+                    continue  # Skip this order due to unrealistic price compared to market depth average price
+
+                # Check if there is enough volume
+                if volume < volume_threshold * volume:
+                    continue  # Skip this order due to insufficient volume in market depth
 
             # Determine entry/exit bar index
             is_market_order = not order.limit and not stop_price
@@ -1006,7 +1050,8 @@ class Backtest:
                  margin: float = 1.,
                  trade_on_close=False,
                  hedging=False,
-                 exclusive_orders=False
+                 exclusive_orders=False,
+                 market_depth_data=None,
                  ):
         """
         Initialize a backtest. Requires data and a strategy to test.
@@ -1102,10 +1147,11 @@ class Backtest:
                           stacklevel=2)
 
         self._data: pd.DataFrame = data
+        self._market_depth_data: pd.DataFrame = market_depth_data if market_depth_data is not None else None
         self._broker = partial(
             _Broker, cash=cash, commission=commission, margin=margin,
             trade_on_close=trade_on_close, hedging=hedging,
-            exclusive_orders=exclusive_orders, index=data.index,
+            exclusive_orders=exclusive_orders, index=data.index
         )
         self._strategy = strategy
         self._results: Optional[pd.Series] = None
@@ -1150,7 +1196,11 @@ class Backtest:
             dtype: object
         """
         data = _Data(self._data.copy(deep=False))
-        broker: _Broker = self._broker(data=data)
+        market_depth_data = None
+        if self._market_depth_data is not None:
+            market_depth_data = _MarketDepthData(self._market_depth_data.copy(deep=False))
+
+        broker: _Broker = self._broker(data=data, market_depth_data=market_depth_data)
         strategy: Strategy = self._strategy(broker, data, kwargs)
 
         strategy.init()
