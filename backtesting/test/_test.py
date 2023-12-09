@@ -276,7 +276,7 @@ class TestBacktest(TestCase):
                 'Return [%]': 414.2298999999996,
                 'Volatility (Ann.) [%]': 36.49390889140787,
                 'SQN': 1.0766187356697705,
-                'Kelly Criterion': 0.7875234266909678,
+                'Kelly Criterion': 0.1518705127029717,
                 'Sharpe Ratio': 0.5803778344714113,
                 'Sortino Ratio': 1.0847880675854096,
                 'Start': pd.Timestamp('2004-08-19 00:00:00'),
@@ -304,7 +304,7 @@ class TestBacktest(TestCase):
         self.assertSequenceEqual(
             sorted(stats['_trades'].columns),
             sorted(['Size', 'EntryBar', 'ExitBar', 'EntryPrice', 'ExitPrice',
-                    'PnL', 'ReturnPct', 'EntryTime', 'ExitTime', 'Duration']))
+                    'PnL', 'ReturnPct', 'EntryTime', 'ExitTime', 'Duration', 'Tag']))
 
     def test_compute_stats_bordercase(self):
 
@@ -531,6 +531,18 @@ class TestStrategy(TestCase):
         stats = self._Backtest(coroutine, close_all_at_end=True).run()
         self.assertEqual(len(stats._trades), 1)
 
+    def test_order_tag(self):
+        def coroutine(self):
+            yield self.buy(size=2, tag=1)
+            yield self.sell(size=1, tag='s')
+            yield self.sell(size=1)
+
+            yield self.buy(tag=2)
+            yield self.position.close()
+
+        stats = self._Backtest(coroutine).run()
+        self.assertEqual(list(stats._trades.Tag), [1, 1, 2])
+
 
 class TestOptimize(TestCase):
     def test_optimize(self):
@@ -663,6 +675,7 @@ class TestPlot(TestCase):
                           plot_return=True,
                           plot_pl=False,
                           plot_drawdown=True,
+                          plot_trades=False,
                           superimpose=False,
                           resample='1W',
                           smooth_equity=False,

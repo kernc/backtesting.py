@@ -136,7 +136,7 @@ class _Data:
         self.__arrays['__index'] = index
 
     def __repr__(self):
-        i = min(self.__i, len(self.__df) - 1)
+        i = min(self.__i, len(self.__df)) - 1
         index = self.__arrays['__index'][i]
         items = ', '.join(f'{k}={v}' for k, v in self.__df.iloc[i].items())
         return f'<Data i={i} ({index}) {items}>'
