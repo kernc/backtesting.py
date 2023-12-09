@@ -5,6 +5,8 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
+* new param on "run()" to manage if trades should be close at end, or not. (#273)
+
 
 ### 0.3.3
 (2021-12-13)

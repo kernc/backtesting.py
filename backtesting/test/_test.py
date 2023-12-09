@@ -218,7 +218,7 @@ class TestBacktest(TestCase):
         bt = Backtest(GOOG, Assertive)
         with self.assertWarns(UserWarning):
             stats = bt.run()
-        self.assertEqual(stats['# Trades'], 145)
+        self.assertEqual(stats['# Trades'], 144)
 
     def test_broker_params(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross,
@@ -251,7 +251,7 @@ class TestBacktest(TestCase):
         np.testing.assert_array_equal(peaks, pd.Series([7, 4], index=[3, 5]).reindex(dd.index))
 
     def test_compute_stats(self):
-        stats = Backtest(GOOG, SmaCross).run()
+        stats = Backtest(GOOG, SmaCross, close_all_at_end=True).run()
         expected = pd.Series({
                 # NOTE: These values are also used on the website!
                 '# Trades': 66,
@@ -401,7 +401,32 @@ class TestBacktest(TestCase):
                 elif len(self.data) == len(SHORT_DATA):
                     self.position.close()
 
-        self.assertFalse(Backtest(SHORT_DATA, S).run()._trades.empty)
+        self.assertTrue(Backtest(SHORT_DATA, S).run()._trades.empty)
+
+    def test_dont_close_orders_from_last_strategy_iteration(self):
+        class S(Strategy):
+            def init(self): pass
+
+            def next(self):
+                if not self.position:
+                    self.buy()
+                elif len(self.data) == len(SHORT_DATA):
+                    self.position.close()
+        self.assertEqual(len(
+            Backtest(SHORT_DATA, S, close_all_at_end=False).run()._strategy.closed_trades), 0)
+        self.assertEqual(len(
+            Backtest(SHORT_DATA, S, close_all_at_end=False).run()._strategy.trades), 1)
+
+    def test_dont_close_orders_trades_from_last_strategy_iteration(self):
+        class S(Strategy):
+            def init(self): pass
+
+            def next(self):
+                if not self.position:
+                    self.buy()
+
+        self.assertEqual(len(
+            Backtest(SHORT_DATA, S, close_all_at_end=False).run()._strategy.trades), 1)
 
     def test_check_adjusted_price_when_placing_order(self):
         class S(Strategy):
@@ -503,7 +528,7 @@ class TestStrategy(TestCase):
         def coroutine(self):
             yield self.buy()
 
-        stats = self._Backtest(coroutine).run()
+        stats = self._Backtest(coroutine, close_all_at_end=True).run()
         self.assertEqual(len(stats._trades), 1)
 
     def test_order_tag(self):
@@ -873,7 +898,7 @@ class TestLib(TestCase):
                                 self.data.Close < sma)
 
         stats = Backtest(GOOG, S).run()
-        self.assertIn(stats['# Trades'], (1181, 1182))  # varies on different archs?
+        self.assertIn(stats['# Trades'], (1179, 1180))  # varies on different archs?
 
     def test_TrailingStrategy(self):
         class S(TrailingStrategy):
@@ -889,7 +914,7 @@ class TestLib(TestCase):
                     self.buy()
 
         stats = Backtest(GOOG, S).run()
-        self.assertEqual(stats['# Trades'], 57)
+        self.assertEqual(stats['# Trades'], 56)
 
 
 class TestUtil(TestCase):
