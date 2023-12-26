@@ -32,6 +32,17 @@ def geometric_mean(returns: pd.Series) -> float:
     return np.exp(np.log(returns).sum() / (len(returns) or np.nan)) - 1
 
 
+def minute_to_timeframes(minutes):
+    if minutes < 60:
+        return f'{minutes}m'
+    elif minutes < 1440:
+        return f'{minutes // 60}h'
+    elif minutes < 10080:
+        return f'{minutes // 1440}d'
+    else:
+        return f'{minutes // 10080}w'
+
+
 def compute_stats(
         trades: Union[List['Trade'], pd.DataFrame],
         equity: np.ndarray,
@@ -143,6 +154,16 @@ def compute_stats(
     s.loc['_strategy'] = strategy_instance
     s.loc['_equity_curve'] = equity_df
     s.loc['_trades'] = trades_df
+
+    # Try to count timeframe from ohlc_data
+    timeframe = ''
+    try:
+        minutes = int((ohlc_data.index.__getitem__(1) - ohlc_data.index.__getitem__(0)).total_seconds() / 60)
+        timeframe = minute_to_timeframes(minutes)
+    except Exception as e:
+        print("Error: ", e)
+    s.loc['_timeframe'] = timeframe
+    s.loc['_max_index'] = len(index)
 
     s = _Stats(s)
     return s
