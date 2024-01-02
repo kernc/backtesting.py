@@ -1074,9 +1074,9 @@ class Backtest:
 
         If `exclusive_orders` is `True`, each new order auto-closes the previous
         trade/position, making at most a single trade (long or short) in effect
-        at each time.
+        at each time.        
         
-        If `leave_orders_open` is `True`, trades are not automatically closed at 
+        If `leave_orders_open` is `True`, trades are not automatically closed at
         completion of the backtest. This allows strategies to be run in a "forward"
         manner, where a user can see open trades with updated data.
 
@@ -1224,7 +1224,8 @@ class Backtest:
                 # Next tick, a moment before bar close
                 strategy.next()
             else:
-                # Close any remaining open trades so they produce some stats if self.leave_orders_open is False
+                # Close any remaining open trades so they produce some stats 
+                # if self.leave_orders_open is False
                 if self.leave_orders_open is False:
                     for trade in broker.trades:
                         trade.close()
