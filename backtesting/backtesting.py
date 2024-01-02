@@ -1030,7 +1030,8 @@ class Backtest:
                  margin: float = 1.,
                  trade_on_close=False,
                  hedging=False,
-                 exclusive_orders=False
+                 exclusive_orders=False,
+                 leave_orders_open=False
                  ):
         """
         Initialize a backtest. Requires data and a strategy to test.
@@ -1074,6 +1075,10 @@ class Backtest:
         If `exclusive_orders` is `True`, each new order auto-closes the previous
         trade/position, making at most a single trade (long or short) in effect
         at each time.
+        
+        If `leave_orders_open` is `True`, trades are not automatically closed at 
+        completion of the backtest. This allows strategies to be run in a "forward"
+        manner, where a user can see open trades with updated data.
 
         [FIFO]: https://www.investopedia.com/terms/n/nfa-compliance-rule-2-43b.asp
         """
@@ -1133,6 +1138,7 @@ class Backtest:
         )
         self._strategy = strategy
         self._results: Optional[pd.Series] = None
+        self.leave_orders_open = leave_orders_open
 
     def run(self, **kwargs) -> pd.Series:
         """
@@ -1218,9 +1224,10 @@ class Backtest:
                 # Next tick, a moment before bar close
                 strategy.next()
             else:
-                # Close any remaining open trades so they produce some stats
-                for trade in broker.trades:
-                    trade.close()
+                # Close any remaining open trades so they produce some stats if self.leave_orders_open is False
+                if self.leave_orders_open is False:
+                    for trade in broker.trades:
+                        trade.close()
 
                 # Re-run broker one last time to handle orders placed in the last strategy
                 # iteration. Use the same OHLC values as in the last broker iteration.
