@@ -48,6 +48,7 @@ if __name__ == '__main__':
                 'matplotlib',
                 'scikit-learn',
                 'scikit-optimize',
+                'tqdm',
             ],
             'dev': [
                 'flake8',

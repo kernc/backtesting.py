@@ -76,6 +76,8 @@ def compute_stats(
             'ReturnPct': [t.pl_pct for t in trades],
             'EntryTime': [t.entry_time for t in trades],
             'ExitTime': [t.exit_time for t in trades],
+            'SL': [t.sl for t in trades], # https://github.com/kernc/backtesting.py/pull/1039/files
+            'TP': [t.tp for t in trades],
             'open_indicator': [t.open_indicator for t in trades],
             'close_indicator': [t.close_indicator for t in trades],
         })
