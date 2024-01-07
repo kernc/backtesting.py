@@ -52,13 +52,16 @@ class Strategy(metaclass=ABCMeta):
     `backtesting.backtesting.Strategy.init` and
     `backtesting.backtesting.Strategy.next` to define
     your own strategy.
+
+    **kwargs in this case is a list of params for an AbstractStrategy class, could be reworked
     """
 
-    def __init__(self, broker, data, params):
+    def __init__(self, broker, data, market_depth_data=None, **kwargs):
         self._indicators = []
         self._broker: _Broker = broker
         self._data: _Data = data
-        self._params = self._check_params(params)
+        self._market_depth_data: _MarketDepthData = market_depth_data
+        self._params = self._check_params(kwargs)
 
     def __repr__(self):
         return '<Strategy ' + str(self) + '>'
@@ -230,6 +233,10 @@ class Strategy(metaclass=ABCMeta):
           as a **DataFrame**, use `.df` accessor (i.e. `data.df`).
         """
         return self._data
+
+    @property
+    def market_depth_data(self) -> _MarketDepthData:
+        return self._market_depth_data
 
     @property
     def position(self) -> 'Position':
@@ -1204,10 +1211,12 @@ class Backtest:
             market_depth_data = _MarketDepthData(self._market_depth_data.copy(deep=False))
 
         broker: _Broker = self._broker(data=data, market_depth_data=market_depth_data)
-        strategy: Strategy = self._strategy(broker, data, kwargs)
+        strategy: Strategy = self._strategy(broker, data, market_depth_data=market_depth_data, **kwargs)
 
         strategy.init()
         data._update()  # Strategy.init might have changed/added to data.df
+        if market_depth_data:
+            market_depth_data._update()
 
         # Indicators used in Strategy.next()
         indicator_attrs = {attr: indicator
@@ -1436,6 +1445,7 @@ class Backtest:
             backtest_uuid = np.random.random()
             param_batches = list(_batch(param_combos))
             Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)  # type: ignore
+
             try:
                 # If multiprocessing start method is 'fork' (i.e. on POSIX), use
                 # a pool of processes to compute results in parallel.
