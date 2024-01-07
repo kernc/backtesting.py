@@ -18,6 +18,9 @@ from math import copysign
 from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
+from tqdm import tqdm
+
+
 import numpy as np
 import pandas as pd
 from numpy.random import default_rng
@@ -1413,6 +1416,8 @@ class Backtest:
                 warnings.warn(f'Searching for best of {len(param_combos)} configurations.',
                               stacklevel=2)
 
+            print(f"Running {len(param_combos)} backtest{'s' if len(param_combos) > 1 else ''}...")
+
             heatmap = pd.Series(np.nan,
                                 name=maximize_key,
                                 index=pd.MultiIndex.from_tuples(
@@ -1439,8 +1444,8 @@ class Backtest:
                     with ProcessPoolExecutor() as executor:
                         futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
                                    for i in range(len(param_batches))]
-                        for future in _tqdm(as_completed(futures), total=len(futures),
-                                            desc='Backtest.optimize'):
+
+                        for future in tqdm(as_completed(futures), total=len(futures), desc='Backtest.optimize'):
                             batch_index, values = future.result()
                             for value, params in zip(values, param_batches[batch_index]):
                                 heatmap[tuple(params.values())] = value
@@ -1448,7 +1453,7 @@ class Backtest:
                     if os.name == 'posix':
                         warnings.warn("For multiprocessing support in `Backtest.optimize()` "
                                       "set multiprocessing start method to 'fork'.")
-                    for batch_index in _tqdm(range(len(param_batches))):
+                    for batch_index in tqdm(range(len(param_batches))):
                         _, values = Backtest._mp_task(backtest_uuid, batch_index)
                         for value, params in zip(values, param_batches[batch_index]):
                             heatmap[tuple(params.values())] = value
