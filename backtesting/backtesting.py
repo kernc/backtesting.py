@@ -1692,7 +1692,7 @@ class Backtest:
         self._step_time = start
         self._step_indicator_attrs = indicator_attrs
 
-    def next(self):
+    def next(self, done:bool|None=None, **kwargs):
         """
         Move the backtest one time step forward and return the results for the current step.
 
@@ -1718,9 +1718,10 @@ class Backtest:
                 pass
 
             # Next tick, a moment before bar close
-            self._step_strategy.next()
+            self._step_strategy.next(**kwargs)
             self._step_time += 1
-        else:
+            
+        if done==True:
             # Close any remaining open trades so they produce some stats
             for trade in self._step_broker.trades:
                 trade.close()
