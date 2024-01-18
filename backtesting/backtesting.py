@@ -173,7 +173,7 @@ class Strategy(metaclass=ABCMeta):
             sl: Optional[float] = None,
             tp: Optional[float] = None,
             indicator: str = None,
-            tag: object = None):
+            tag: object = None
             ):
         """
         Place a new long order. For explanation of parameters, see `Order` and its properties.
@@ -195,7 +195,8 @@ class Strategy(metaclass=ABCMeta):
              sl: Optional[float] = None,
              tp: Optional[float] = None,
              indicator: str = None,
-             tag: object = None):
+             tag: object = None
+             ):
         """
         Place a new short order. For explanation of parameters, see `Order` and its properties.
 
