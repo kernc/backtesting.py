@@ -1007,7 +1007,7 @@ class _Broker:
                   order.tp, 
                   time_index,
                   indicator=order.open_indicator(),
-                  order.tag
+                  tag=order.tag
                 )
 
                 # We need to reprocess the SL/TP orders newly added to the queue.
