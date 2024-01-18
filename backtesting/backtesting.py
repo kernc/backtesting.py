@@ -173,7 +173,7 @@ class Strategy(metaclass=ABCMeta):
             sl: Optional[float] = None,
             tp: Optional[float] = None,
             indicator: str = None,
-            tag: object = None):
+            tag: object = None
             ):
         """
         Place a new long order. For explanation of parameters, see `Order` and its properties.
@@ -195,7 +195,8 @@ class Strategy(metaclass=ABCMeta):
              sl: Optional[float] = None,
              tp: Optional[float] = None,
              indicator: str = None,
-             tag: object = None):
+             tag: object = None
+             ):
         """
         Place a new short order. For explanation of parameters, see `Order` and its properties.
 
@@ -776,8 +777,7 @@ class _Broker:
                     "Short orders require: "
                     f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})")
 
-        order = Order(self, size, limit, stop, sl, tp, trade, open_indicator=indicator, tag)
-        order = Order(self, size, limit, stop, sl, tp, trade, tag)
+        order = Order(self, size, limit, stop, sl, tp, trade, open_indicator=indicator, tag=tag)
         # Put the new order in the order queue,
         # inserting SL/TP/trade-closing orders in-front
         if trade:
@@ -1007,7 +1007,7 @@ class _Broker:
                   order.tp, 
                   time_index,
                   indicator=order.open_indicator(),
-                  order.tag
+                  tag=order.tag
                 )
 
                 # We need to reprocess the SL/TP orders newly added to the queue.
@@ -1068,7 +1068,7 @@ class _Broker:
         self.closed_trades.append(trade._replace(exit_price=price, exit_bar=time_index))
         self._cash += trade.pl
 
-    def _open_trade(self, price: float, size: int, sl: Optional[float], tp: Optional[float], time_index: int, indicator: str = None, tag):
+    def _open_trade(self, price: float, size: int, sl: Optional[float], tp: Optional[float], time_index: int, indicator: str = None, tag = None):
         trade = Trade(self, size, price, time_index, tag)
         # TODO CHECK THIS Trade last arg
         trade.set_open_indicator(indicator)
@@ -1331,7 +1331,6 @@ class Backtest:
                  return_heatmap: bool = False,
                  return_optimization: bool = False,
                  return_multiple_results: int = False,
-                 random_state: int = None,
                  random_state: Optional[int] = None,
                  **kwargs) -> Union[pd.Series,
     Tuple[pd.Series, pd.Series],
