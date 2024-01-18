@@ -776,8 +776,7 @@ class _Broker:
                     "Short orders require: "
                     f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})")
 
-        order = Order(self, size, limit, stop, sl, tp, trade, open_indicator=indicator, tag)
-        order = Order(self, size, limit, stop, sl, tp, trade, tag)
+        order = Order(self, size, limit, stop, sl, tp, trade, open_indicator=indicator, tag=tag)
         # Put the new order in the order queue,
         # inserting SL/TP/trade-closing orders in-front
         if trade:
@@ -1331,7 +1330,6 @@ class Backtest:
                  return_heatmap: bool = False,
                  return_optimization: bool = False,
                  return_multiple_results: int = False,
-                 random_state: int = None,
                  random_state: Optional[int] = None,
                  **kwargs) -> Union[pd.Series,
     Tuple[pd.Series, pd.Series],
