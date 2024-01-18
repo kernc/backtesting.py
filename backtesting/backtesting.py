@@ -182,8 +182,8 @@ class Strategy(metaclass=ABCMeta):
 
         See also `Strategy.sell()`.
         """
-        assert 0 < size < 1 or round(size) == size, \
-            "size must be a positive fraction of equity, or a positive whole number of units"
+        # assert 0 < size < 1 or round(size) == size, \
+        #     "size must be a positive fraction of equity, or a positive whole number of units"
 
         return self._broker.new_order(size, limit, stop, sl, tp, indicator, tag)
 
@@ -206,8 +206,8 @@ class Strategy(metaclass=ABCMeta):
             If you merely want to close an existing long position,
             use `Position.close()` or `Trade.close()`.
         """
-        assert 0 < size < 1 or round(size) == size, \
-            "size must be a positive fraction of equity, or a positive whole number of units"
+        # assert 0 < size < 1 or round(size) == size, \
+        #     "size must be a positive fraction of equity, or a positive whole number of units"
         return self._broker.new_order(-size, limit, stop, sl, tp, indicator, tag)
 
     @property
@@ -947,7 +947,7 @@ class _Broker:
                     assert order not in self.orders  # Removed when trade was closed
                 else:
                     # It's a trade.close() order, now done
-                    assert abs(_prev_size) >= abs(size) >= 1
+                    assert abs(_prev_size) >= abs(size) >= 0
                     self.orders.remove(order)
                 continue
 
@@ -957,18 +957,24 @@ class _Broker:
             # In long positions, the adjusted price is a fraction higher, and vice versa.
             adjusted_price = self._adjusted_price(order.size, price)
 
-            # If order size was specified proportionally,
-            # precompute true size in units, accounting for margin and spread/commissions
-            size = order.size
-            if -1 < size < 1:
-                size = copysign(int((self.margin_available * self._leverage * abs(size))
-                                    // adjusted_price), size)
+            try:
+                # If order size was specified proportionally,
+                # precompute true size in units, accounting for margin and spread/commissions
+                size = order.size
+                # if -1 < size < 1:
+                #     size = copysign(int((self.margin_available * self._leverage * abs(size))
+                #                         // adjusted_price), size)
+                #     # Not enough cash/margin even for a single unit
+                #     if not size:
+                #         self.orders.remove(order)
+                #         continue
+                # assert size == round(size)
+                # need_size = int(size)
+                need_size = size
+            except (ValueError, AssertionError):
                 # Not enough cash/margin even for a single unit
-                if not size:
-                    self.orders.remove(order)
-                    continue
-            assert size == round(size)
-            need_size = int(size)
+                self.orders.remove(order)
+                continue
 
             if not self._hedging:
                 # Fill position by FIFO closing/reducing existing opposite-facing trades.
@@ -1001,13 +1007,13 @@ class _Broker:
             # Open a new trade
             if need_size:
                 self._open_trade(
-                  adjusted_price, 
-                  need_size, 
-                  order.sl, 
-                  order.tp, 
-                  time_index,
-                  indicator=order.open_indicator(),
-                  tag=order.tag
+                    adjusted_price,
+                    need_size,
+                    order.sl,
+                    order.tp,
+                    time_index,
+                    indicator=order.open_indicator(),
+                    tag=order.tag
                 )
 
                 # We need to reprocess the SL/TP orders newly added to the queue.
