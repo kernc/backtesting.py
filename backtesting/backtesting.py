@@ -968,8 +968,9 @@ class _Broker:
                     if not size:
                         self.orders.remove(order)
                         continue
-                assert size == round(size)
-                need_size = int(size)
+                # assert size == round(size)
+                # need_size = int(size)
+                need_size = size
             except (ValueError, AssertionError):
                 # Not enough cash/margin even for a single unit
                 self.orders.remove(order)
