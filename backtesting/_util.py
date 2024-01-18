@@ -2,6 +2,7 @@ import warnings
 from typing import Callable, Dict, List, Optional, Sequence, Union, cast
 from itertools import chain
 from numbers import Number
+from typing import Dict, List, Optional, Sequence, Union, cast
 
 import numpy as np
 import pandas as pd
@@ -223,7 +224,7 @@ class _Data:
         self.__arrays['__index'] = index
 
     def __repr__(self):
-        i = min(self.__i, len(self.__df) - 1)
+        i = min(self.__i, len(self.__df)) - 1
         index = self.__arrays['__index'][i]
         items = ', '.join(f'{k}={v}' for k, v in self.__df.iloc[i].items())
         return f'<Data i={i} ({index}) {items}>'

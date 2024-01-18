@@ -12,18 +12,18 @@ Please raise ideas for additions to this collection on the [issue tracker].
 """
 
 from collections import OrderedDict
+from inspect import currentframe
 from itertools import compress
 from numbers import Number
-from inspect import currentframe
-from typing import Sequence, Optional, Union, Callable
+from typing import Callable, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
 
-from .backtesting import Strategy
 from ._plotting import plot_heatmaps as _plot_heatmaps
 from ._stats import compute_stats as _compute_stats
 from ._util import _Array, _as_str
+from .backtesting import Strategy
 
 __pdoc__ = {}
 
@@ -202,7 +202,7 @@ def resample_apply(rule: str,
                    func: Optional[Callable[..., Sequence]],
                    series: Union[pd.Series, pd.DataFrame, _Array],
                    *args,
-                   agg: Union[str, dict] = None,
+                   agg: Optional[Union[str, dict]] = None,
                    **kwargs):
     """
     Apply `func` (such as an indicator) to `series`, resampled to
@@ -286,7 +286,7 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
         series = series.s
 
     if agg is None:
-        agg = OHLCV_AGG.get(getattr(series, 'name', None), 'last')
+        agg = OHLCV_AGG.get(getattr(series, 'name', ''), 'last')
         if isinstance(series, pd.DataFrame):
             agg = {column: OHLCV_AGG.get(column, 'last')
                    for column in series.columns}
@@ -322,14 +322,14 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
                                 method='ffill').reindex(series.index)
         return result
 
-    wrap_func.__name__ = func.__name__  # type: ignore
+    wrap_func.__name__ = func.__name__
 
     array = strategy_I(wrap_func, resampled, *args, **kwargs)
     return array
 
 
 def random_ohlc_data(example_data: pd.DataFrame, *,
-                     frac=1., random_state: int = None) -> pd.DataFrame:
+                     frac=1., random_state: Optional[int] = None) -> pd.DataFrame:
     """
     OHLC data generator. The generated OHLC data has basic
     [descriptive statistics](https://en.wikipedia.org/wiki/Descriptive_statistics)
@@ -391,7 +391,7 @@ class SignalStrategy(Strategy):
     __exit_signal = (False,)
 
     def set_signal(self, entry_size: Sequence[float],
-                   exit_portion: Sequence[float] = None,
+                   exit_portion: Optional[Sequence[float]] = None,
                    *,
                    plot: bool = True):
         """
@@ -461,8 +461,8 @@ class TrailingStrategy(Strategy):
         Set the lookback period for computing ATR. The default value
         of 100 ensures a _stable_ ATR.
         """
-        h, l, c_prev = self.data.High, self.data.Low, pd.Series(self.data.Close).shift(1)
-        tr = np.max([h - l, (c_prev - h).abs(), (c_prev - l).abs()], axis=0)
+        hi, lo, c_prev = self.data.High, self.data.Low, pd.Series(self.data.Close).shift(1)
+        tr = np.max([hi - lo, (c_prev - hi).abs(), (c_prev - lo).abs()], axis=0)
         atr = pd.Series(tr).rolling(periods).mean().bfill().values
         self.__atr = atr
 

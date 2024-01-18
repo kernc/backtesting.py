@@ -9,11 +9,11 @@ import multiprocessing as mp
 import os
 import sys
 import warnings
-from abc import abstractmethod, ABCMeta
+from abc import ABCMeta, abstractmethod
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import copy
 from functools import lru_cache, partial
-from itertools import repeat, product, chain, compress
+from itertools import chain, compress, product, repeat
 from math import copysign
 from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
@@ -33,7 +33,7 @@ except ImportError:
     def _tqdm(seq, **_):
         return seq
 
-from ._plotting import plot
+from ._plotting import plot  # noqa: I001
 from ._stats import compute_stats
 from ._util import _as_str, _Indicator, _Data, try_, static_indicator, _MarketDepthData
 
@@ -82,12 +82,12 @@ class Strategy(metaclass=ABCMeta):
             setattr(self, k, v)
         return params
 
-    def I(self,  # noqa: E741, E743
+    def I(self,  # noqa: E743
           func: Callable, *args,
           name=None, plot=True, overlay=None, color=None, scatter=False,
           **kwargs) -> np.ndarray:
         """
-        Declare indicator. An indicator is just an array of values,
+        Declare an indicator. An indicator is just an array of values,
         but one that is revealed gradually in
         `backtesting.backtesting.Strategy.next` much like
         `backtesting.backtesting.Strategy.data` is.
@@ -161,44 +161,53 @@ class Strategy(metaclass=ABCMeta):
             super().next()
         """
 
-    class __FULL_EQUITY(float):
+    class __FULL_EQUITY(float):  # noqa: N801
         def __repr__(self): return '.9999'
 
     _FULL_EQUITY = __FULL_EQUITY(1 - sys.float_info.epsilon)
 
     def buy(self, *,
             size: float = _FULL_EQUITY,
-            limit: float = None,
-            stop: float = None,
-            sl: float = None,
-            tp: float = None,
+            limit: Optional[float] = None,
+            stop: Optional[float] = None,
+            sl: Optional[float] = None,
+            tp: Optional[float] = None,
             indicator: str = None,
+            tag: object = None):
             ):
         """
         Place a new long order. For explanation of parameters, see `Order` and its properties.
+
+        See `Position.close()` and `Trade.close()` for closing existing positions.
 
         See also `Strategy.sell()`.
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(size, limit, stop, sl, tp, indicator)
+
+        return self._broker.new_order(size, limit, stop, sl, tp, indicator, tag)
 
     def sell(self, *,
+             # TODO here we can trade adjusted size
              size: float = _FULL_EQUITY,
-             limit: float = None,
-             stop: float = None,
-             sl: float = None,
-             tp: float = None,
+             limit: Optional[float] = None,
+             stop: Optional[float] = None,
+             sl: Optional[float] = None,
+             tp: Optional[float] = None,
              indicator: str = None,
-             ):
+             tag: object = None):
         """
         Place a new short order. For explanation of parameters, see `Order` and its properties.
 
         See also `Strategy.buy()`.
+
+        .. note::
+            If you merely want to close an existing long position,
+            use `Position.close()` or `Trade.close()`.
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(-size, limit, stop, sl, tp, indicator)
+        return self._broker.new_order(-size, limit, stop, sl, tp, indicator, tag)
 
     @property
     def equity(self) -> float:
@@ -360,14 +369,14 @@ class Order:
     def __init__(self,
                  broker: '_Broker',
                  size: float,
-                 limit_price: float = None,
-                 stop_price: float = None,
-                 sl_price: float = None,
-                 tp_price: float = None,
+                 limit_price: Optional[float] = None,
+                 stop_price: Optional[float] = None,
+                 sl_price: Optional[float] = None,
+                 tp_price: Optional[float] = None,
                  parent_trade: 'Trade' = None,
                  open_indicator: str = None,
-                 close_indicator: str = None
-                 ):
+                 close_indicator: str = None,
+                 tag: object = None):
         self.__broker = broker
         assert size != 0
         self.__size = size
@@ -378,6 +387,7 @@ class Order:
         self.__parent_trade = parent_trade
         self.__open_indicator = open_indicator
         self.__close_indicator = close_indicator
+        self.__tag = tag
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
@@ -393,6 +403,7 @@ class Order:
                                                  ('sl', self.__sl_price),
                                                  ('tp', self.__tp_price),
                                                  ('contingent', self.is_contingent),
+                                                 ('tag', self.__tag),
                                              ) if value is not None))
 
     def cancel(self):
@@ -476,6 +487,14 @@ class Order:
     def parent_trade(self):
         return self.__parent_trade
 
+    @property
+    def tag(self):
+        """
+        Arbitrary value (such as a string) which, if set, enables tracking
+        of this order and the associated `Trade` (see `Trade.tag`).
+        """
+        return self.__tag
+
     __pdoc__['Order.parent_trade'] = False
 
     # Extra properties
@@ -510,8 +529,7 @@ class Trade:
     When an `Order` is filled, it results in an active `Trade`.
     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
     """
-
-    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar):
+    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar, tag):
         self.__broker = broker
         self.__size = size
         self.__entry_price = entry_price
@@ -522,6 +540,7 @@ class Trade:
         self.__tp_order: Optional[Order] = None
         self.__open_indicator: Optional[str] = None
         self.__close_indicator: Optional[str] = None
+        self.__tag = tag
 
     def set_open_indicator(self, open_indicator: str):
         self.__open_indicator = open_indicator
@@ -531,7 +550,8 @@ class Trade:
 
     def __repr__(self):
         return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
-               f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}>'
+               f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}' \
+               f'{" tag="+str(self.__tag) if self.__tag is not None else ""}>'
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
@@ -545,7 +565,7 @@ class Trade:
         """Place new `Order` to close `portion` of the trade at next market price."""
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
         size = copysign(max(1, round(abs(self.__size) * portion)), -self.__size)
-        order = Order(self.__broker, size, parent_trade=self, close_indicator=indicator)
+        order = Order(self.__broker, size, parent_trade=self, close_indicator=indicator, tag=self.__tag)
         self.set_close_indicator(indicator)
         self.__broker.orders.insert(0, order)
 
@@ -578,6 +598,19 @@ class Trade:
         (or None if the trade is still active).
         """
         return self.__exit_bar
+
+    @property
+    def tag(self):
+        """
+        A tag value inherited from the `Order` that opened
+        this trade.
+
+        This can be used to track trades and apply conditional
+        logic / subgroup analysis.
+
+        See also `Order.tag`.
+        """
+        return self.__tag
 
     @property
     def _sl_order(self):
@@ -679,8 +712,8 @@ class Trade:
         if order:
             order.cancel()
         if price:
-            kwargs = dict(stop=price) if type == 'sl' else dict(limit=price)
-            order = self.__broker.new_order(-self.size, trade=self, **kwargs)
+            kwargs = {'stop': price} if type == 'sl' else {'limit': price}
+            order = self.__broker.new_order(-self.size, trade=self, tag=self.tag, **kwargs)
             setattr(self, attr, order)
 
 
@@ -712,13 +745,14 @@ class _Broker:
 
     def new_order(self,
                   size: float,
-                  limit: float = None,
-                  stop: float = None,
-                  sl: float = None,
-                  tp: float = None,
+                  limit: Optional[float] = None,
+                  stop: Optional[float] = None,
+                  sl: Optional[float] = None,
+                  tp: Optional[float] = None,
                   indicator: str = None,
+                  tag: object = None,
                   *,
-                  trade: Trade = None):
+                  trade: Optional[Trade] = None):
         """
         Argument size indicates whether the order is long or short
         """
@@ -742,7 +776,8 @@ class _Broker:
                     "Short orders require: "
                     f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})")
 
-        order = Order(self, size, limit, stop, sl, tp, trade, open_indicator=indicator)
+        order = Order(self, size, limit, stop, sl, tp, trade, open_indicator=indicator, tag)
+        order = Order(self, size, limit, stop, sl, tp, trade, tag)
         # Put the new order in the order queue,
         # inserting SL/TP/trade-closing orders in-front
         if trade:
@@ -965,8 +1000,15 @@ class _Broker:
 
             # Open a new trade
             if need_size:
-                self._open_trade(adjusted_price, need_size, order.sl, order.tp, time_index,
-                                 indicator=order.open_indicator())
+                self._open_trade(
+                  adjusted_price, 
+                  need_size, 
+                  order.sl, 
+                  order.tp, 
+                  time_index,
+                  indicator=order.open_indicator(),
+                  order.tag
+                )
 
                 # We need to reprocess the SL/TP orders newly added to the queue.
                 # This allows e.g. SL hitting in the same bar the order was open.
@@ -1026,8 +1068,9 @@ class _Broker:
         self.closed_trades.append(trade._replace(exit_price=price, exit_bar=time_index))
         self._cash += trade.pl
 
-    def _open_trade(self, price: float, size: int, sl: float, tp: float, time_index: int, indicator: str = None):
-        trade = Trade(self, size, price, time_index)
+    def _open_trade(self, price: float, size: int, sl: Optional[float], tp: Optional[float], time_index: int, indicator: str = None, tag):
+        trade = Trade(self, size, price, time_index, tag)
+        # TODO CHECK THIS Trade last arg
         trade.set_open_indicator(indicator)
         self.trades.append(trade)
         # Create SL/TP (bracket) orders.
@@ -1200,10 +1243,18 @@ class Backtest:
             Profit Factor                         2.08802
             Expectancy [%]                        8.79171
             SQN                                  0.916893
+            Kelly Criterion                        0.6134
             _strategy                            SmaCross
             _equity_curve                           Eq...
             _trades                       Size  EntryB...
             dtype: object
+
+        .. warning::
+            You may obtain different results for different strategy parameters.
+            E.g. if you use 50- and 200-bar SMA, the trading simulation will
+            begin on bar 201. The actual length of delay is equal to the lookback
+            period of the `Strategy.I` indicator which lags the most.
+            Obviously, this can affect results.
         """
         data = _Data(self._data.copy(deep=False))
         market_depth_data = None
@@ -1275,12 +1326,13 @@ class Backtest:
     def optimize(self, *,
                  maximize: Union[str, Callable[[pd.Series], float]] = 'SQN',
                  method: str = 'grid',
-                 max_tries: Union[int, float] = None,
-                 constraint: Callable[[dict], bool] = None,
+                 max_tries: Optional[Union[int, float]] = None,
+                 constraint: Optional[Callable[[dict], bool]] = None,
                  return_heatmap: bool = False,
                  return_optimization: bool = False,
                  return_multiple_results: int = False,
                  random_state: int = None,
+                 random_state: Optional[int] = None,
                  **kwargs) -> Union[pd.Series,
     Tuple[pd.Series, pd.Series],
     Tuple[pd.Series, pd.Series, dict]]:
@@ -1366,6 +1418,7 @@ class Backtest:
             raise TypeError('`maximize` must be str (a field of backtest.run() result '
                             'Series) or a function that accepts result Series '
                             'and returns a number; the higher the better')
+        assert callable(maximize), maximize
 
         have_constraint = bool(constraint)
         if constraint is None:
@@ -1377,6 +1430,7 @@ class Backtest:
             raise TypeError("`constraint` must be a function that accepts a dict "
                             "of strategy parameters and returns a bool whether "
                             "the combination of parameters is admissible or not")
+        assert callable(constraint), constraint
 
         if return_optimization and method != 'skopt':
             raise ValueError("return_optimization=True only valid if method='skopt'")
@@ -1400,7 +1454,7 @@ class Backtest:
                 return self[item]
 
         def _grid_size():
-            size = np.prod([len(_tuple(v)) for v in kwargs.values()])
+            size = int(np.prod([len(_tuple(v)) for v in kwargs.values()]))
             if size < 10_000 and have_constraint:
                 size = sum(1 for p in product(*(zip(repeat(k), _tuple(v))
                                                 for k, v in kwargs.items()))
@@ -1505,13 +1559,13 @@ class Backtest:
         Tuple[pd.Series, pd.Series, dict]]:
             try:
                 from skopt import forest_minimize
-                from skopt.space import Integer, Real, Categorical
-                from skopt.utils import use_named_args
                 from skopt.callbacks import DeltaXStopper
                 from skopt.learning import ExtraTreesRegressor
+                from skopt.space import Categorical, Integer, Real
+                from skopt.utils import use_named_args
             except ImportError:
                 raise ImportError("Need package 'scikit-optimize' for method='skopt'. "
-                                  "pip install scikit-optimize")
+                                  "pip install scikit-optimize") from None
 
             nonlocal max_tries
             max_tries = (200 if max_tries is None else
@@ -1612,7 +1666,7 @@ class Backtest:
 
     def plot(self, *, results: pd.Series = None, filename=None, plot_width=None,
              plot_equity=True, plot_return=False, plot_pl=True,
-             plot_volume=True, plot_drawdown=False,
+             plot_volume=True, plot_drawdown=False, plot_trades=True,
              smooth_equity=False, relative_equity=True,
              superimpose: Union[bool, str] = True,
              resample=True, reverse_indicators=False,
@@ -1650,6 +1704,9 @@ class Backtest:
 
         If `plot_drawdown` is `True`, the resulting plot will contain
         a separate drawdown graph section.
+
+        If `plot_trades` is `True`, the stretches between trade entries
+        and trade exits are marked by hash-marked tractor beams.
 
         If `smooth_equity` is `True`, the equity graph will be
         interpolated between fixed points at trade closing times,
@@ -1709,6 +1766,7 @@ class Backtest:
             plot_pl=plot_pl,
             plot_volume=plot_volume,
             plot_drawdown=plot_drawdown,
+            plot_trades=plot_trades,
             smooth_equity=smooth_equity,
             relative_equity=relative_equity,
             superimpose=superimpose,
