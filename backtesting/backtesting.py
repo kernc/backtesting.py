@@ -1068,7 +1068,7 @@ class _Broker:
         self.closed_trades.append(trade._replace(exit_price=price, exit_bar=time_index))
         self._cash += trade.pl
 
-    def _open_trade(self, price: float, size: int, sl: Optional[float], tp: Optional[float], time_index: int, indicator: str = None, tag):
+    def _open_trade(self, price: float, size: int, sl: Optional[float], tp: Optional[float], time_index: int, indicator: str = None, tag = None):
         trade = Trade(self, size, price, time_index, tag)
         # TODO CHECK THIS Trade last arg
         trade.set_open_indicator(indicator)
