@@ -961,13 +961,13 @@ class _Broker:
                 # If order size was specified proportionally,
                 # precompute true size in units, accounting for margin and spread/commissions
                 size = order.size
-                if -1 < size < 1:
-                    size = copysign(int((self.margin_available * self._leverage * abs(size))
-                                        // adjusted_price), size)
-                    # Not enough cash/margin even for a single unit
-                    if not size:
-                        self.orders.remove(order)
-                        continue
+                # if -1 < size < 1:
+                #     size = copysign(int((self.margin_available * self._leverage * abs(size))
+                #                         // adjusted_price), size)
+                #     # Not enough cash/margin even for a single unit
+                #     if not size:
+                #         self.orders.remove(order)
+                #         continue
                 # assert size == round(size)
                 # need_size = int(size)
                 need_size = size
