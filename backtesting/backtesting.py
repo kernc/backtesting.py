@@ -565,7 +565,8 @@ class Trade:
     def close(self, portion: float = 1., indicator: str = None):
         """Place new `Order` to close `portion` of the trade at next market price."""
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
-        size = copysign(max(1, round(abs(self.__size) * portion)), -self.__size)
+        size = copysign(max(1, abs(self.__size) * portion), -self.__size)
+        # size = copysign(max(1, round(abs(self.__size) * portion)), -self.__size)
         order = Order(self.__broker, size, parent_trade=self, close_indicator=indicator, tag=self.__tag)
         self.set_close_indicator(indicator)
         self.__broker.orders.insert(0, order)
@@ -962,8 +963,8 @@ class _Broker:
                 # precompute true size in units, accounting for margin and spread/commissions
                 size = order.size
                 # if -1 < size < 1:
-                #     size = copysign(int((self.margin_available * self._leverage * abs(size))
-                #                         // adjusted_price), size)
+                size = copysign(float((self._leverage * abs(size)) / adjusted_price), size)
+                # size = copysign(float((self.margin_available * self._leverage * abs(size)) // adjusted_price), size)
                 #     # Not enough cash/margin even for a single unit
                 #     if not size:
                 #         self.orders.remove(order)
