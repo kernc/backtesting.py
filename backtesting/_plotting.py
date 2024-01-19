@@ -415,7 +415,7 @@ return this.labels[index] || "";
                          marker='triangle', line_color='black', size='marker_size')
         r2 = fig.scatter('index', 'returns_short', source=trade_source, fill_color=cmap,
                          marker='inverted_triangle', line_color='black', size='marker_size')
-        tooltips = [("Size", "@size{0,0}")]
+        tooltips = [("Size", "@size{0.[000]}")]
         if 'count' in trades:
             tooltips.append(("Count", "@count{0,0}"))
         set_tooltips(fig, tooltips + [("P/L", "@returns_long{+0.[000]%}")],
