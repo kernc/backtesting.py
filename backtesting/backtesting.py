@@ -964,7 +964,11 @@ class _Broker:
                 size = order.size
                 # if -1 < size < 1:
                 size = copysign(float((self._leverage * abs(size)) / adjusted_price), size)
-                # size = copysign(float((self.margin_available * self._leverage * abs(size)) // adjusted_price), size)
+                if size <= 0:
+                    self.orders.remove(order)
+                    continue
+                #     size = copysign(int((self.margin_available * self._leverage * abs(size))
+                #                         // adjusted_price), size)
                 #     # Not enough cash/margin even for a single unit
                 #     if not size:
                 #         self.orders.remove(order)
