@@ -3,37 +3,32 @@ from backtesting import Strategy
 from backtesting.test import GOOG, SMA
 from backtesting.lib import crossover
 import types
+import random
+random.seed(0)
 
-class SmaCross(Strategy):
-    # Define the two MA lags as *class variables*
-    # for later optimization
-    n1 = 10
-    n2 = 20
-    
+class TestStrategy(Strategy):
     def init(self):
-        # Precompute the two moving averages
-        self.sma1 = self.I(SMA, self.data.Close, self.n1)
-        self.sma2 = self.I(SMA, self.data.Close, self.n2)
-    
-    def next(self):
-        # If sma1 crosses above sma2, close any existing
-        # short trades, and buy the asset
-        if crossover(self.sma1, self.sma2):
-            self.position.close()
-            self.buy()
+        print("Init", self.equity)
+        
+    def next(self, action=None):
+        # uncomment if you want to test run()
+        # if not action:
+        #     action = random.randint(0, 1)
+        if action!=None:
+            if action == 0:
+                self.buy()
+            elif action == 1:
+                self.position.close()
 
-        # Else, if sma1 crosses below sma2, close any existing
-        # long trades, and sell the asset
-        elif crossover(self.sma2, self.sma1):
-            self.position.close()
-            self.sell()
 
-bt = Backtest(GOOG, SmaCross, cash=10_000, commission=.002)
+bt = Backtest(GOOG, TestStrategy, cash=10_000, commission=.002)
+
 # stats = bt.run()
-bt.initialize()
 
+bt.initialize()
 while True:
-    stats = bt.next()
+    action = random.randint(0, 1)
+    stats = bt.next(action=action)
     if not isinstance(stats, types.NoneType):
         break
 print(stats)
