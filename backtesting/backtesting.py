@@ -1663,7 +1663,7 @@ class Backtest:
             show_legend=show_legend,
             open_browser=open_browser)
 
-    def initialize(self, **kwargs):
+    def initialize(self, **kwargs) -> None:
         """
         Initialize the backtest with the given parameters. Keyword arguments are interpreted as strategy parameters.
 
@@ -1692,7 +1692,7 @@ class Backtest:
         self._step_time = start
         self._step_indicator_attrs = indicator_attrs
 
-    def next(self, done:bool|None=None, **kwargs):
+    def next(self, done:bool|None=None, **kwargs) -> None|pd.Series:
         """
         Move the backtest one time step forward and return the results for the current step.
 
@@ -1718,6 +1718,7 @@ class Backtest:
                 pass
 
             # Next tick, a moment before bar close
+            # passing kwargs to be used in the strategy class
             self._step_strategy.next(**kwargs)
             self._step_time += 1
             
