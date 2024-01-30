@@ -964,7 +964,7 @@ class _Broker:
                 size = order.size
                 # if -1 < size < 1:
                 size = copysign(float((self._leverage * abs(size)) / adjusted_price), size)
-                if abs(size) <= 0:
+                if size <= 0:
                     self.orders.remove(order)
                     continue
                 #     size = copysign(int((self.margin_available * self._leverage * abs(size))
@@ -1116,6 +1116,7 @@ class Backtest:
                  hedging=False,
                  exclusive_orders=False,
                  market_depth_data=None,
+                 redis_cli=None,
                  ):
         """
         Initialize a backtest. Requires data and a strategy to test.
@@ -1219,6 +1220,7 @@ class Backtest:
         )
         self._strategy = strategy
         self._results: Optional[pd.Series] = None
+        self._redis_cli = redis_cli
 
     def run(self, **kwargs) -> pd.Series:
         """
@@ -1342,6 +1344,7 @@ class Backtest:
                  return_heatmap: bool = False,
                  return_optimization: bool = False,
                  return_multiple_results: int = False,
+                 persistence_key: str = None,
                  random_state: Optional[int] = None,
                  **kwargs) -> Union[pd.Series,
     Tuple[pd.Series, pd.Series],
@@ -1507,7 +1510,31 @@ class Backtest:
             # With start method "fork", children processes will inherit parent address space
             # in a copy-on-write manner, achieving better performance/RAM benefit.
             backtest_uuid = np.random.random()
-            param_batches = list(_batch(param_combos))
+            # origina code
+            # param_batches = object(_batch(param_combos))
+            # transform to dic, for persistence_key state storage
+            param_batches = {i: batch for i, batch in enumerate(_batch(param_combos))}
+            # Fetch catch data for perstence_key
+            # walk throw cache data and compare to param_batches
+            # if params_batch key found in cache data, remove from param_batches
+            # and add to heatmap
+            if persistence_key is not None:
+                cache = self._redis_cli
+                cached_optimized_results = cache.get_optimized_results(persistence_key)
+                if cached_optimized_results is not None:
+                    cached_optimized_used = 0
+                    for cached_batch_index, optimization_value in cached_optimized_results.items():
+                        cached_params_batch_index = int(cached_batch_index)
+                        if param_batches[cached_params_batch_index] is not None:
+                            params_values = param_batches[cached_params_batch_index]
+                            del param_batches[cached_params_batch_index]
+                            cached_optimized_used += 1
+                            for optimization_value, params_value in zip(optimization_value, params_values):
+                                heatmap[tuple(params_value.values())] = float(optimization_value)
+
+                    print(f"Found and used {cached_optimized_used} cached optimized results")
+                    print(f"Running only {len(param_batches)} backtests...")
+
             Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)  # type: ignore
 
             try:
@@ -1516,11 +1543,17 @@ class Backtest:
                 # Otherwise (i.e. on Windos), sequential computation will be "faster".
                 if mp.get_start_method(allow_none=False) == 'fork':
                     with ProcessPoolExecutor() as executor:
+                        # old logic when works with list
+                        # futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
+                        #            for i in range(len(param_batches))]
+                        # new logic to work with dict
                         futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
-                                   for i in range(len(param_batches))]
+                                   for i in param_batches.keys()]
 
                         for future in tqdm(as_completed(futures), total=len(futures), desc='Backtest.optimize'):
                             batch_index, values = future.result()
+                            if persistence_key is not None:
+                                cache.set_optimized_batch_index_result(persistence_key, batch_index, values)
                             for value, params in zip(values, param_batches[batch_index]):
                                 heatmap[tuple(params.values())] = value
                 else:
@@ -1528,9 +1561,14 @@ class Backtest:
                         warnings.warn("For multiprocessing support in `Backtest.optimize()` "
                                       "set multiprocessing start method to 'fork'.")
                     for batch_index in tqdm(range(len(param_batches))):
+                        # TODO add implementation for persistence_key cache storage
+                        # Warning will not work properly with persistence_key not None
                         _, values = Backtest._mp_task(backtest_uuid, batch_index)
                         for value, params in zip(values, param_batches[batch_index]):
                             heatmap[tuple(params.values())] = value
+
+                if persistence_key is not None:
+                    cache.delete_optimized_results(persistence_key)
             finally:
                 del Backtest._mp_backtests[backtest_uuid]
 
