@@ -964,7 +964,7 @@ class _Broker:
                 size = order.size
                 # if -1 < size < 1:
                 size = copysign(float((self._leverage * abs(size)) / adjusted_price), size)
-                if size <= 0:
+                if abs(size) <= 0:
                     self.orders.remove(order)
                     continue
                 #     size = copysign(int((self.margin_available * self._leverage * abs(size))
