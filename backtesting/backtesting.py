@@ -9,6 +9,9 @@ import multiprocessing as mp
 import os
 import sys
 import warnings
+import json
+import hashlib
+
 from abc import ABCMeta, abstractmethod
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import copy
@@ -1505,6 +1508,12 @@ class Backtest:
                 for i in range(0, len(seq), n):
                     yield seq[i:i + n]
 
+            def _hash_batch(batch):
+                # Sort each dictionary in the batch and convert the batch to a JSON string
+                sorted_batch = json.dumps([sorted(d.items()) for d in batch], sort_keys=True)
+                # Create a hash of the sorted JSON string
+                return hashlib.md5(sorted_batch.encode()).hexdigest()
+
             # Save necessary objects into "global" state; pass into concurrent executor
             # (and thus pickle) nothing but two numbers; receive nothing but numbers.
             # With start method "fork", children processes will inherit parent address space
@@ -1513,7 +1522,13 @@ class Backtest:
             # origina code
             # param_batches = object(_batch(param_combos))
             # transform to dic, for persistence_key state storage
-            param_batches = {i: batch for i, batch in enumerate(_batch(param_combos))}
+
+            param_batches = {}
+            for batch in _batch(param_combos):
+                hash_key = _hash_batch(batch)
+                if hash_key not in param_batches:
+                    param_batches[hash_key] = batch
+
             # Fetch catch data for perstence_key
             # walk throw cache data and compare to param_batches
             # if params_batch key found in cache data, remove from param_batches
@@ -1523,13 +1538,12 @@ class Backtest:
                 cached_optimized_results = cache.get_optimized_results(persistence_key)
                 if cached_optimized_results is not None:
                     cached_optimized_used = 0
-                    for cached_batch_index, optimization_value in cached_optimized_results.items():
-                        cached_params_batch_index = int(cached_batch_index)
-                        if param_batches[cached_params_batch_index] is not None:
-                            params_values = param_batches[cached_params_batch_index]
-                            del param_batches[cached_params_batch_index]
+                    for cached_batch_index, optimization_values in cached_optimized_results.items():
+                        if param_batches[cached_batch_index] is not None:
+                            params_values = param_batches[cached_batch_index]
+                            del param_batches[cached_batch_index]
                             cached_optimized_used += 1
-                            for optimization_value, params_value in zip(optimization_value, params_values):
+                            for optimization_value, params_value in zip(optimization_values, params_values):
                                 heatmap[tuple(params_value.values())] = float(optimization_value)
 
                     print(f"Found and used {cached_optimized_used} cached optimized results")
