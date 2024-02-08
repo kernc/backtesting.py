@@ -1,0 +1,56 @@
+name: CI
+on:
+  push: { branches: [master] }
+  pull_request: { branches: [master] }
+  schedule: [ cron: '2 2 * * 6' ]  # Every Saturday, 02:02
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-18.04
+    strategy:
+      matrix:
+        python-version: [3.7, '3.10']
+        include:
+          - python-version: 3.9
+            test-type: lint
+          - python-version: 3.9
+            test-type: docs
+
+    steps:
+      - uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-py${{ matrix.python-version }}
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 3
+      - name: Fetch tags
+        run: git fetch --depth=1 origin +refs/tags/*:refs/tags/*
+
+      - run: pip install -U pip setuptools wheel
+      - if: matrix.test-type == 'lint'
+        run: pip install -U --pre bokeh pandas 'numpy<1.24' && pip install -U .[dev]
+      - if: matrix.test-type == 'docs'
+        run: pip install -e .[doc]  # -e provides _version.py for pdoc
+      - run: pip install -U .[test]
+
+      - if: matrix.test-type == 'lint'
+        run: ruff backtesting
+      - if: matrix.test-type == 'lint'
+        run: mypy backtesting
+      - if: matrix.test-type == 'lint'
+        env: { BOKEH_BROWSER: none }
+        run: time catchsegv coverage run -m backtesting.test
+      - if: matrix.test-type == 'lint'
+        run: bash <(curl -s https://codecov.io/bash)
+
+      - if: '! matrix.test-type'
+        env: { BOKEH_BROWSER: none }
+        run: time catchsegv python -m backtesting.test
+
+      - if: matrix.test-type == 'docs'
+        run: time catchsegv doc/build.sh

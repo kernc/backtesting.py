@@ -1,0 +1,41 @@
+name: Deploy docs
+on:
+  push:
+    tags: ['[0-9]+.[0-9]+.*']
+
+jobs:
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.8
+
+      - uses: actions/cache@v2
+        name: Set up caches
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}
+
+      - name: Checkout repo
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 3
+      - name: Fetch tags
+        run: git fetch --depth=1 origin +refs/tags/*:refs/tags/*
+
+      - name: Install dependencies
+        run: |
+          pip install -U pip setuptools wheel
+          pip install -U -e .[doc,test]
+
+      - name: Build docs
+        run: time catchsegv doc/build.sh
+
+      - name: Deploy docs
+        env:
+          GH_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+        run: .github/deploy-gh-pages.sh
