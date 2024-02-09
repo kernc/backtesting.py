@@ -114,6 +114,7 @@ class _Data:
         self.__cache: Dict[str, _Array] = {}
         self.__arrays: Dict[str, _Array] = {}
         self._update()
+        
 
     def set_date(self, current_date):
         self.current_date = current_date

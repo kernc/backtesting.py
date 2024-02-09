@@ -727,15 +727,22 @@ class _Broker:
         self._hedging = hedging
         self._exclusive_orders = exclusive_orders
 
-        self._equity = np.tile(np.nan, len(index))
+        # self._equity = np.tile(np.nan, len(index))
+        index = pd.to_datetime(self._data.df['date']).dt.date
+        self._equity = pd.Series(index=index, dtype=float)
         self.orders: List[Order] = []
         self.trades: List[Trade] = []
         self.position = Position(self)
         self.closed_trades: List[Trade] = []
+        self.positions = {}  # 字典，用于跟踪每支股票的持仓信息
+        self._current_date = None
 
     def __repr__(self):
         return f'<Broker: {self._cash:.0f}{self.position.pl:+.1f} ({len(self.trades)} trades)>'
-
+    
+    def update_current_date(self,current_date):
+        self._current_date = current_date
+    
     def new_order(self,
                   size: float,
                   stock=None,
@@ -786,7 +793,55 @@ class _Broker:
 
             self.orders.append(order)
 
+        self.update_position(stock, size, self.get_stock_price(stock))
+
         return order
+    
+    def update_position(self, stock, size, price):
+        if stock in self.positions:
+            position = self.positions[stock]
+            new_quantity = position['quantity'] + size
+            if new_quantity == 0:
+                del self.positions[stock]  # 清空持仓
+            else:
+                new_average_price = (position['average_price'] * position['quantity'] + price * size) / new_quantity
+                self.positions[stock] = {'quantity': new_quantity, 'average_price': new_average_price}
+        else:
+            self.positions[stock] = {'quantity': size, 'average_price': price}
+
+        # 每次更新持仓后，重新计算总资产
+        self.update_equity(self._current_date)
+
+    def update_equity(self, current_date, init_value=None):
+        total_stock_value = 0
+        if init_value is not None:
+            total_equity = init_value
+        else:
+            for stock, position in self.positions.items():
+                # 假设有方法 self.get_stock_price 来获取当前股票价格
+                stock_price = self.get_stock_price(stock)
+                total_stock_value += position['quantity'] * stock_price
+
+            total_equity = self._cash + total_stock_value
+
+        # 更新 self._equity Series 的相应日期条目
+        current_date = pd.Timestamp(current_date).date()
+
+        self._equity[current_date] = total_equity
+        return total_equity
+
+    def get_stock_price(self, stock):
+        # 确保 self._current_date 只包含日期部分
+        # current_date_ts = pd.to_datetime(self._current_date).normalize()
+        stock_data = self._data.df[self._data.df['stock'] == stock]
+        
+        filtered_stock_data = stock_data.loc[stock_data['date'] == self._current_date]
+        current_price = filtered_stock_data['Close'].iloc[0]
+
+        return current_price
+        # else:
+        #     raise ValueError(f"Price for stock {stock} on date {current_date_ts} not found.")
+
 
     @property
     def last_price(self) -> float:
@@ -811,22 +866,26 @@ class _Broker:
         return max(0, self.equity - margin_used)
 
     def next(self):
-        i = self._i = len(self._data) - 1
+        # 假设 current_date 已经是一个 pd.Timestamp 或能够被转换为 Timestamp 的对象
         self._process_orders()
 
-        # Log account equity for the equity curve
-        equity = self.equity
-        self._equity[i] = equity
+        # 更新总资产并获取当前的总资产值
+        equity = self.update_equity(self._current_date)
+        # print(len(self._equity))
 
-        # If equity is negative, set all to 0 and stop the simulation
+        # 如果总资产净值为负，终止模拟
         if equity <= 0:
-            assert self.margin_available <= 0
-            for trade in self.trades:
-                self._close_trade(trade, self._data.Close[-1], i)
-            self._cash = 0
-            self._equity[i:] = 0
-            raise _OutOfMoneyError
+            self._handle_negative_equity(self._current_date)  # 使用一个专门的方法来处理负资产情况
 
+        
+    def _handle_negative_equity(self, current_date):
+        assert self.margin_available <= 0
+        for trade in self.trades:
+            self._close_trade(trade, self._data.Close[-1], current_date)  # 确保_close_trade方法能接受日期参数
+        self._cash = 0
+        self._equity[current_date:] = 0  # 注意：这一行可能需要调整，因为直接设置 pd.Series 切片为 0 可能不适用
+        raise _OutOfMoneyError
+    
     def _process_orders(self):
         data = self._data
         open, high, low = data.Open[-1], data.High[-1], data.Low[-1]
@@ -877,7 +936,18 @@ class _Broker:
 
             # Determine entry/exit bar index
             is_market_order = not order.limit and not stop_price
-            time_index = (self._i - 1) if is_market_order and self._trade_on_close else self._i
+            # time_index = (self._i - 1) if is_market_order and self._trade_on_close else self._i
+            # self._current_date = pd.to_datetime(self._current_date).normalize()
+            filtered_df = data.df.loc[data.df['date'] == self._current_date]
+            if is_market_order and self._trade_on_close:
+                # 如果是市价订单并且在收盘时交易
+
+                time_index = filtered_df.index[0] -1  # 获取第一个匹配行的索引
+
+                # time_index = data.df.index.get_loc(self._current_date) - 1
+            else:
+                # 否则根据当前日期确定索引
+                time_index = filtered_df.index[0]
 
             # If order is a SL/TP order, it should close an existing trade it was contingent upon
             if order.parent_trade:
@@ -1037,7 +1107,7 @@ class Backtest:
     optimize it.
     """
     def __init__(self,
-                #  data: pd.DataFrame,
+                 data: pd.DataFrame,
                  strategy: Type[Strategy],
                  *,
                  cash: float = 10_000,
@@ -1092,7 +1162,7 @@ class Backtest:
 
         [FIFO]: https://www.investopedia.com/terms/n/nfa-compliance-rule-2-43b.asp
         """
-        data = self.load_stock_data()
+        # data = self.load_stock_data()
 
         if not (isinstance(strategy, type) and issubclass(strategy, Strategy)):
             raise TypeError('`strategy` must be a Strategy sub-type')
@@ -1101,17 +1171,6 @@ class Backtest:
         if not isinstance(commission, Number):
             raise TypeError('`commission` must be a float value, percent of '
                             'entry order price')
-
-        # data = data.copy(deep=False)
-
-        # all_dates = pd.to_datetime(data['date']).unique()
-        # all_dates.sort()  # 确保日期按顺序排列
-        all_dates = pd.to_datetime(data['date']).unique()
-        all_dates = pd.Series(all_dates).sort_values().values  # 转换为 Series，使用 sort_values，然后取 values
-        print(all_dates)
-
-        self._all_dates = all_dates
-
 
 
         # Convert index to datetime index
@@ -1157,96 +1216,18 @@ class Backtest:
             trade_on_close=trade_on_close, hedging=hedging,
             exclusive_orders=exclusive_orders, index=data.index,
         )
+        print('data index is :' + str(data.index))
         self._strategy = strategy
         self._results: Optional[pd.Series] = None
-            
-        #     # 其余初始化逻辑...
-        # self._data: dd.DataFrame = data
-        # self._broker = partial(
-        #     _Broker, cash=cash, commission=commission, margin=margin,
-        #     trade_on_close=trade_on_close, hedging=hedging,
-        #     exclusive_orders=exclusive_orders, index=data.index.compute(),
-        # )
-        # self._strategy = strategy
-        # self._results: Optional[pd.Series] = None
 
-    def load_stock_data(self) -> dd.DataFrame:
-        """
-        加载或构造包含所有 StockRecord 的 Dask DataFrame。
-        这个函数需要根据您的数据源进行具体实现。
-        """
-        from datetime import datetime
+        all_dates = pd.to_datetime(self._data['date']).unique().normalize()
+        # all_dates = pd.to_datetime(self._data['date']).dt.date.unique()
 
-        def adjust_date(stockRecord_date):
-            if stockRecord_date.month < 4:
-                return stockRecord_date.year - 1, 9, 30
-            elif stockRecord_date.month < 7:
-                return stockRecord_date.year-1, 12, 31
-            elif stockRecord_date.month < 10:
-                return stockRecord_date.year, 3, 31
-            else:
-                return stockRecord_date.year, 6, 30
+        all_dates = pd.Series(all_dates).sort_values().values  # 转换为 Series，使用 sort_values，然后取 values
+        self._all_dates = all_dates
+        self._cash = cash
 
-
-        # 假设 StockRecord, IncomeStatement, CashFlowStatement 是您的 Django 模型
-        income_statements_qs = IncomeStatement.objects.all().order_by('date').values('date', 'EPSPeriod','stock')
-        cashflow_statements_qs = CashFlowStatement.objects.all().order_by('date').values('date', 'InterestIncome','stock')
-
-        # 转换为 Pandas DataFrame
-
-        income_statements_df = pd.DataFrame(list(income_statements_qs))
-        cashflow_statements_df = pd.DataFrame(list(cashflow_statements_qs))
-
-        stocks = Stock.objects.filter(no_sheet_data=False,id__gt=1800)
-
-        stock_records_qs = StockRecord.objects.filter(stock__in=stocks).order_by('date').values('date','stock', 'DayHigh', 'DayLow', 'ClosingPrice', 'OpeningPrice', 'MACD', 'Volume')
-        stock_records_df = pd.DataFrame(list(stock_records_qs))
-
-        stock_records_df['date'] = pd.to_datetime(stock_records_df['date'])
-        income_statements_df['date'] = pd.to_datetime(income_statements_df['date'])
-        cashflow_statements_df['date'] = pd.to_datetime(cashflow_statements_df['date'])
-
-        stock_records_df = stock_records_df.rename(
-        columns={
-            "DayHigh": "High",
-            "DayLow": "Low",
-            "ClosingPrice": "Close",
-            "OpeningPrice": "Open",
-        }
-    )
-        # 为 stock_records_df 添加 sheet_date 列
-        stock_records_df['sheet_date'] = stock_records_df['date'].apply(lambda x: datetime(*adjust_date(x)))
-        
-        # 为了合并，需要将 income_statements_df , cashflow_statements_df 中的 date 重命名为 sheet_date
-        income_statements_df.rename(columns={'date': 'sheet_date'}, inplace=True)
-        cashflow_statements_df.rename(columns={'date': 'sheet_date'}, inplace=True)
-        
-        # 合并 DataFrame，基于 company_id 和 sheet_date
-        merged_df = pd.merge(stock_records_df, income_statements_df, on=['stock', 'sheet_date'], how='left')
-        merged_df = pd.merge(merged_df, cashflow_statements_df, on=['stock', 'sheet_date'], how='left')
-
-        for col in merged_df.columns:
-            # 检查是否为 Decimal 类型
-            if merged_df[col].dtype == 'object' and all(isinstance(x, Decimal) for x in merged_df[col].dropna()):
-                merged_df[col] = merged_df[col].astype(float)
-            
-            # 检查列是否包含日期字符串（简单的检查，可能需要根据实际情况调整）
-            elif pd.api.types.is_object_dtype(merged_df[col]):
-                try:
-                    # 尝试转换为 datetime 类型，如果成功则说明是日期字符串
-                    merged_df[col] = pd.to_datetime(merged_df[col], errors='coerce')  # 'coerce' 会将无法解析的转为 NaT
-                except ValueError:
-                    # 如果转换失败，保持原状
-                    pass
-
-        merged_df.set_index('date')
-        print(type(merged_df.index))
-        print(merged_df)
-        
-        # 将 Pandas DataFrame 转换为 Dask DataFrame
-        # merged_ddf = dd.from_pandas(merged_df, npartitions=10)
-        
-        return merged_df
+    
     def run(self, **kwargs) -> pd.Series:
         """
         Run the backtest. Returns `pd.Series` with results and statistics.
@@ -1308,15 +1289,20 @@ class Backtest:
 
         # Skip first few candles where indicators are still "warming up"
         # +1 to have at least two entries available
+        # current_last_day = '1970-01-01'
         start = 1 + max((np.isnan(indicator.astype(float)).argmin(axis=-1).max()
                          for _, indicator in indicator_attrs), default=0)
-
+        # broker.update_equity(current_date=current_last_day,init_value=self._cash)
         # Disable "invalid value encountered in ..." warnings. Comparison
         # np.nan >= 3 is not invalid; it's False.
         with np.errstate(invalid='ignore'):
+            
             for current_date in self._all_dates:
                  # 将当前日期转换为 Pandas Timestamp
                 # print(current_date)
+                # current_last_day = current_date
+                broker.update_current_date(current_date)
+
                 current_date_ts = pd.Timestamp(current_date)
                 
                 # 计算5天前的日期
@@ -1328,15 +1314,16 @@ class Backtest:
                 
                 # 更新 data 和 strategy 的状态，以反映当前日期的数据
                 data.set_date(current_date)
-                
-                # 为了简化，我们假设 strategy.next 方法已经被修改为接受当前数据作为参数
-                strategy.next(current_data_up_to_date)
-                
+              
                 # 处理订单和经纪人事务
                 try:
                     broker.next()
                 except _OutOfMoneyError:
                     break
+                
+                # 为了简化，我们假设 strategy.next 方法已经被修改为接受当前数据作为参数
+                strategy.next(current_data_up_to_date)
+  
             else:
                 # 关闭任何剩余的开放交易
                 for trade in broker.trades:
@@ -1346,37 +1333,10 @@ class Backtest:
                 if self._all_dates.size > 0:
                     try_(broker.next, exception=_OutOfMoneyError)
 
-
-            # for i in range(start, len(self._data)):
-            #     # Prepare data and indicators for `next` call
-            #     data._set_length(i + 1)
-            #     for attr, indicator in indicator_attrs:
-            #         # Slice indicator on the last dimension (case of 2d indicator)
-            #         setattr(strategy, attr, indicator[..., :i + 1])
-
-            #     # Handle orders processing and broker stuff
-            #     try:
-            #         broker.next()
-            #     except _OutOfMoneyError:
-            #         break
-
-            #     # Next tick, a moment before bar close
-            #     strategy.next()
-            # else:
-            #     # Close any remaining open trades so they produce some stats
-            #     for trade in broker.trades:
-            #         trade.close()
-
-            #     # Re-run broker one last time to handle orders placed in the last strategy
-            #     # iteration. Use the same OHLC values as in the last broker iteration.
-            #     if start < len(self._data):
-            #         try_(broker.next, exception=_OutOfMoneyError)
-
-            # # Set data back to full length
-            # # for future `indicator._opts['data'].index` calls to work
             data._set_length(len(self._data))
 
             equity = pd.Series(broker._equity).bfill().fillna(broker._cash).values
+            print(equity)
             self._results = compute_stats(
                 trades=broker.closed_trades,
                 equity=equity,
