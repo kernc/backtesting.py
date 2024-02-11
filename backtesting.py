@@ -19,6 +19,7 @@ from math import copysign
 from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 from decimal import Decimal
+import datetime
 
 import numpy as np
 import pandas as pd
@@ -221,11 +222,9 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        try:
-            print('buy')
-            return self._broker.new_order(size,stock, limit, stop, sl, tp, tag)
-        except Exception as e:
-            pass
+ 
+        return self._broker.new_order(size,stock, limit, stop, sl, tp, tag)
+ 
 
     def sell(self, *,
              size: float = _FULL_EQUITY,
@@ -246,11 +245,9 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        try:
-            print('sell')
-            return self._broker.new_order(-size,stock, limit, stop, sl, tp, tag)
-        except Exception as e:
-            pass
+
+        return self._broker.new_order(-size,stock, limit, stop, sl, tp, tag)
+
 
     @property
     def equity(self) -> float:
@@ -1025,7 +1022,7 @@ class _Broker:
      
         else:
             self.positions[stock] = {'quantity': size, 'average_price': price}
-
+        # print(self._current_date)
         self.update_equity(self._current_date)
 
     def update_equity(self, current_date, init_value=None):
@@ -1035,27 +1032,33 @@ class _Broker:
         else:
             for stock, position in self.positions.items():
                 # 假设有方法 self.get_stock_price 来获取当前股票价格
-                stock_price = self.get_stock_price(stock)
-                # print(position['quantity'],stock_price)
-                total_stock_value += position['quantity'] * stock_price
+                try:
+                    stock_price = self.get_stock_price(stock)
+                    # print(position['quantity'],stock_price)
+                    total_stock_value += position['quantity'] * stock_price
+                except:
+                    # print(current_date)
+                    pass
 
             total_equity = self._cash + total_stock_value
 
         # 更新 self._equity Series 的相应日期条目
         current_date = pd.Timestamp(current_date).date()
-
+        # print('update_equity')
         self._equity[current_date] = total_equity
+        
         return total_equity
 
     def get_stock_price(self, stock):
         # 确保 self._current_date 只包含日期部分
         # current_date_ts = pd.to_datetime(self._current_date).normalize()
-        stock_data = self._data.df[self._data.df['stock'] == stock].copy()
+        stock_data = self._data.filtered_data[self._data.filtered_data['stock'] == stock].copy()
         stock_data['date'] = pd.to_datetime(stock_data['date']).dt.date
         current_date = pd.Timestamp(self._current_date).date()
-        filtered_stock_data = stock_data.loc[stock_data['date'] == current_date]
+        current_date_str = current_date.strftime("%Y-%m-%d")
 
-        # return current_price
+        current_date = datetime.datetime.strptime(current_date_str, "%Y-%m-%d").date()
+        filtered_stock_data = stock_data.loc[stock_data['date'] == current_date]
     
         if not filtered_stock_data.empty:
             current_price = filtered_stock_data['Close'].iloc[0]
@@ -1063,7 +1066,7 @@ class _Broker:
         else:
             # 没有找到对应日期的数据，可以返回 None 或者抛出一个更具体的错误
             # 这里返回 None 作为示例
-            # print(stock,current_date)
+            # print('no data',current_date)
             return None
 
 
@@ -1093,34 +1096,37 @@ class _Broker:
         # 假设 current_date 已经是一个 pd.Timestamp 或能够被转换为 Timestamp 的对象
         
         # 更新总资产并获取当前的总资产值
-        try:
-            self._i = len(self._data) - 1
-            self._process_orders()
-            equity = self.update_equity(self._current_date)
-            
-            if equity <= 0:
-                print('testttttt')
-                self._handle_negative_equity(self._current_date)  # 使用一个专门的方法来处理负资产情况
-        except Exception as e:
-            # print(e)
-            pass
+
+        i = self._i = len(self._data.filtered_data) - 1
+        self._process_orders()
+        equity = self.update_equity(self._current_date)
+        # self._equity[i] = equity
+        
+        # If equity is negative, set all to 0 and stop the simulation
+        if equity <= 0:
+            assert self.margin_available <= 0
+            for trade in self.trades:
+                self._close_trade(trade, self._data.Close[-1], i)
+            self._cash = 0
+            self._equity[i:] = 0
+            raise _OutOfMoneyError
+
 
         # 如果总资产净值为负，终止模拟
-        
-
         
     def _handle_negative_equity(self, current_date):
         assert self.margin_available <= 0
         for trade in self.trades:
-            self._close_trade(trade, self._data.Close[-1], current_date)  # 确保_close_trade方法能接受日期参数
+            self._close_trade(trade, self._data.filtered_data.Close[-1], current_date)  # 确保_close_trade方法能接受日期参数
         self._cash = 0
         self._equity[current_date:] = 0  # 注意：这一行可能需要调整，因为直接设置 pd.Series 切片为 0 可能不适用
         raise _OutOfMoneyError
     
     def _process_orders(self):
-        data = self._data
-        open, high, low = data.Open[-1], data.High[-1], data.Low[-1]
-        prev_close = data.Close[-2]
+        data = self._data.filtered_data
+        open, high, low = data['Open'].iat[-1], data['High'].iat[-1], data['Low'].iat[-1]
+        if len(data) > 1:
+            prev_close = data['Close'].iat[-2]
         reprocess_orders = False
 
         # Process orders
@@ -1221,9 +1227,11 @@ class _Broker:
                     # Order size greater than this opposite-directed existing trade,
                     # so it will be closed completely
                     if abs(need_size) >= abs(trade.size):
+                        print('aaa')
                         self._close_trade(trade, price, time_index)
                         need_size += trade.size
                     else:
+                        print('bbb')
                         # The existing trade is larger than the new order,
                         # so it will only be closed partially
                         self._reduce_trade(trade, price, need_size, time_index)
@@ -1293,6 +1301,7 @@ class _Broker:
         self._close_trade(close_trade, price, time_index)
 
     def _close_trade(self, trade: Trade, price: float, time_index):
+        print("測試")
         self.trades.remove(trade)
         if trade._sl_order:
             self.orders.remove(trade._sl_order)
@@ -1519,7 +1528,7 @@ class Backtest:
             for current_date in self._all_dates:
                 
                  # 将当前日期转换为 Pandas Timestamp
-                print(current_date)
+                # print(current_date)
                 # current_last_day = current_date
                 broker.update_current_date(current_date)
 
@@ -1531,12 +1540,11 @@ class Backtest:
                 # 筛选出当前日期之前5天内的所有数据
                 # 注意：这里包括了当前日期当天的数据，如果不需要当天的数据，可以将条件改为 < current_date
                 current_data_up_to_date = self._data[(self._data['date'] > five_days_ago) & (self._data['date'] <= current_date)]
-                
                 # # 更新 data 和 strategy 的状态，以反映当前日期的数据
-                # data.set_date(current_date)
+                data.set_date(current_date)
                 
-                data._set_length(i + 1)
-                i += 1
+                # data._set_length(i + 1)
+                # i += 1
                 # 处理订单和经纪人事务
                 try:
                     broker.next()
@@ -1558,6 +1566,8 @@ class Backtest:
             data._set_length(len(self._data))
 
             equity = pd.Series(broker._equity).bfill().fillna(broker._cash).values
+
+            # print(equity)
 
             self._results = compute_stats(
                 trades=broker.closed_trades,

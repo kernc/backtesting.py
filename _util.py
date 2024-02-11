@@ -119,6 +119,7 @@ class _Data:
     def set_date(self, current_date):
         self.current_date = current_date
         self.filtered_data = self.__df[self.__df['date'] <= current_date]
+        # print(self.filtered_data)
 
 
     def __getitem__(self, item):
