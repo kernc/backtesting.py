@@ -221,7 +221,11 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(size,stock, limit, stop, sl, tp, tag)
+        try:
+            print('buy')
+            return self._broker.new_order(size,stock, limit, stop, sl, tp, tag)
+        except Exception as e:
+            pass
 
     def sell(self, *,
              size: float = _FULL_EQUITY,
@@ -242,7 +246,11 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(-size,stock, limit, stop, sl, tp, tag)
+        try:
+            print('sell')
+            return self._broker.new_order(-size,stock, limit, stop, sl, tp, tag)
+        except Exception as e:
+            pass
 
     @property
     def equity(self) -> float:
@@ -537,6 +545,213 @@ class Order:
         return bool(self.__parent_trade)
 
 
+# class Trade:
+#     """
+#     When an `Order` is filled, it results in an active `Trade`.
+#     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
+#     """
+#     # def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar, tag):
+#     #     self.__broker = broker
+#     #     self.__size = size
+#     #     self.__entry_price = entry_price
+#     #     self.__exit_price: Optional[float] = None
+#     #     self.__entry_bar: int = entry_bar
+#     #     self.__exit_bar: Optional[int] = None
+#     #     self.__sl_order: Optional[Order] = None
+#     #     self.__tp_order: Optional[Order] = None
+#     #     self.__tag = tag
+
+#     def __init__(self, broker, size, entry_price, entry_time, tag):
+#         self.__broker = broker
+#         self.__size = size
+#         self.__entry_price = entry_price
+#         self.__exit_price: Optional[float] = None
+#         self.__entry_time = entry_time  # 使用时间而不是条目索引
+#         self.__exit_time = None
+#         self.__sl_order: Optional[Order] = None
+#         self.__tp_order: Optional[Order] = None
+#         self.__tag = tag
+#         # 其他属性保持不变
+
+#     def __repr__(self):
+#         return f'<Trade size={self.__size} time={self.__entry_time}-{self.__exit_time or ""} ' \
+#                f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}' \
+#                f'{" tag="+str(self.__tag) if self.__tag is not None else ""}>'
+
+#     def _replace(self, **kwargs):
+#         for k, v in kwargs.items():
+#             setattr(self, f'_{self.__class__.__qualname__}__{k}', v)
+#         return self
+
+#     def _copy(self, **kwargs):
+#         return copy(self)._replace(**kwargs)
+
+#     def close(self, portion: float = 1.):
+#         """Place new `Order` to close `portion` of the trade at next market price."""
+#         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
+#         size = copysign(max(1, round(abs(self.__size) * portion)), -self.__size)
+#         order = Order(self.__broker, size, parent_trade=self, tag=self.__tag)
+#         self.__broker.orders.insert(0, order)
+
+#     # Fields getters
+
+#     @property
+#     def size(self):
+#         """Trade size (volume; negative for short trades)."""
+#         return self.__size
+
+#     @property
+#     def entry_price(self) -> float:
+#         """Trade entry price."""
+#         return self.__entry_price
+
+#     @property
+#     def exit_price(self) -> Optional[float]:
+#         """Trade exit price (or None if the trade is still active)."""
+#         return self.__exit_price
+    
+#     @property
+#     def entry_time(self):
+#         """交易的进入日期"""
+#         return self.__entry_time
+
+#     @property
+#     def exit_time(self):
+#         """交易的退出日期"""
+#         return self.__exit_time
+
+#     # @property
+#     # def entry_bar(self) -> int:
+#     #     """Candlestick bar index of when the trade was entered."""
+#     #     return self.__entry_bar
+
+#     # @property
+#     # def exit_bar(self) -> Optional[int]:
+#     #     """
+#     #     Candlestick bar index of when the trade was exited
+#     #     (or None if the trade is still active).
+#     #     """
+#     #     return self.__exit_bar
+
+#     @property
+#     def tag(self):
+#         """
+#         A tag value inherited from the `Order` that opened
+#         this trade.
+
+#         This can be used to track trades and apply conditional
+#         logic / subgroup analysis.
+
+#         See also `Order.tag`.
+#         """
+#         return self.__tag
+
+#     @property
+#     def _sl_order(self):
+#         return self.__sl_order
+
+#     @property
+#     def _tp_order(self):
+#         return self.__tp_order
+
+#     # Extra properties
+
+#     @property
+#     def entry_time(self) -> Union[pd.Timestamp, int]:
+#         """Datetime of when the trade was entered."""
+#         return self.__broker._data.index[self.__entry_time]
+
+#     @property
+#     def exit_time(self) -> Optional[Union[pd.Timestamp, int]]:
+#         """Datetime of when the trade was exited."""
+#         if self.__exit_time is None:
+#             return None
+#         return self.__broker._data.index[self.__entry_time]
+
+#     @property
+#     def is_long(self):
+#         """True if the trade is long (trade size is positive)."""
+#         return self.__size > 0
+
+#     @property
+#     def is_short(self):
+#         """True if the trade is short (trade size is negative)."""
+#         return not self.is_long
+
+#     @property
+#     def pl(self):
+#         if self.exit_price is not None:
+#             return self.size * (self.exit_price - self.entry_price)
+#         return 0
+
+#     @property
+#     def pl_pct(self):
+#         if self.exit_price is not None:
+#             return (self.exit_price / self.entry_price - 1) * 100
+#         return 0
+    
+#     # @property
+#     # def pl(self):
+#     #     """Trade profit (positive) or loss (negative) in cash units."""
+#     #     price = self.__exit_price or self.__broker.last_price
+#     #     return self.__size * (price - self.__entry_price)
+
+#     # @property
+#     # def pl_pct(self):
+#     #     """Trade profit (positive) or loss (negative) in percent."""
+#     #     price = self.__exit_price or self.__broker.last_price
+#     #     return copysign(1, self.__size) * (price / self.__entry_price - 1)
+
+#     @property
+#     def value(self):
+#         """Trade total value in cash (volume × price)."""
+#         price = self.__exit_price or self.__broker.last_price
+#         return abs(self.__size) * price
+
+#     # SL/TP management API
+
+#     @property
+#     def sl(self):
+#         """
+#         Stop-loss price at which to close the trade.
+
+#         This variable is writable. By assigning it a new price value,
+#         you create or modify the existing SL order.
+#         By assigning it `None`, you cancel it.
+#         """
+#         return self.__sl_order and self.__sl_order.stop
+
+#     @sl.setter
+#     def sl(self, price: float):
+#         self.__set_contingent('sl', price)
+
+#     @property
+#     def tp(self):
+#         """
+#         Take-profit price at which to close the trade.
+
+#         This property is writable. By assigning it a new price value,
+#         you create or modify the existing TP order.
+#         By assigning it `None`, you cancel it.
+#         """
+#         return self.__tp_order and self.__tp_order.limit
+
+#     @tp.setter
+#     def tp(self, price: float):
+#         self.__set_contingent('tp', price)
+
+#     def __set_contingent(self, type, price):
+#         assert type in ('sl', 'tp')
+#         assert price is None or 0 < price < np.inf
+#         attr = f'_{self.__class__.__qualname__}__{type}_order'
+#         order: Order = getattr(self, attr)
+#         if order:
+#             order.cancel()
+#         if price:
+#             kwargs = {'stop': price} if type == 'sl' else {'limit': price}
+#             order = self.__broker.new_order(-self.size, trade=self, tag=self.tag, **kwargs)
+#             setattr(self, attr, order)
+    
 class Trade:
     """
     When an `Order` is filled, it results in an active `Trade`.
@@ -804,12 +1019,13 @@ class _Broker:
             if new_quantity == 0:
                 del self.positions[stock]  # 清空持仓
             else:
+
                 new_average_price = (position['average_price'] * position['quantity'] + price * size) / new_quantity
                 self.positions[stock] = {'quantity': new_quantity, 'average_price': new_average_price}
+     
         else:
             self.positions[stock] = {'quantity': size, 'average_price': price}
 
-        # 每次更新持仓后，重新计算总资产
         self.update_equity(self._current_date)
 
     def update_equity(self, current_date, init_value=None):
@@ -820,6 +1036,7 @@ class _Broker:
             for stock, position in self.positions.items():
                 # 假设有方法 self.get_stock_price 来获取当前股票价格
                 stock_price = self.get_stock_price(stock)
+                # print(position['quantity'],stock_price)
                 total_stock_value += position['quantity'] * stock_price
 
             total_equity = self._cash + total_stock_value
@@ -833,14 +1050,21 @@ class _Broker:
     def get_stock_price(self, stock):
         # 确保 self._current_date 只包含日期部分
         # current_date_ts = pd.to_datetime(self._current_date).normalize()
-        stock_data = self._data.df[self._data.df['stock'] == stock]
-        
-        filtered_stock_data = stock_data.loc[stock_data['date'] == self._current_date]
-        current_price = filtered_stock_data['Close'].iloc[0]
+        stock_data = self._data.df[self._data.df['stock'] == stock].copy()
+        stock_data['date'] = pd.to_datetime(stock_data['date']).dt.date
+        current_date = pd.Timestamp(self._current_date).date()
+        filtered_stock_data = stock_data.loc[stock_data['date'] == current_date]
 
-        return current_price
-        # else:
-        #     raise ValueError(f"Price for stock {stock} on date {current_date_ts} not found.")
+        # return current_price
+    
+        if not filtered_stock_data.empty:
+            current_price = filtered_stock_data['Close'].iloc[0]
+            return current_price
+        else:
+            # 没有找到对应日期的数据，可以返回 None 或者抛出一个更具体的错误
+            # 这里返回 None 作为示例
+            # print(stock,current_date)
+            return None
 
 
     @property
@@ -867,15 +1091,22 @@ class _Broker:
 
     def next(self):
         # 假设 current_date 已经是一个 pd.Timestamp 或能够被转换为 Timestamp 的对象
-        self._process_orders()
-
+        
         # 更新总资产并获取当前的总资产值
-        equity = self.update_equity(self._current_date)
-        # print(len(self._equity))
+        try:
+            self._i = len(self._data) - 1
+            self._process_orders()
+            equity = self.update_equity(self._current_date)
+            
+            if equity <= 0:
+                print('testttttt')
+                self._handle_negative_equity(self._current_date)  # 使用一个专门的方法来处理负资产情况
+        except Exception as e:
+            # print(e)
+            pass
 
         # 如果总资产净值为负，终止模拟
-        if equity <= 0:
-            self._handle_negative_equity(self._current_date)  # 使用一个专门的方法来处理负资产情况
+        
 
         
     def _handle_negative_equity(self, current_date):
@@ -936,18 +1167,7 @@ class _Broker:
 
             # Determine entry/exit bar index
             is_market_order = not order.limit and not stop_price
-            # time_index = (self._i - 1) if is_market_order and self._trade_on_close else self._i
-            # self._current_date = pd.to_datetime(self._current_date).normalize()
-            filtered_df = data.df.loc[data.df['date'] == self._current_date]
-            if is_market_order and self._trade_on_close:
-                # 如果是市价订单并且在收盘时交易
-
-                time_index = filtered_df.index[0] -1  # 获取第一个匹配行的索引
-
-                # time_index = data.df.index.get_loc(self._current_date) - 1
-            else:
-                # 否则根据当前日期确定索引
-                time_index = filtered_df.index[0]
+            time_index = (self._i - 1) if is_market_order and self._trade_on_close else self._i
 
             # If order is a SL/TP order, it should close an existing trade it was contingent upon
             if order.parent_trade:
@@ -1050,7 +1270,7 @@ class _Broker:
         if reprocess_orders:
             self._process_orders()
 
-    def _reduce_trade(self, trade: Trade, price: float, size: float, time_index: int):
+    def _reduce_trade(self, trade: Trade, price: float, size: float, time_index):
         assert trade.size * size < 0
         assert abs(trade.size) >= abs(size)
 
@@ -1072,7 +1292,7 @@ class _Broker:
 
         self._close_trade(close_trade, price, time_index)
 
-    def _close_trade(self, trade: Trade, price: float, time_index: int):
+    def _close_trade(self, trade: Trade, price: float, time_index):
         self.trades.remove(trade)
         if trade._sl_order:
             self.orders.remove(trade._sl_order)
@@ -1083,7 +1303,7 @@ class _Broker:
         self._cash += trade.pl
 
     def _open_trade(self, price: float, size: int,
-                    sl: Optional[float], tp: Optional[float], time_index: int, tag):
+                    sl: Optional[float], tp: Optional[float], time_index, tag):
         trade = Trade(self, size, price, time_index, tag)
         self.trades.append(trade)
         # Create SL/TP (bracket) orders.
@@ -1216,7 +1436,7 @@ class Backtest:
             trade_on_close=trade_on_close, hedging=hedging,
             exclusive_orders=exclusive_orders, index=data.index,
         )
-        print('data index is :' + str(data.index))
+        # print('data index is :' + str(data.index))
         self._strategy = strategy
         self._results: Optional[pd.Series] = None
 
@@ -1289,17 +1509,17 @@ class Backtest:
 
         # Skip first few candles where indicators are still "warming up"
         # +1 to have at least two entries available
-        # current_last_day = '1970-01-01'
         start = 1 + max((np.isnan(indicator.astype(float)).argmin(axis=-1).max()
                          for _, indicator in indicator_attrs), default=0)
         # broker.update_equity(current_date=current_last_day,init_value=self._cash)
         # Disable "invalid value encountered in ..." warnings. Comparison
         # np.nan >= 3 is not invalid; it's False.
         with np.errstate(invalid='ignore'):
-            
+            i = 0
             for current_date in self._all_dates:
+                
                  # 将当前日期转换为 Pandas Timestamp
-                # print(current_date)
+                print(current_date)
                 # current_last_day = current_date
                 broker.update_current_date(current_date)
 
@@ -1312,9 +1532,11 @@ class Backtest:
                 # 注意：这里包括了当前日期当天的数据，如果不需要当天的数据，可以将条件改为 < current_date
                 current_data_up_to_date = self._data[(self._data['date'] > five_days_ago) & (self._data['date'] <= current_date)]
                 
-                # 更新 data 和 strategy 的状态，以反映当前日期的数据
-                data.set_date(current_date)
-              
+                # # 更新 data 和 strategy 的状态，以反映当前日期的数据
+                # data.set_date(current_date)
+                
+                data._set_length(i + 1)
+                i += 1
                 # 处理订单和经纪人事务
                 try:
                     broker.next()
@@ -1336,7 +1558,7 @@ class Backtest:
             data._set_length(len(self._data))
 
             equity = pd.Series(broker._equity).bfill().fillna(broker._cash).values
-            print(equity)
+
             self._results = compute_stats(
                 trades=broker.closed_trades,
                 equity=equity,
