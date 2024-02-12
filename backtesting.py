@@ -1033,7 +1033,7 @@ class _Broker:
             for stock, position in self.positions.items():
                 # 假设有方法 self.get_stock_price 来获取当前股票价格
                 try:
-                    stock_price = self.get_stock_price(stock)
+                    stock_price = self.get_stock_price(stock=stock)
                     # print(position['quantity'],stock_price)
                     total_stock_value += position['quantity'] * stock_price
                 except:
@@ -1050,24 +1050,27 @@ class _Broker:
         return total_equity
 
     def get_stock_price(self, stock):
-        # 确保 self._current_date 只包含日期部分
-        # current_date_ts = pd.to_datetime(self._current_date).normalize()
         stock_data = self._data.filtered_data[self._data.filtered_data['stock'] == stock].copy()
         stock_data['date'] = pd.to_datetime(stock_data['date']).dt.date
         current_date = pd.Timestamp(self._current_date).date()
         current_date_str = current_date.strftime("%Y-%m-%d")
-
         current_date = datetime.datetime.strptime(current_date_str, "%Y-%m-%d").date()
         filtered_stock_data = stock_data.loc[stock_data['date'] == current_date]
-    
+
+
         if not filtered_stock_data.empty:
             current_price = filtered_stock_data['Close'].iloc[0]
             return current_price
         else:
-            # 没有找到对应日期的数据，可以返回 None 或者抛出一个更具体的错误
-            # 这里返回 None 作为示例
-            # print('no data',current_date)
-            return None
+            for i in range(1,10):
+                try:
+                    adjust_date = (current_date - datetime.timedelta(days=i))
+                    filtered_stock_data = stock_data.loc[stock_data['date'] == adjust_date]
+                    adjust_price = filtered_stock_data['Close'].iloc[0]
+                    return adjust_price
+                except:
+                    continue
+ 
 
 
     @property
