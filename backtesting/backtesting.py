@@ -74,6 +74,14 @@ class Strategy(metaclass=ABCMeta):
                     "can be optimized or run with.")
             setattr(self, k, v)
         return params
+    
+    def get_indicators_dataframe(self):
+        """
+        Compile all indicator arrays into a DataFrame with the same index as the strategy data.
+        """
+    
+        indicators_dict = {ind.name: ind for ind in self._indicators}
+        return pd.DataFrame(indicators_dict, index=self._data.index)
 
     def I(self,  # noqa: E743
           func: Callable, *args,
