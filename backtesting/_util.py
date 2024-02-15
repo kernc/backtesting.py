@@ -107,7 +107,7 @@ class _Data:
     and the returned "series" are _not_ `pd.Series` but `np.ndarray`
     for performance reasons.
     """
-    def __init__(self, df: pd.DataFrame):
+    def __init__(self, df: dd):
         self.__df = df
         self.__i = len(df)
         self.__pip: Optional[float] = None
