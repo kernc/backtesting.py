@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, List, Union
 
 import numpy as np
 import pandas as pd
+from dask import dataframe as dd
 
 from ._util import _data_period
 
@@ -10,6 +11,7 @@ if TYPE_CHECKING:
 
 
 def compute_drawdown_duration_peaks(dd: pd.Series):
+    dd = dd[~dd.index.duplicated(keep='first')]  # 删除重复索引，保留第一个出现的
     iloc = np.unique(np.r_[(dd == 0).values.nonzero()[0], len(dd) - 1])
     iloc = pd.Series(iloc, index=dd.index[iloc])
     df = iloc.to_frame('iloc').assign(prev=iloc.shift())
@@ -21,6 +23,7 @@ def compute_drawdown_duration_peaks(dd: pd.Series):
 
     df['duration'] = df['iloc'].map(dd.index.__getitem__) - df['prev'].map(dd.index.__getitem__)
     df['peak_dd'] = df.apply(lambda row: dd.iloc[row['prev']:row['iloc'] + 1].max(), axis=1)
+    
     df = df.reindex(dd.index)
     return df['duration'], df['peak_dd']
 
@@ -31,26 +34,40 @@ def geometric_mean(returns: pd.Series) -> float:
         return 0
     return np.exp(np.log(returns).sum() / (len(returns) or np.nan)) - 1
 
+def remove_duplicates(df):
+    # 重置索引，保持日期列，以便去重
+    df = df.reset_index().drop_duplicates(subset='date').set_index('date')
+    return df
 
 def compute_stats(
         trades: Union[List['Trade'], pd.DataFrame],
         equity: np.ndarray,
-        ohlc_data: pd.DataFrame,
+        ohlc_data: dd,
         strategy_instance: 'Strategy',
         risk_free_rate: float = 0,
 ) -> pd.Series:
     assert -1 < risk_free_rate < 1
 
-    index = ohlc_data.index
+    ohlc_data_unique = ohlc_data.map_partitions(remove_duplicates)
+
+    # 计算并获取去重后的结果
+    # 注意：直接计算整个 DataFrame 而不仅是索引
+    ohlc_data_unique_computed = ohlc_data_unique.compute()
+
+    # 获取去重后的索引
+    index = ohlc_data_unique_computed.index
+    print(index)
+
     dd = 1 - equity / np.maximum.accumulate(equity)
     dd_dur, dd_peaks = compute_drawdown_duration_peaks(pd.Series(dd, index=index))
+
 
     equity_df = pd.DataFrame({
         'Equity': equity,
         'DrawdownPct': dd,
         'DrawdownDuration': dd_dur},
         index=index)
-    
+
     print(trades)
 
     if isinstance(trades, pd.DataFrame):
@@ -97,7 +114,7 @@ def compute_stats(
     s.loc['Equity Final [$]'] = equity[-1]
     s.loc['Equity Peak [$]'] = equity.max()
     s.loc['Return [%]'] = (equity[-1] - equity[0]) / equity[0] * 100
-    c = ohlc_data.Close.values
+    c = ohlc_data.Close.compute().values
     s.loc['Buy & Hold Return [%]'] = (c[-1] - c[0]) / c[0] * 100  # long-only return
 
     gmean_day_return: float = 0

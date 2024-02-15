@@ -116,10 +116,11 @@ class _Data:
         self._update()
         
 
-    def set_date(self, current_date):
-        self.current_date = current_date
-        self.filtered_data = self.__df[self.__df['date'] <= current_date]
-        # print(self.filtered_data)
+    def set_data(self, current_data_up_to_date):
+        self.filtered_data = current_data_up_to_date
+
+    def __getdata__(self):
+        return self.__df
 
 
     def __getitem__(self, item):
@@ -134,6 +135,9 @@ class _Data:
     def _set_length(self, i):
         self.__i = i
         self.__cache.clear()
+
+    def _get_length(self):
+        return self.__i
 
     def _update(self):
         index = self.__df.index.copy()
