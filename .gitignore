@@ -3,7 +3,7 @@
 *.py[cod]
 *.html
 *.png
-# _version.py
+_version.py
 
 *.egg-info
 .eggs/*
