@@ -1030,7 +1030,8 @@ class Backtest:
                  margin: float = 1.,
                  trade_on_close=False,
                  hedging=False,
-                 exclusive_orders=False
+                 exclusive_orders=False,
+                 order_fees : float = 0
                  ):
         """
         Initialize a backtest. Requires data and a strategy to test.
@@ -1133,6 +1134,7 @@ class Backtest:
         )
         self._strategy = strategy
         self._results: Optional[pd.Series] = None
+        self.order_fees = order_fees
 
     def run(self, **kwargs) -> pd.Series:
         """
@@ -1238,6 +1240,7 @@ class Backtest:
                 ohlc_data=self._data,
                 risk_free_rate=0.0,
                 strategy_instance=strategy,
+                order_fees=self.order_fees
             )
 
         return self._results
