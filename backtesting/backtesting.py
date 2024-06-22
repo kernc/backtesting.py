@@ -816,7 +816,6 @@ class _Broker:
     def _process_orders(self):
         data = self._data
         open, high, low = data.Open[-1], data.High[-1], data.Low[-1]
-        prev_close = data.Close[-2]
         reprocess_orders = False
 
         # Process orders
@@ -856,7 +855,9 @@ class _Broker:
                          max(stop_price or open, order.limit))
             else:
                 # Market-if-touched / market order
-                price = prev_close if self._trade_on_close else open
+                # Contingent orders always on next open
+                prev_close = data.Close[-2]
+                price = prev_close if self._trade_on_close and not order.is_contingent else open
                 price = (max(price, stop_price or -np.inf)
                          if order.is_long else
                          min(price, stop_price or np.inf))

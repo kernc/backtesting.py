@@ -964,6 +964,25 @@ class TestDocs(TestCase):
             self.assertIn(key, readme)
 
 
+class TestRegressions(TestCase):
+    def test_gh_521(self):
+        class S(Strategy):
+            def init(self): pass
+
+            def next(self):
+                if self.data.Close[-1] == 100:
+                    self.buy(size=1, sl=90)
+
+        df = pd.DataFrame({
+            'Open': [100, 100, 100, 50, 50],
+            'High': [100, 100, 100, 50, 50],
+            'Low': [100, 100, 100, 50, 50],
+            'Close': [100, 100, 100, 50, 50],
+        })
+        bt = Backtest(df, S, cash=100, trade_on_close=True)
+        self.assertEqual(bt.run()._trades['ExitPrice'][0], 50)
+
+
 if __name__ == '__main__':
     warnings.filterwarnings('error')
     unittest.main()
