@@ -1060,6 +1060,14 @@ class Backtest:
         the commission, e.g. set it to `0.0002` for commission-less forex
         trading where the average spread is roughly 0.2‰ of asking price.
 
+        .. note::
+            With nonzero `commission`, long and short orders will be placed
+            at an adjusted price that is slightly higher or lower (respectively)
+            than the current price. See e.g.
+            [#153](https://github.com/kernc/backtesting.py/issues/153),
+            [#538](https://github.com/kernc/backtesting.py/issues/538),
+            [#633](https://github.com/kernc/backtesting.py/issues/633).
+
         `margin` is the required margin (ratio) of a leveraged account.
         No difference is made between initial and maintenance margins.
         To run the backtest using e.g. 50:1 leverge that your broker allows,
