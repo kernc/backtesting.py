@@ -106,6 +106,20 @@ def compute_stats(
             365 if index.dayofweek.to_series().between(5, 6).mean() > 2/7 * .6 else
             252)
 
+        # For calculating covariance matrix to determine beta
+    equity_returns = []
+    market_returns = []
+    # Calculate returns for each period
+    for i in range(1, len(equity)):
+        equity_return = (equity[i] - equity[i - 1]) / equity[i - 1]
+        market_return = (c[i] - c[i - 1]) / c[i - 1]
+        equity_returns.append(equity_return)
+        market_returns.append(market_return)
+    # Turn into array
+    equity_returns = np.array(equity_returns)
+    market_returns = np.array(market_returns)
+    cov_matrix = np.cov(equity_returns, market_returns)
+
     # Annualized return and risk metrics are computed based on the (mostly correct)
     # assumption that the returns are compounded. See: https://dx.doi.org/10.2139/ssrn.3054517
     # Our annualized return matches `empyrical.annual_return(day_returns)` whereas
@@ -115,31 +129,37 @@ def compute_stats(
     s.loc['Volatility (Ann.) [%]'] = np.sqrt((day_returns.var(ddof=int(bool(day_returns.shape))) + (1 + gmean_day_return)**2)**annual_trading_days - (1 + gmean_day_return)**(2*annual_trading_days)) * 100  # noqa: E501
     # s.loc['Return (Ann.) [%]'] = gmean_day_return * annual_trading_days * 100
     # s.loc['Risk (Ann.) [%]'] = day_returns.std(ddof=1) * np.sqrt(annual_trading_days) * 100
-
+    
     # Our Sharpe mismatches `empyrical.sharpe_ratio()` because they use arithmetic mean return
     # and simple standard deviation
-    s.loc['Sharpe Ratio'] = (s.loc['Return (Ann.) [%]'] - risk_free_rate) / (s.loc['Volatility (Ann.) [%]'] or np.nan)  # noqa: E501
+    s.loc['Sharpe Ratio'] = np.clip((s.loc['Return (Ann.) [%]'] - risk_free_rate) / (s.loc['Volatility (Ann.) [%]'] or np.nan), 0, np.inf)  # noqa: E501
     # Our Sortino mismatches `empyrical.sortino_ratio()` because they use arithmetic mean return
-    s.loc['Sortino Ratio'] = (annualized_return - risk_free_rate) / (np.sqrt(np.mean(day_returns.clip(-np.inf, 0)**2)) * np.sqrt(annual_trading_days))  # noqa: E501
+    s.loc['Sortino Ratio'] = np.clip((annualized_return - risk_free_rate) / (np.sqrt(np.mean(day_returns.clip(-np.inf, 0)**2)) * np.sqrt(annual_trading_days)), 0, np.inf)  # noqa: E501
     max_dd = -np.nan_to_num(dd.max())
-    s.loc['Calmar Ratio'] = annualized_return / (-max_dd or np.nan)
+    # Add Alpha and Beta  
+    s.loc['Alpha [%]'] = s.loc['Return [%]'] - s.loc['Buy & Hold Return [%]']
+    s.loc['Beta'] = round(cov_matrix[0, 1] / cov_matrix[1, 1], 2)
+    s.loc['Calmar Ratio'] = np.clip(annualized_return / (-max_dd or np.nan), 0, np.inf)
     s.loc['Max. Drawdown [%]'] = max_dd * 100
     s.loc['Avg. Drawdown [%]'] = -dd_peaks.mean() * 100
     s.loc['Max. Drawdown Duration'] = _round_timedelta(dd_dur.max())
     s.loc['Avg. Drawdown Duration'] = _round_timedelta(dd_dur.mean())
+    s.loc['Profit Factor'] = returns[returns > 0].sum() / (abs(returns[returns < 0].sum()) or np.nan)  # noqa: E501
     s.loc['# Trades'] = n_trades = len(trades_df)
-    win_rate = np.nan if not n_trades else (pl > 0).mean()
-    s.loc['Win Rate [%]'] = win_rate * 100
+    s.loc['Win Rate [%]'] = np.nan if not n_trades else (pl > 0).sum() / n_trades * 100  # noqa: E501
+    s.loc['Best Trade [$]'] = pl.max()
+    s.loc['Worst Trade [$]'] = pl.min()
+    s.loc['Avg. Trade [$]'] = pl.mean()
+    s.loc['Avg. Win [$]'] = pl[pl > 0].mean()
+    s.loc['Avg. Loss [$]'] = pl[pl < 0].mean()
     s.loc['Best Trade [%]'] = returns.max() * 100
     s.loc['Worst Trade [%]'] = returns.min() * 100
     mean_return = geometric_mean(returns)
     s.loc['Avg. Trade [%]'] = mean_return * 100
     s.loc['Max. Trade Duration'] = _round_timedelta(durations.max())
     s.loc['Avg. Trade Duration'] = _round_timedelta(durations.mean())
-    s.loc['Profit Factor'] = returns[returns > 0].sum() / (abs(returns[returns < 0].sum()) or np.nan)  # noqa: E501
     s.loc['Expectancy [%]'] = returns.mean() * 100
     s.loc['SQN'] = np.sqrt(n_trades) * pl.mean() / (pl.std() or np.nan)
-    s.loc['Kelly Criterion'] = win_rate - (1 - win_rate) / (pl[pl > 0].mean() / -pl[pl < 0].mean())
 
     s.loc['_strategy'] = strategy_instance
     s.loc['_equity_curve'] = equity_df
@@ -153,4 +173,9 @@ class _Stats(pd.Series):
     def __repr__(self):
         # Prevent expansion due to _equity and _trades dfs
         with pd.option_context('max_colwidth', 20):
-            return super().__repr__()
+            lines = (super().__repr__().split('\n'))
+            lines.insert(5, '')
+            lines.insert(10, '')
+            lines.insert(18, '')
+            lines.insert(21, '')
+            return '\n'.join(lines)
