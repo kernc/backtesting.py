@@ -208,8 +208,7 @@ class Strategy(metaclass=ABCMeta):
 
         See also `Strategy.sell()`.
         """
-        assert 0 < size < 1 or round(size) == size, \
-            "size must be a positive fraction of equity, or a positive whole number of units"
+        assert size > 0, 'size must be positive.'
         return self._broker.new_order(size, limit, stop, sl, tp, tag)
 
     def sell(self, *,
@@ -228,8 +227,7 @@ class Strategy(metaclass=ABCMeta):
             If you merely want to close an existing long position,
             use `Position.close()` or `Trade.close()`.
         """
-        assert 0 < size < 1 or round(size) == size, \
-            "size must be a positive fraction of equity, or a positive whole number of units"
+        assert size > 0, "size must be positive."
         return self._broker.new_order(-size, limit, stop, sl, tp, tag)
 
     @property
@@ -555,7 +553,7 @@ class Trade:
     def close(self, portion: float = 1.):
         """Place new `Order` to close `portion` of the trade at next market price."""
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
-        size = copysign(max(1, round(abs(self.__size) * portion)), -self.__size)
+        size = copysign(max(1, abs(self.__size) * portion), -self.__size)
         order = Order(self.__broker, size, parent_trade=self, tag=self.__tag)
         self.__broker.orders.insert(0, order)
 
