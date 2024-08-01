@@ -329,7 +329,7 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
 
 
 def random_ohlc_data(example_data: pd.DataFrame, *,
-                     frac=1., random_state: Optional[int] = None) -> pd.DataFrame:
+                     frac=1., random_state: Optional[int] = None) -> Generator[pd.DataFrame, None, None]:
     """
     OHLC data generator. The generated OHLC data has basic
     [descriptive statistics](https://en.wikipedia.org/wiki/Descriptive_statistics)
