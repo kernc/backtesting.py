@@ -54,6 +54,12 @@ kindly have a look at some similar alternative Python backtesting frameworks:
   stock picking, backtesting, and unified visualization. Documentation in Chinese.
 - [AwesomeQuant](https://github.com/wilsonfreitas/awesome-quant#trading--backtesting) -
   A somewhat curated list of libraries, packages, and resources for quants.
+- [Nautilus Trader](https://github.com/nautechsystems/nautilus_trader) -
+  high-performance, production-grade algorithmic trading platform written in Rust/Python,
+  with event-driven engine to backtest portfolios of automated trading strategies,
+  and also deploy those same strategies live, with no code changes.
+
+
 
 #### Obsolete / Unmaintained
 
