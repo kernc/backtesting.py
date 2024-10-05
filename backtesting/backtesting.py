@@ -24,7 +24,9 @@ from numpy.random import default_rng
 
 try:
     from tqdm.auto import tqdm as _tqdm
+    from tqdm.auto import trange as _trange
     _tqdm = partial(_tqdm, leave=False)
+    _trange = partial(_trange, leave=False)
 except ImportError:
     def _tqdm(seq, **_):
         return seq
@@ -1202,7 +1204,7 @@ class Backtest:
         # np.nan >= 3 is not invalid; it's False.
         with np.errstate(invalid='ignore'):
 
-            for i in range(start, len(self._data)):
+            for i in _trange(start, len(self._data),):
                 # Prepare data and indicators for `next` call
                 data._set_length(i + 1)
                 for attr, indicator in indicator_attrs:
