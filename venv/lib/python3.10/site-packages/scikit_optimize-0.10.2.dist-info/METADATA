@@ -1,0 +1,299 @@
+Metadata-Version: 2.1
+Name: scikit-optimize
+Version: 0.10.2
+Summary: Sequential model-based optimization toolbox.
+Author: The scikit-optimize contributors
+License: BSD 3-clause
+Project-URL: Homepage, https://scikit-optimize.readthedocs.io/en/latest/contents.html
+Project-URL: Source Code, https://github.com/holgern/scikit-optimize
+Project-URL: Bug Tracker, https://github.com/holgern/scikit-optimize/issues
+Classifier: Intended Audience :: Science/Research
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: BSD License
+Classifier: Programming Language :: Python
+Classifier: Topic :: Software Development
+Classifier: Topic :: Scientific/Engineering
+Classifier: Operating System :: Microsoft :: Windows
+Classifier: Operating System :: POSIX
+Classifier: Operating System :: Unix
+Classifier: Operating System :: MacOS
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Description-Content-Type: text/x-rst
+License-File: LICENSE
+License-File: AUTHORS.md
+Requires-Dist: joblib >=0.11
+Requires-Dist: pyaml >=16.9
+Requires-Dist: numpy >=1.20.3
+Requires-Dist: scipy >=1.1.0
+Requires-Dist: scikit-learn >=1.0.0
+Requires-Dist: packaging >=21.3
+Provides-Extra: dev
+Requires-Dist: flake8 ; extra == 'dev'
+Requires-Dist: pandas ; extra == 'dev'
+Requires-Dist: pytest ; extra == 'dev'
+Requires-Dist: pytest-cov ; extra == 'dev'
+Requires-Dist: pytest-xdist ; extra == 'dev'
+Provides-Extra: doc
+Requires-Dist: memory-profiler ; extra == 'doc'
+Requires-Dist: numpydoc ; extra == 'doc'
+Requires-Dist: sphinx ; extra == 'doc'
+Requires-Dist: pydata-sphinx-theme ; extra == 'doc'
+Requires-Dist: sphinx-gallery >=0.6 ; extra == 'doc'
+Provides-Extra: plots
+Requires-Dist: matplotlib >=2.0.0 ; extra == 'plots'
+
+
+|Logo|
+
+|pypi| |conda| |CI Status| |binder| |codecov| |Zenodo DOI|
+
+Scikit-Optimize
+===============
+
+Scikit-Optimize, or ``skopt``, is a simple and efficient library for
+optimizing (very) expensive and noisy black-box functions. It implements
+several methods for sequential model-based optimization. ``skopt`` aims
+to be accessible and easy to use in many contexts.
+
+The library is built on top of NumPy, SciPy, and Scikit-Learn.
+
+We do not perform gradient-based optimization. For gradient-based
+optimization algorithms look at
+``scipy.optimize``
+`here <http://docs.scipy.org/doc/scipy/reference/optimize.html>`_.
+
+.. figure:: https://raw.githubusercontent.com/holgern/scikit-optimize/main/media/bo-objective.png
+   :alt: Approximated objective
+
+Approximated objective function after 50 iterations of ``gp_minimize``.
+Plot made using ``skopt.plots.plot_objective``.
+
+Maintaining the codebase
+------------------------
+This repo is a copy of the original repositoy at https://github.com/scikit-optimize/scikit-optimize/.
+As the original repo is now in read-only mode, i decided to continue the development on it on my own.
+I still have credentials for pypi, so I will publish new releases at https://pypi.org/project/scikit-optimize/.
+I did my best to include all open PR since 2021 in the new release of scikit-optimize 0.10.
+
+https://scikit-optimize.github.io/ has been moved to http://scikit-optimize.readthedocs.io/.
+
+Important links
+---------------
+
+-  Project website https://scikit-optimize.readthedocs.io/
+-  Example notebooks - can be found in examples_.
+-  `Discussion forum
+   <https://github.com/scikit-optimize/scikit-optimize/discussions>`__
+-  Issue tracker -
+   https://github.com/holgern/scikit-optimize/issues
+-  Releases - https://pypi.python.org/pypi/scikit-optimize
+-  Conda feedstock - https://github.com/conda-forge/scikit-optimize-feedstock
+
+Install
+-------
+
+scikit-optimize requires
+
+* Python >= 3.8
+* NumPy (>= 1.20.3)
+* SciPy (>= 0.19.1)
+* joblib (>= 0.11)
+* scikit-learn >= 1.0.0
+* matplotlib >= 2.0.0
+
+You can install the latest release with:
+::
+
+    pip install scikit-optimize
+
+This installs the essentials. To install plotting functionality,
+you can instead do:
+::
+
+    pip install 'scikit-optimize[plots]'
+
+This will additionally install Matplotlib.
+
+If you're using Anaconda platform, there is a `conda-forge <https://conda-forge.org/>`_
+package of scikit-optimize:
+::
+
+    conda install -c conda-forge scikit-optimize
+
+Using conda-forge is probably the easiest way to install scikit-optimize on
+Windows.
+
+
+Getting started
+---------------
+
+Find the minimum of the noisy function ``f(x)`` over the range
+``-2 < x < 2`` with ``skopt``:
+
+.. code:: python
+
+    import numpy as np
+    from skopt import gp_minimize
+
+    def f(x):
+        return (np.sin(5 * x[0]) * (1 - np.tanh(x[0] ** 2)) +
+                np.random.randn() * 0.1)
+
+    res = gp_minimize(f, [(-2.0, 2.0)])
+
+
+For more control over the optimization loop you can use the ``skopt.Optimizer``
+class:
+
+.. code:: python
+
+    from skopt import Optimizer
+
+    opt = Optimizer([(-2.0, 2.0)])
+
+    for i in range(20):
+        suggested = opt.ask()
+        y = f(suggested)
+        opt.tell(suggested, y)
+        print('iteration:', i, suggested, y)
+
+
+Read our `introduction to bayesian
+optimization <https://scikit-optimize.readthedocs.io/en/latest/auto_examples/bayesian-optimization.html>`__
+and the other examples_.
+
+
+Development
+-----------
+
+The library is still experimental and under development. Checkout
+the `next
+milestone <https://github.com/holgern/scikit-optimize/milestones>`__
+for the plans for the next release or look at some `easy
+issues <https://github.com/holgern/scikit-optimize/issues?q=is%3Aissue+is%3Aopen+label%3AEasy>`__
+to get started contributing.
+
+The development version can be installed through:
+
+::
+
+    git clone https://github.com/holgern/scikit-optimize.git
+    cd scikit-optimize
+    pip install -e .
+
+Run all tests by executing ``pytest`` in the top level directory.
+
+To only run the subset of tests with short run time, you can use ``pytest -m 'fast_test'`` (``pytest -m 'slow_test'`` is also possible). To exclude all slow running tests try ``pytest -m 'not slow_test'``.
+
+This is implemented using pytest `attributes <https://docs.pytest.org/en/latest/mark.html>`__. If a tests runs longer than 1 second, it is marked as slow, else as fast.
+
+All contributors are welcome!
+
+
+
+Pre-commit-config
+-----------------
+
+Installation
+~~~~~~~~~~~~
+
+::
+
+    pip install pre-commit
+
+
+Using homebrew
+~~~~~~~~~~~~~~
+::
+
+    brew install pre-commit
+
+    pre-commit --version
+    pre-commit 2.10.0
+
+Install the git hook scripts
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+::
+
+    pre-commit install
+
+
+Run against all the files
+~~~~~~~~~~~~~~~~~~~~~~~~~
+::
+
+    pre-commit run --all-files
+    pre-commit run --show-diff-on-failure --color=always --all-files
+
+
+Update package rev in pre-commit yaml
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+::
+
+    pre-commit autoupdate
+    pre-commit run --show-diff-on-failure --color=always --all-files
+
+
+Making a Release
+~~~~~~~~~~~~~~~~
+
+The release procedure is almost completely automated. By tagging a new release,
+CI will build all required packages and push them to PyPI. To make a release,
+create a new issue and work through the following checklist:
+
+* [ ] check if the dependencies in `setup.py` are valid or need unpinning,
+* [ ] check that the `doc/whats_new/v0.X.rst` is up-to-date,
+* [ ] did the last build of master succeed?
+* [ ] create a [new release](https://github.com/holgern/scikit-optimize/releases),
+* [ ] ping [conda-forge](https://github.com/conda-forge/scikit-optimize-feedstock).
+
+Before making a release, we usually create a release candidate. If the next
+release is v0.X, then the release candidate should be tagged v0.Xrc1.
+Mark the release candidate as a "pre-release" on GitHub when you tag it.
+
+Made possible by
+----------------
+
+The scikit-optimize project was made possible with the support of
+
+.. image:: https://avatars1.githubusercontent.com/u/18165687?v=4&s=128
+   :alt: Wild Tree Tech
+   :target: https://wildtreetech.com
+
+.. image:: https://i.imgur.com/lgxboT5.jpg
+    :alt: NYU Center for Data Science
+    :target: https://cds.nyu.edu/
+
+.. image:: https://i.imgur.com/V1VSIvj.jpg
+    :alt: NSF
+    :target: https://www.nsf.gov
+
+.. image:: https://i.imgur.com/3enQ6S8.jpg
+    :alt: Northrop Grumman
+    :target: https://www.northropgrumman.com/Pages/default.aspx
+
+If your employer allows you to work on scikit-optimize during the day and would like
+recognition, feel free to add them to the "Made possible by" list.
+
+
+.. |pypi| image:: https://img.shields.io/pypi/v/scikit-optimize.svg
+   :target: https://pypi.python.org/pypi/scikit-optimize
+.. |conda| image:: https://anaconda.org/conda-forge/scikit-optimize/badges/version.svg
+   :target: https://anaconda.org/conda-forge/scikit-optimize
+.. |CI Status| image:: https://github.com/holgern/scikit-optimize/actions/workflows/ci.yml/badge.svg?branch=main
+   :target: https://github.com/holgern/scikit-optimize/actions/workflows/ci.yml?query=branch%3Amain
+.. |Logo| image:: https://avatars2.githubusercontent.com/u/18578550?v=4&s=80
+.. |binder| image:: https://mybinder.org/badge.svg
+   :target: https://mybinder.org/v2/gh/holgern/scikit-optimize/main?filepath=examples
+.. |Zenodo DOI| image:: https://zenodo.org/badge/768077165.svg
+   :target: https://zenodo.org/doi/10.5281/zenodo.10804382
+.. |scipy.optimize| replace:: ``scipy.optimize``
+.. _scipy.optimize: https://docs.scipy.org/doc/scipy/reference/optimize.html
+.. _examples: https://scikit-optimize.readthedocs.io/en/latest/auto_examples/index.html
+.. |codecov| image:: https://codecov.io/gh/holgern/scikit-optimize/graph/badge.svg?token=9Mp32drAPj
+   :target: https://codecov.io/gh/holgern/scikit-optimize

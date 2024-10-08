@@ -20,4 +20,4 @@ doc/build/*
 **/.ipynb_checkpoints
 *~*
 
-.venv/
+venv/
