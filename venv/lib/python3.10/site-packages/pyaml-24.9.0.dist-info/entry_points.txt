@@ -1,2 +1,0 @@
-[console_scripts]
-pyaml = pyaml.__main__:main

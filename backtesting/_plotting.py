@@ -440,7 +440,7 @@ return this.labels[index] || "";
         """Superimposed, downsampled vbars"""
         time_resolution = pd.DatetimeIndex(df['datetime']).resolution
         resample_rule = (superimpose if isinstance(superimpose, str) else
-                         dict(day='ME',
+                         dict(day='M',
                               hour='D',
                               minute='H',
                               second='T',
