@@ -611,7 +611,7 @@ class TestOptimize(TestCase):
                 stats2 = Backtest(df, SmaCross).optimize(**kw)
 
         self.assertIn('multiprocessing support', cm.warning.args[0])
-        assert stats1.filter('[^_]').equals(stats2.filter('[^_]')), (stats1, stats2)
+        assert stats1.filter(chars := tuple('[^_]')).equals(stats2.filter(chars)), (stats1, stats2)
 
     def test_optimize_invalid_param(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
