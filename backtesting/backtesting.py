@@ -13,7 +13,7 @@ from abc import ABCMeta, abstractmethod
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import copy
 from functools import lru_cache, partial
-from itertools import chain, compress, product, repeat
+from itertools import chain, product, repeat
 from math import copysign
 from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
@@ -1278,11 +1278,10 @@ class Backtest:
 
         * `"grid"` which does an exhaustive (or randomized) search over the
           cartesian product of parameter combinations, and
-        * `"skopt"` which finds close-to-optimal strategy parameters using
+        * `"sambo"` which finds close-to-optimal strategy parameters using
           [model-based optimization], making at most `max_tries` evaluations.
 
-        [model-based optimization]: \
-            https://scikit-optimize.github.io/stable/auto_examples/bayesian-optimization.html
+        [model-based optimization]: https://sambo-optimization.github.io
 
         `max_tries` is the maximal number of strategy runs to perform.
         If `method="grid"`, this results in randomized grid search.
@@ -1290,7 +1289,7 @@ class Backtest:
         number of runs to approximately that fraction of full grid space.
         Alternatively, if integer, it denotes the absolute maximum number
         of evaluations. If unspecified (default), grid search is exhaustive,
-        whereas for `method="skopt"`, `max_tries` is set to 200.
+        whereas for `method="sambo"`, `max_tries` is set to 200.
 
         `constraint` is a function that accepts a dict-like object of
         parameters (with values) and returns `True` when the combination
@@ -1303,16 +1302,14 @@ class Backtest:
         inspected or projected onto 2D to plot a heatmap
         (see `backtesting.lib.plot_heatmaps()`).
 
-        If `return_optimization` is True and `method = 'skopt'`,
+        If `return_optimization` is True and `method = 'sambo'`,
         in addition to result series (and maybe heatmap), return raw
         [`scipy.optimize.OptimizeResult`][OptimizeResult] for further
-        inspection, e.g. with [scikit-optimize]\
-        [plotting tools].
+        inspection, e.g. with [SAMBO]'s [plotting tools].
 
-        [OptimizeResult]: \
-            https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.OptimizeResult.html
-        [scikit-optimize]: https://scikit-optimize.github.io
-        [plotting tools]: https://scikit-optimize.github.io/stable/modules/plots.html
+        [OptimizeResult]: https://sambo-optimization.github.io/doc/sambo/#sambo.OptimizeResult
+        [SAMBO]: https://sambo-optimization.github.io
+        [plotting tools]: https://sambo-optimization.github.io/doc/sambo/plot.html
 
         If you want reproducible optimization results, set `random_state`
         to a fixed integer random seed.
@@ -1360,8 +1357,12 @@ class Backtest:
                             "the combination of parameters is admissible or not")
         assert callable(constraint), constraint
 
-        if return_optimization and method != 'skopt':
-            raise ValueError("return_optimization=True only valid if method='skopt'")
+        if method == 'skopt':
+            method = 'sambo'
+            warnings.warn('`Backtest.optimize(method="skopt")` is deprecated. Use `method="sambo"`.',
+                          DeprecationWarning, stacklevel=2)
+        if return_optimization and method != 'sambo':
+            raise ValueError("return_optimization=True only valid if method='sambo'")
 
         def _tuple(x):
             return x if isinstance(x, Sequence) and not isinstance(x, str) else (x,)
@@ -1456,18 +1457,13 @@ class Backtest:
                 return stats, heatmap
             return stats
 
-        def _optimize_skopt() -> Union[pd.Series,
+        def _optimize_sambo() -> Union[pd.Series,
                                        Tuple[pd.Series, pd.Series],
                                        Tuple[pd.Series, pd.Series, dict]]:
             try:
-                from skopt import forest_minimize
-                from skopt.callbacks import DeltaXStopper
-                from skopt.learning import ExtraTreesRegressor
-                from skopt.space import Categorical, Integer, Real
-                from skopt.utils import use_named_args
+                import sambo
             except ImportError:
-                raise ImportError("Need package 'scikit-optimize' for method='skopt'. "
-                                  "pip install scikit-optimize") from None
+                raise ImportError("Need package 'sambo' for method='sambo'. pip install sambo") from None
 
             nonlocal max_tries
             max_tries = (200 if max_tries is None else
@@ -1478,80 +1474,62 @@ class Backtest:
             for key, values in kwargs.items():
                 values = np.asarray(values)
                 if values.dtype.kind in 'mM':  # timedelta, datetime64
-                    # these dtypes are unsupported in skopt, so convert to raw int
+                    # these dtypes are unsupported in SAMBO, so convert to raw int
                     # TODO: save dtype and convert back later
                     values = values.astype(int)
 
                 if values.dtype.kind in 'iumM':
-                    dimensions.append(Integer(low=values.min(), high=values.max(), name=key))
+                    dimensions.append((values.min(), values.max() + 1))
                 elif values.dtype.kind == 'f':
-                    dimensions.append(Real(low=values.min(), high=values.max(), name=key))
+                    dimensions.append((values.min(), values.max()))
                 else:
-                    dimensions.append(Categorical(values.tolist(), name=key, transform='onehot'))
+                    dimensions.append(values.tolist())
 
             # Avoid recomputing re-evaluations:
-            # "The objective has been evaluated at this point before."
-            # https://github.com/scikit-optimize/scikit-optimize/issues/302
-            memoized_run = lru_cache()(lambda tup: self.run(**dict(tup)))
+            memoized_run = lru_cache()(lambda tup: self.run(**dict(tup)))  # XXX: Reeval if this needed?
+            progress = iter(_tqdm(repeat(None), total=max_tries, leave=False, desc='Backtest.optimize'))
+            _names = tuple(kwargs.keys())
 
-            # np.inf/np.nan breaks sklearn, np.finfo(float).max breaks skopt.plots.plot_objective
-            INVALID = 1e300
-            progress = iter(_tqdm(repeat(None), total=max_tries, desc='Backtest.optimize'))
-
-            @use_named_args(dimensions=dimensions)
-            def objective_function(**params):
+            def objective_function(x):
+                nonlocal progress, memoized_run, constraint, _names
                 next(progress)
-                # Check constraints
-                # TODO: Adjust after https://github.com/scikit-optimize/scikit-optimize/pull/971
-                if not constraint(AttrDict(params)):
-                    return INVALID
-                res = memoized_run(tuple(params.items()))
+                res = memoized_run(tuple(zip(_names, x)))
                 value = -maximize(res)
-                if np.isnan(value):
-                    return INVALID
-                return value
+                return 0 if np.isnan(value) else value
 
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    'ignore', 'The objective has been evaluated at this point before.')
+            def cons(x):
+                nonlocal constraint, _names
+                return constraint(AttrDict(zip(_names, x)))
 
-                res = forest_minimize(
-                    func=objective_function,
-                    dimensions=dimensions,
-                    n_calls=max_tries,
-                    base_estimator=ExtraTreesRegressor(n_estimators=20, min_samples_leaf=2),
-                    acq_func='LCB',
-                    kappa=3,
-                    n_initial_points=min(max_tries, 20 + 3 * len(kwargs)),
-                    initial_point_generator='lhs',  # 'sobel' requires n_initial_points ~ 2**N
-                    callback=DeltaXStopper(9e-7),
-                    random_state=random_state)
+            res = sambo.minimize(
+                fun=objective_function,
+                bounds=dimensions,
+                constraints=cons,
+                max_iter=max_tries,
+                method='sceua',
+                rng=random_state)
 
             stats = self.run(**dict(zip(kwargs.keys(), res.x)))
             output = [stats]
 
             if return_heatmap:
-                heatmap = pd.Series(dict(zip(map(tuple, res.x_iters), -res.func_vals)),
+                heatmap = pd.Series(dict(zip(map(tuple, res.xv), -res.funv)),
                                     name=maximize_key)
                 heatmap.index.names = kwargs.keys()
-                heatmap = heatmap[heatmap != -INVALID]
                 heatmap.sort_index(inplace=True)
                 output.append(heatmap)
 
             if return_optimization:
-                valid = res.func_vals != INVALID
-                res.x_iters = list(compress(res.x_iters, valid))
-                res.func_vals = res.func_vals[valid]
                 output.append(res)
 
             return stats if len(output) == 1 else tuple(output)
 
         if method == 'grid':
             output = _optimize_grid()
-        elif method == 'skopt':
-            output = _optimize_skopt()
+        elif method in ('sambo', 'skopt'):
+            output = _optimize_sambo()
         else:
-            raise ValueError(f"Method should be 'grid' or 'skopt', not {method!r}")
+            raise ValueError(f"Method should be 'grid' or 'sambo', not {method!r}")
         return output
 
     @staticmethod

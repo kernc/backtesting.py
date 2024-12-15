@@ -550,13 +550,13 @@ class TestOptimize(TestCase):
         with _tempfile() as f:
             bt.plot(filename=f, open_browser=False)
 
-    def test_method_skopt(self):
+    def test_method_sambo(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
-        res, heatmap, skopt_results = bt.optimize(
+        res, heatmap, sambo_results = bt.optimize(
             fast=range(2, 20), slow=np.arange(2, 20, dtype=object),
             constraint=lambda p: p.fast < p.slow,
             max_tries=30,
-            method='skopt',
+            method='sambo',
             return_optimization=True,
             return_heatmap=True,
             random_state=2)
@@ -564,7 +564,7 @@ class TestOptimize(TestCase):
         self.assertIsInstance(heatmap, pd.Series)
         self.assertGreater(heatmap.max(), 1.1)
         self.assertGreater(heatmap.min(), -2)
-        self.assertEqual(-skopt_results.fun, heatmap.max())
+        self.assertEqual(-sambo_results.fun, heatmap.max())
         self.assertEqual(heatmap.index.tolist(), heatmap.dropna().index.unique().tolist())
 
     def test_max_tries(self):
@@ -572,8 +572,8 @@ class TestOptimize(TestCase):
         OPT_PARAMS = {'fast': range(2, 10, 2), 'slow': [2, 5, 7, 9]}
         for method, max_tries, random_state in (('grid', 5, 0),
                                                 ('grid', .3, 0),
-                                                ('skopt', 7, 0),
-                                                ('skopt', .45, 0)):
+                                                ('sambo', 6, 0),
+                                                ('sambo', .42, 0)):
             with self.subTest(method=method,
                               max_tries=max_tries,
                               random_state=random_state):

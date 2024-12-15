@@ -133,10 +133,10 @@ def plot_heatmaps(heatmap: pd.Series,
 
     .. todo::
         Lay heatmaps out lower-triangular instead of in a simple grid.
-        Like [`skopt.plots.plot_objective()`][plot_objective] does.
+        Like [`sambo.plot.plot_objective()`][plot_objective] does.
 
     [plot_objective]: \
-        https://scikit-optimize.github.io/stable/modules/plots.html#plot-objective
+        https://sambo-optimization.github.io/doc/sambo/plot.html#sambo.plot.plot_objective
     """
     return _plot_heatmaps(heatmap, agg, ncols, filename, plot_width, open_browser)
 

@@ -46,8 +46,8 @@ if __name__ == '__main__':
             'test': [
                 'seaborn',
                 'matplotlib',
-                'scikit-learn <= 1.1.3',  # Pinned due to boken scikit-optimize
-                'scikit-optimize',
+                'scikit-learn',
+                'sambo',
             ],
             'dev': [
                 'ruff==0.0.160',
