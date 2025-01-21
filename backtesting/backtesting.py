@@ -5,6 +5,9 @@ module directly, e.g.
 
     from backtesting import Backtest, Strategy
 """
+
+from __future__ import annotations
+
 import multiprocessing as mp
 import os
 import sys
@@ -200,9 +203,10 @@ class Strategy(metaclass=ABCMeta):
             stop: Optional[float] = None,
             sl: Optional[float] = None,
             tp: Optional[float] = None,
-            tag: object = None):
+            tag: object = None) -> 'Order':
         """
-        Place a new long order. For explanation of parameters, see `Order` and its properties.
+        Place a new long order and return it. For explanation of parameters, see `Order`
+        and its properties.
 
         See `Position.close()` and `Trade.close()` for closing existing positions.
 
@@ -218,9 +222,10 @@ class Strategy(metaclass=ABCMeta):
              stop: Optional[float] = None,
              sl: Optional[float] = None,
              tp: Optional[float] = None,
-             tag: object = None):
+             tag: object = None) -> 'Order':
         """
-        Place a new short order. For explanation of parameters, see `Order` and its properties.
+        Place a new short order and return it. For explanation of parameters, see `Order`
+        and its properties.
 
         See also `Strategy.buy()`.
 
@@ -745,7 +750,7 @@ class _Broker:
                   tp: Optional[float] = None,
                   tag: object = None,
                   *,
-                  trade: Optional[Trade] = None):
+                  trade: Optional[Trade] = None) -> Order:
         """
         Argument size indicates whether the order is long or short
         """
