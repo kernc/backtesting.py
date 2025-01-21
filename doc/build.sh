@@ -67,6 +67,9 @@ fi
 echo
 echo 'Testing for broken links'
 echo
+problematic_urls='
+https://www.gnu.org/licenses/agpl-3.0.html
+'
 pushd "$BUILDROOT" >/dev/null
 WEBSITE='https://kernc\.github\.io/backtesting\.py'
 grep -PR '<a .*?href=' |
@@ -95,7 +98,10 @@ print(html.unescape(unquote(sys.argv[-1])))' "$url")"
             if [ -f "$target_file" ]; then continue; fi
 
             url="${url// /%20}"
-            curl --silent --fail --retry 5 --retry-delay 5 --user-agent 'Mozilla/5.0 Firefox 101' "$url" >/dev/null 2>&1 ||
+            echo "$url"
+            curl --silent --fail --retry 2 --retry-delay 2 --connect-timeout 10 \
+                    --user-agent 'Mozilla/5.0 Firefox 128' "$url" >/dev/null 2>&1 ||
+                grep -qF "$url" <(echo "$problematic_urls") ||
                 die "broken link in $file:  $url"
         done
     done
