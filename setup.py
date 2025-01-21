@@ -9,7 +9,7 @@ if __name__ == '__main__':
     from setuptools import setup, find_packages
 
     setup(
-        name='Backtesting',
+        name='backtesting',
         description="Backtest trading strategies in Python",
         license='AGPL-3.0',
         url='https://kernc.github.io/backtesting.py/',
