@@ -135,15 +135,22 @@ hm = heatmap.groupby(['n1', 'n2']).mean().unstack()
 hm = hm[::-1]
 hm
 
-# Let's plot this table using the excellent [_Seaborn_](https://seaborn.pydata.org) package:
+# Let's plot this table as a heatmap:
 
 # +
 # %matplotlib inline
 
-import seaborn as sns
+import matplotlib.pyplot as plt
 
-
-sns.heatmap(hm[::-1], cmap='viridis')
+fig, ax = plt.subplots()
+im = ax.imshow(hm, cmap='viridis')
+_ = (
+    ax.set_xticks(range(len(hm.columns)), labels=hm.columns),
+    ax.set_yticks(range(len(hm)), labels=hm.index),
+    ax.set_xlabel('n2'),
+    ax.set_ylabel('n1'),
+    ax.figure.colorbar(im, ax=ax),
+)
 # -
 
 # We see that, on average, we obtain the highest result using trend-determining parameters `n1=30` and `n2=100` or `n1=70` and `n2=80`,

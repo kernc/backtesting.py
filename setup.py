@@ -44,7 +44,6 @@ if __name__ == '__main__':
                 'jupyter_client',  # for nbconvert
             ],
             'test': [
-                'seaborn',
                 'matplotlib',
                 'scikit-learn',
                 'sambo',
