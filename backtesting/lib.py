@@ -107,7 +107,7 @@ def crossover(series1: Sequence, series2: Sequence) -> bool:
         (series2, series2) if isinstance(series2, Number) else
         series2)
     try:
-        return series1[-2] < series2[-2] and series1[-1] > series2[-1]
+        return series1[-2] < series2[-2] and series1[-1] > series2[-1]  # type: ignore
     except IndexError:
         return False
 
@@ -133,10 +133,10 @@ def plot_heatmaps(heatmap: pd.Series,
 
     .. todo::
         Lay heatmaps out lower-triangular instead of in a simple grid.
-        Like [`skopt.plots.plot_objective()`][plot_objective] does.
+        Like [`sambo.plot.plot_objective()`][plot_objective] does.
 
     [plot_objective]: \
-        https://scikit-optimize.github.io/stable/modules/plots.html#plot-objective
+        https://sambo-optimization.github.io/doc/sambo/plot.html#sambo.plot.plot_objective
     """
     return _plot_heatmaps(heatmap, agg, ncols, filename, plot_width, open_browser)
 
@@ -194,7 +194,7 @@ def compute_stats(
         equity[:] = stats._equity_curve.Equity.iloc[0]
         for t in trades.itertuples(index=False):
             equity.iloc[t.EntryBar:] += t.PnL
-    return _compute_stats(trades=trades, equity=equity, ohlc_data=data,
+    return _compute_stats(trades=trades, equity=equity.values, ohlc_data=data,
                           risk_free_rate=risk_free_rate, strategy_instance=stats._strategy)
 
 
@@ -278,10 +278,11 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
     if func is None:
         def func(x, *_, **__):
             return x
+    assert callable(func), 'resample_apply(func=) must be callable'
 
     if not isinstance(series, (pd.Series, pd.DataFrame)):
         assert isinstance(series, _Array), \
-            'resample_apply() takes either a `pd.Series`, `pd.DataFrame`, ' \
+            'resample_apply(series=) must be `pd.Series`, `pd.DataFrame`, ' \
             'or a `Strategy.data.*` array'
         series = series.s
 
@@ -304,7 +305,7 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
             strategy_I = frame.f_locals['self'].I             # type: ignore
             break
     else:
-        def strategy_I(func, *args, **kwargs):
+        def strategy_I(func, *args, **kwargs):  # noqa: F811
             return func(*args, **kwargs)
 
     def wrap_func(resampled, *args, **kwargs):
