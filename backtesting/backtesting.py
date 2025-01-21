@@ -1393,7 +1393,7 @@ class Backtest:
                             for params in (AttrDict(params)
                                            for params in product(*(zip(repeat(k), _tuple(v))
                                                                    for k, v in kwargs.items())))
-                            if constraint(params)  # type: ignore
+                            if constraint(params)
                             and rand() <= grid_frac]
             if not param_combos:
                 raise ValueError('No admissible parameter combinations to test')
@@ -1419,7 +1419,7 @@ class Backtest:
             # in a copy-on-write manner, achieving better performance/RAM benefit.
             backtest_uuid = np.random.random()
             param_batches = list(_batch(param_combos))
-            Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)  # type: ignore
+            Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)
             try:
                 # If multiprocessing start method is 'fork' (i.e. on POSIX), use
                 # a pool of processes to compute results in parallel.

@@ -107,7 +107,7 @@ def crossover(series1: Sequence, series2: Sequence) -> bool:
         (series2, series2) if isinstance(series2, Number) else
         series2)
     try:
-        return series1[-2] < series2[-2] and series1[-1] > series2[-1]
+        return series1[-2] < series2[-2] and series1[-1] > series2[-1]  # type: ignore
     except IndexError:
         return False
 
