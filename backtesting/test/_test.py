@@ -306,6 +306,7 @@ class TestBacktest(TestCase):
                 'Return (Ann.) [%]': 21.180255813792282,
                 'Return [%]': 414.2298999999996,
                 'Volatility (Ann.) [%]': 36.49390889140787,
+                'CAGR [%]': 14.159843619607383,
                 'SQN': 1.0766187356697705,
                 'Kelly Criterion': 0.1518705127029717,
                 'Sharpe Ratio': 0.5803778344714113,
@@ -580,13 +581,13 @@ class TestOptimize(TestCase):
         with _tempfile() as f:
             bt.plot(filename=f, open_browser=False)
 
-    def test_method_skopt(self):
+    def test_method_sambo(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
-        res, heatmap, skopt_results = bt.optimize(
+        res, heatmap, sambo_results = bt.optimize(
             fast=range(2, 20), slow=np.arange(2, 20, dtype=object),
             constraint=lambda p: p.fast < p.slow,
             max_tries=30,
-            method='skopt',
+            method='sambo',
             return_optimization=True,
             return_heatmap=True,
             random_state=2)
@@ -594,7 +595,7 @@ class TestOptimize(TestCase):
         self.assertIsInstance(heatmap, pd.Series)
         self.assertGreater(heatmap.max(), 1.1)
         self.assertGreater(heatmap.min(), -2)
-        self.assertEqual(-skopt_results.fun, heatmap.max())
+        self.assertEqual(-sambo_results.fun, heatmap.max())
         self.assertEqual(heatmap.index.tolist(), heatmap.dropna().index.unique().tolist())
 
     def test_max_tries(self):
@@ -602,8 +603,8 @@ class TestOptimize(TestCase):
         OPT_PARAMS = {'fast': range(2, 10, 2), 'slow': [2, 5, 7, 9]}
         for method, max_tries, random_state in (('grid', 5, 0),
                                                 ('grid', .3, 0),
-                                                ('skopt', 7, 0),
-                                                ('skopt', .45, 0)):
+                                                ('sambo', 6, 0),
+                                                ('sambo', .42, 0)):
             with self.subTest(method=method,
                               max_tries=max_tries,
                               random_state=random_state):
@@ -613,22 +614,6 @@ class TestOptimize(TestCase):
                                          return_heatmap=True,
                                          **OPT_PARAMS)
                 self.assertEqual(len(heatmap), 6)
-
-    def test_nowrite_df(self):
-        # Test we don't write into passed data df by default.
-        # Important for copy-on-write in Backtest.optimize()
-        df = EURUSD.astype(float)
-        values = df.values.ctypes.data
-        assert values == df.values.ctypes.data
-
-        class S(SmaCross):
-            def init(self):
-                super().init()
-                assert values == self.data.df.values.ctypes.data
-
-        bt = Backtest(df, S)
-        _ = bt.run()
-        assert values == bt._data.values.ctypes.data
 
     def test_multiprocessing_windows_spawn(self):
         df = GOOG.iloc[:100]
@@ -640,7 +625,7 @@ class TestOptimize(TestCase):
                 stats2 = Backtest(df, SmaCross).optimize(**kw)
 
         self.assertIn('multiprocessing support', cm.warning.args[0])
-        assert stats1.filter('[^_]').equals(stats2.filter('[^_]')), (stats1, stats2)
+        assert stats1.filter(chars := tuple('[^_]')).equals(stats2.filter(chars)), (stats1, stats2)
 
     def test_optimize_invalid_param(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
@@ -701,7 +686,7 @@ class TestPlot(TestCase):
 
     def test_resolutions(self):
         with _tempfile() as f:
-            for rule in 'LSTHDWM':
+            for rule in 'ms s min h D W ME'.split():
                 with self.subTest(rule=rule):
                     df = EURUSD.iloc[:2].resample(rule).agg(OHLCV_AGG).dropna().iloc[:1100]
                     bt = Backtest(df, SmaCross)
@@ -779,8 +764,8 @@ class TestPlot(TestCase):
         bt = Backtest(GOOG, SmaCross)
         bt.run()
         import backtesting._plotting
-        with _tempfile() as f,\
-                patch.object(backtesting._plotting, '_MAX_CANDLES', 10),\
+        with _tempfile() as f, \
+                patch.object(backtesting._plotting, '_MAX_CANDLES', 10), \
                 self.assertWarns(UserWarning):
             bt.plot(filename=f, resample=True)
             # Give browser time to open before tempfile is removed
@@ -992,6 +977,26 @@ class TestDocs(TestCase):
         stats = Backtest(SHORT_DATA, SmaCross).run()
         for key in stats.index:
             self.assertIn(key, readme)
+
+
+class TestRegressions(TestCase):
+    def test_gh_521(self):
+        class S(Strategy):
+            def init(self): pass
+
+            def next(self):
+                if self.data.Close[-1] == 100:
+                    self.buy(size=1, sl=90)
+
+        df = pd.DataFrame({
+            'Open': [100, 100, 100, 50, 50],
+            'High': [100, 100, 100, 50, 50],
+            'Low': [100, 100, 100, 50, 50],
+            'Close': [100, 100, 100, 50, 50],
+        })
+        with self.assertWarnsRegex(UserWarning, 'index is not datetime'):
+            bt = Backtest(df, S, cash=100, trade_on_close=True)
+        self.assertEqual(bt.run()._trades['ExitPrice'][0], 50)
 
 
 if __name__ == '__main__':

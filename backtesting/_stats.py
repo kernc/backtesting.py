@@ -103,7 +103,8 @@ def compute_stats(
     gmean_day_return: float = 0
     day_returns = np.array(np.nan)
     annual_trading_days = np.nan
-    if isinstance(index, pd.DatetimeIndex):
+    is_datetime_index = isinstance(index, pd.DatetimeIndex)
+    if is_datetime_index:
         day_returns = equity_df['Equity'].resample('D').last().dropna().pct_change()
         gmean_day_return = geometric_mean(day_returns)
         annual_trading_days = float(
@@ -119,6 +120,9 @@ def compute_stats(
     s.loc['Volatility (Ann.) [%]'] = np.sqrt((day_returns.var(ddof=int(bool(day_returns.shape))) + (1 + gmean_day_return)**2)**annual_trading_days - (1 + gmean_day_return)**(2*annual_trading_days)) * 100  # noqa: E501
     # s.loc['Return (Ann.) [%]'] = gmean_day_return * annual_trading_days * 100
     # s.loc['Risk (Ann.) [%]'] = day_returns.std(ddof=1) * np.sqrt(annual_trading_days) * 100
+    if is_datetime_index:
+        time_in_years = (s.loc['Duration'].days + s.loc['Duration'].seconds / 86400) / annual_trading_days
+        s.loc['CAGR [%]'] = ((s.loc['Equity Final [$]'] / equity[0])**(1/time_in_years) - 1) * 100 if time_in_years else np.nan  # noqa: E501
 
     # Our Sharpe mismatches `empyrical.sharpe_ratio()` because they use arithmetic mean return
     # and simple standard deviation
@@ -155,6 +159,10 @@ def compute_stats(
 
 class _Stats(pd.Series):
     def __repr__(self):
-        # Prevent expansion due to _equity and _trades dfs
-        with pd.option_context('max_colwidth', 20):
+        with pd.option_context(
+            'display.max_colwidth', 20,  # Prevent expansion due to _equity and _trades dfs
+            'display.max_rows', len(self),  # Reveal self whole
+            'display.precision', 5,  # Enough for my eyes at least
+            # 'format.na_rep', '--',  # TODO: Enable once it works
+        ):
             return super().__repr__()

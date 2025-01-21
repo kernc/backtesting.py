@@ -6,9 +6,9 @@
 #       extension: .py
 #       format_name: light
 #       format_version: '1.5'
-#       jupytext_version: 1.6.0
+#       jupytext_version: 1.16.6
 #   kernelspec:
-#     display_name: Python 3
+#     display_name: Python 3 (ipykernel)
 #     language: python
 #     name: python3
 # ---
@@ -132,21 +132,29 @@ heatmap.sort_values().iloc[-3:]
 # Say we're mostly interested in how parameters `n1` and `n2`, on average, affect the outcome.
 
 hm = heatmap.groupby(['n1', 'n2']).mean().unstack()
+hm = hm[::-1]
 hm
 
-# Let's plot this table using the excellent [_Seaborn_](https://seaborn.pydata.org) package:
+# Let's plot this table as a heatmap:
 
 # +
 # %matplotlib inline
 
-import seaborn as sns
+import matplotlib.pyplot as plt
 
-
-sns.heatmap(hm[::-1], cmap='viridis')
+fig, ax = plt.subplots()
+im = ax.imshow(hm, cmap='viridis')
+_ = (
+    ax.set_xticks(range(len(hm.columns)), labels=hm.columns),
+    ax.set_yticks(range(len(hm)), labels=hm.index),
+    ax.set_xlabel('n2'),
+    ax.set_ylabel('n1'),
+    ax.figure.colorbar(im, ax=ax),
+)
 # -
 
-# We see that, on average, we obtain the highest result using trend-determining parameters `n1=40` and `n2=60`,
-# and it's not like other nearby combinations work similarly well — in our particular strategy, this combination really stands out.
+# We see that, on average, we obtain the highest result using trend-determining parameters `n1=30` and `n2=100` or `n1=70` and `n2=80`,
+# and it's not like other nearby combinations work similarly well — for our particular strategy, these combinations really stand out.
 #
 # Since our strategy contains several parameters, we might be interested in other relationships between their values.
 # We can use
@@ -163,29 +171,29 @@ plot_heatmaps(heatmap, agg='mean')
 # ## Model-based optimization
 #
 # Above, we used _randomized grid search_ optimization method. Any kind of grid search, however, might be computationally expensive for large data sets. In the follwing example, we will use
-# [_scikit-optimize_](https://scikit-optimize.github.io)
+# [_SAMBO Optimization_](https://sambo-optimization.github.io)
 # package to guide our optimization better informed using forests of decision trees.
-# The hyperparameter model is sequentially improved by evaluating the expensive function (the backtest) at the next best point, thereby hopefully converging to a set of optimal parameters with as few evaluations as possible.
+# The hyperparameter model is sequentially improved by evaluating the expensive function (the backtest) at the next best point, thereby hopefully converging to a set of optimal parameters with **as few evaluations as possible**.
 #
-# So, with `method="skopt"`:
+# So, with `method="sambo"`:
 
 # +
 # %%capture
 
-# ! pip install scikit-optimize  # This is a run-time dependency
+# ! pip install sambo  # This is a run-time dependency
 
 # +
-# %%time
+# #%%time
 
-stats_skopt, heatmap, optimize_result = backtest.optimize(
-    n1=[10, 100],      # Note: For method="skopt", we
+stats, heatmap, optimize_result = backtest.optimize(
+    n1=[10, 100],      # Note: For method="sambo", we
     n2=[20, 200],      # only need interval end-points
     n_enter=[10, 40],
     n_exit=[10, 30],
     constraint=lambda p: p.n_exit < p.n_enter < p.n1 < p.n2,
     maximize='Equity Final [$]',
-    method='skopt',
-    max_tries=200,
+    method='sambo',
+    max_tries=40,
     random_state=0,
     return_heatmap=True,
     return_optimization=True)
@@ -193,24 +201,27 @@ stats_skopt, heatmap, optimize_result = backtest.optimize(
 
 heatmap.sort_values().iloc[-3:]
 
-# Notice how the optimization runs somewhat slower even though `max_tries=` is the same. But that's due to the sequential nature of the algorithm and should actually perform rather comparably even in cases of _much larger parameter spaces_ where grid search would effectively blow up, but likely (hopefully) reaching a better local optimum than a randomized search would.
+# Notice how the optimization runs somewhat slower even though `max_tries=` is lower. This is due to the sequential nature of the algorithm and should actually perform quite comparably even in cases of _much larger parameter spaces_ where grid search would effectively blow up, likely reaching a better optimum than a simple randomized search would.
 # A note of warning, again, to take steps to avoid
 # [overfitting](https://en.wikipedia.org/wiki/Overfitting)
 # insofar as possible.
 #
 # Understanding the impact of each parameter on the computed objective function is easy in two dimensions, but as the number of dimensions grows, partial dependency plots are increasingly useful.
-# [Plotting tools from _scikit-optimize_](https://scikit-optimize.github.io/stable/modules/plots.html)
-# take care of many of the more mundane things needed to make good and informative plots of the parameter space:
+# [Plotting tools from _SAMBO_](https://sambo-optimization.github.io/doc/sambo/plot.html)
+# take care of the more mundane things needed to make good and informative plots of the parameter space.
+#
+# Note, because SAMBO internally only does _minimization_, the values in `optimize_result` are negated (less is better).
 
 # +
-from skopt.plots import plot_objective
+from sambo.plot import plot_objective
 
-_ = plot_objective(optimize_result, n_points=10)
+names = ['n1', 'n2', 'n_enter', 'n_exit']
+_ = plot_objective(optimize_result, names=names, estimator='et')
 
 # +
-from skopt.plots import plot_evaluations
+from sambo.plot import plot_evaluations
 
-_ = plot_evaluations(optimize_result, bins=10)
+_ = plot_evaluations(optimize_result, names=names)
 # -
 
 # Learn more by exploring further

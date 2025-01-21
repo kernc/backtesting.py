@@ -13,7 +13,7 @@ from abc import ABCMeta, abstractmethod
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import copy
 from functools import lru_cache, partial
-from itertools import chain, compress, product, repeat
+from itertools import chain, product, repeat
 from math import copysign
 from numbers import Number
 from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
@@ -126,7 +126,7 @@ class Strategy(metaclass=ABCMeta):
         try:
             value = func(*args, **kwargs)
         except Exception as e:
-            raise RuntimeError(f'Indicator "{name}" error') from e
+            raise RuntimeError(f'Indicator "{name}" error. See traceback above.') from e
 
         if isinstance(value, pd.DataFrame):
             value = value.values.T
@@ -208,7 +208,7 @@ class Strategy(metaclass=ABCMeta):
 
         See also `Strategy.sell()`.
         """
-        assert 0 < size < 1 or round(size) == size, \
+        assert 0 < size < 1 or round(size) == size >= 1, \
             "size must be a positive fraction of equity, or a positive whole number of units"
         return self._broker.new_order(size, limit, stop, sl, tp, tag)
 
@@ -228,7 +228,7 @@ class Strategy(metaclass=ABCMeta):
             If you merely want to close an existing long position,
             use `Position.close()` or `Trade.close()`.
         """
-        assert 0 < size < 1 or round(size) == size, \
+        assert 0 < size < 1 or round(size) == size >= 1, \
             "size must be a positive fraction of equity, or a positive whole number of units"
         return self._broker.new_order(-size, limit, stop, sl, tp, tag)
 
@@ -406,7 +406,7 @@ class Order:
         return self
 
     def __repr__(self):
-        return '<Order {}>'.format(', '.join(f'{param}={round(value, 5)}'
+        return '<Order {}>'.format(', '.join(f'{param}={try_(lambda: round(value, 5), value)!r}'
                                              for param, value in (
                                                  ('size', self.__size),
                                                  ('limit', self.__limit_price),
@@ -756,6 +756,7 @@ class _Broker:
         tp = tp and float(tp)
 
         is_long = size > 0
+        assert size != 0, size
         adjusted_price = self._adjusted_price(size)
 
         if is_long:
@@ -830,7 +831,6 @@ class _Broker:
     def _process_orders(self):
         data = self._data
         open, high, low = data.Open[-1], data.High[-1], data.Low[-1]
-        prev_close = data.Close[-2]
         reprocess_orders = False
 
         # Process orders
@@ -870,7 +870,9 @@ class _Broker:
                          max(stop_price or open, order.limit))
             else:
                 # Market-if-touched / market order
-                price = prev_close if self._trade_on_close else open
+                # Contingent orders always on next open
+                prev_close = data.Close[-2]
+                price = prev_close if self._trade_on_close and not order.is_contingent else open
                 price = (max(price, stop_price or -np.inf)
                          if order.is_long else
                          min(price, stop_price or np.inf))
@@ -1101,6 +1103,14 @@ class Backtest:
             Before v0.4.0, the commission was only applied once, like `spread` is now.
             If you want to keep the old behavior, simply set `spread` instead.
 
+        .. note::
+            With nonzero `commission`, long and short orders will be placed
+            at an adjusted price that is slightly higher or lower (respectively)
+            than the current price. See e.g.
+            [#153](https://github.com/kernc/backtesting.py/issues/153),
+            [#538](https://github.com/kernc/backtesting.py/issues/538),
+            [#633](https://github.com/kernc/backtesting.py/issues/633).
+
         `margin` is the required margin (ratio) of a leveraged account.
         No difference is made between initial and maintenance margins.
         To run the backtest using e.g. 50:1 leverge that your broker allows,
@@ -1192,31 +1202,32 @@ class Backtest:
             Start                     2004-08-19 00:00:00
             End                       2013-03-01 00:00:00
             Duration                   3116 days 00:00:00
-            Exposure Time [%]                     93.9944
-            Equity Final [$]                      51959.9
-            Equity Peak [$]                       75787.4
-            Return [%]                            419.599
-            Buy & Hold Return [%]                 703.458
-            Return (Ann.) [%]                      21.328
-            Volatility (Ann.) [%]                 36.5383
-            Sharpe Ratio                         0.583718
-            Sortino Ratio                         1.09239
-            Calmar Ratio                         0.444518
-            Max. Drawdown [%]                    -47.9801
+            Exposure Time [%]                    96.74115
+            Equity Final [$]                     51422.99
+            Equity Peak [$]                      75787.44
+            Return [%]                           414.2299
+            Buy & Hold Return [%]               703.45824
+            Return (Ann.) [%]                    21.18026
+            Volatility (Ann.) [%]                36.49391
+            CAGR [%]                             14.15984
+            Sharpe Ratio                          0.58038
+            Sortino Ratio                         1.08479
+            Calmar Ratio                          0.44144
+            Max. Drawdown [%]                   -47.98013
             Avg. Drawdown [%]                    -5.92585
             Max. Drawdown Duration      584 days 00:00:00
             Avg. Drawdown Duration       41 days 00:00:00
-            # Trades                                   65
-            Win Rate [%]                          46.1538
-            Best Trade [%]                         53.596
-            Worst Trade [%]                      -18.3989
-            Avg. Trade [%]                        2.35371
+            # Trades                                   66
+            Win Rate [%]                          46.9697
+            Best Trade [%]                       53.59595
+            Worst Trade [%]                     -18.39887
+            Avg. Trade [%]                        2.53172
             Max. Trade Duration         183 days 00:00:00
             Avg. Trade Duration          46 days 00:00:00
-            Profit Factor                         2.08802
-            Expectancy [%]                        8.79171
-            SQN                                  0.916893
-            Kelly Criterion                        0.6134
+            Profit Factor                         2.16795
+            Expectancy [%]                        3.27481
+            SQN                                   1.07662
+            Kelly Criterion                       0.15187
             _strategy                            SmaCross
             _equity_curve                           Eq...
             _trades                       Size  EntryB...
@@ -1315,11 +1326,10 @@ class Backtest:
 
         * `"grid"` which does an exhaustive (or randomized) search over the
           cartesian product of parameter combinations, and
-        * `"skopt"` which finds close-to-optimal strategy parameters using
+        * `"sambo"` which finds close-to-optimal strategy parameters using
           [model-based optimization], making at most `max_tries` evaluations.
 
-        [model-based optimization]: \
-            https://scikit-optimize.github.io/stable/auto_examples/bayesian-optimization.html
+        [model-based optimization]: https://sambo-optimization.github.io
 
         `max_tries` is the maximal number of strategy runs to perform.
         If `method="grid"`, this results in randomized grid search.
@@ -1327,7 +1337,7 @@ class Backtest:
         number of runs to approximately that fraction of full grid space.
         Alternatively, if integer, it denotes the absolute maximum number
         of evaluations. If unspecified (default), grid search is exhaustive,
-        whereas for `method="skopt"`, `max_tries` is set to 200.
+        whereas for `method="sambo"`, `max_tries` is set to 200.
 
         `constraint` is a function that accepts a dict-like object of
         parameters (with values) and returns `True` when the combination
@@ -1340,16 +1350,14 @@ class Backtest:
         inspected or projected onto 2D to plot a heatmap
         (see `backtesting.lib.plot_heatmaps()`).
 
-        If `return_optimization` is True and `method = 'skopt'`,
+        If `return_optimization` is True and `method = 'sambo'`,
         in addition to result series (and maybe heatmap), return raw
         [`scipy.optimize.OptimizeResult`][OptimizeResult] for further
-        inspection, e.g. with [scikit-optimize]\
-        [plotting tools].
+        inspection, e.g. with [SAMBO]'s [plotting tools].
 
-        [OptimizeResult]: \
-            https://docs.scipy.org/doc/scipy/reference/generated/scipy.optimize.OptimizeResult.html
-        [scikit-optimize]: https://scikit-optimize.github.io
-        [plotting tools]: https://scikit-optimize.github.io/stable/modules/plots.html
+        [OptimizeResult]: https://sambo-optimization.github.io/doc/sambo/#sambo.OptimizeResult
+        [SAMBO]: https://sambo-optimization.github.io
+        [plotting tools]: https://sambo-optimization.github.io/doc/sambo/plot.html
 
         If you want reproducible optimization results, set `random_state`
         to a fixed integer random seed.
@@ -1397,8 +1405,12 @@ class Backtest:
                             "the combination of parameters is admissible or not")
         assert callable(constraint), constraint
 
-        if return_optimization and method != 'skopt':
-            raise ValueError("return_optimization=True only valid if method='skopt'")
+        if method == 'skopt':
+            method = 'sambo'
+            warnings.warn('`Backtest.optimize(method="skopt")` is deprecated. Use `method="sambo"`.',
+                          DeprecationWarning, stacklevel=2)
+        if return_optimization and method != 'sambo':
+            raise ValueError("return_optimization=True only valid if method='sambo'")
 
         def _tuple(x):
             return x if isinstance(x, Sequence) and not isinstance(x, str) else (x,)
@@ -1429,7 +1441,7 @@ class Backtest:
                             for params in (AttrDict(params)
                                            for params in product(*(zip(repeat(k), _tuple(v))
                                                                    for k, v in kwargs.items())))
-                            if constraint(params)  # type: ignore
+                            if constraint(params)
                             and rand() <= grid_frac]
             if not param_combos:
                 raise ValueError('No admissible parameter combinations to test')
@@ -1455,7 +1467,7 @@ class Backtest:
             # in a copy-on-write manner, achieving better performance/RAM benefit.
             backtest_uuid = np.random.random()
             param_batches = list(_batch(param_combos))
-            Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)  # type: ignore
+            Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)
             try:
                 # If multiprocessing start method is 'fork' (i.e. on POSIX), use
                 # a pool of processes to compute results in parallel.
@@ -1480,31 +1492,25 @@ class Backtest:
             finally:
                 del Backtest._mp_backtests[backtest_uuid]
 
-            best_params = heatmap.idxmax()
-
-            if pd.isnull(best_params):
+            if pd.isnull(heatmap).all():
                 # No trade was made in any of the runs. Just make a random
                 # run so we get some, if empty, results
                 stats = self.run(**param_combos[0])
             else:
+                best_params = heatmap.idxmax(skipna=True)
                 stats = self.run(**dict(zip(heatmap.index.names, best_params)))
 
             if return_heatmap:
                 return stats, heatmap
             return stats
 
-        def _optimize_skopt() -> Union[pd.Series,
+        def _optimize_sambo() -> Union[pd.Series,
                                        Tuple[pd.Series, pd.Series],
                                        Tuple[pd.Series, pd.Series, dict]]:
             try:
-                from skopt import forest_minimize
-                from skopt.callbacks import DeltaXStopper
-                from skopt.learning import ExtraTreesRegressor
-                from skopt.space import Categorical, Integer, Real
-                from skopt.utils import use_named_args
+                import sambo
             except ImportError:
-                raise ImportError("Need package 'scikit-optimize' for method='skopt'. "
-                                  "pip install scikit-optimize") from None
+                raise ImportError("Need package 'sambo' for method='sambo'. pip install sambo") from None
 
             nonlocal max_tries
             max_tries = (200 if max_tries is None else
@@ -1515,80 +1521,62 @@ class Backtest:
             for key, values in kwargs.items():
                 values = np.asarray(values)
                 if values.dtype.kind in 'mM':  # timedelta, datetime64
-                    # these dtypes are unsupported in skopt, so convert to raw int
+                    # these dtypes are unsupported in SAMBO, so convert to raw int
                     # TODO: save dtype and convert back later
                     values = values.astype(int)
 
                 if values.dtype.kind in 'iumM':
-                    dimensions.append(Integer(low=values.min(), high=values.max(), name=key))
+                    dimensions.append((values.min(), values.max() + 1))
                 elif values.dtype.kind == 'f':
-                    dimensions.append(Real(low=values.min(), high=values.max(), name=key))
+                    dimensions.append((values.min(), values.max()))
                 else:
-                    dimensions.append(Categorical(values.tolist(), name=key, transform='onehot'))
+                    dimensions.append(values.tolist())
 
             # Avoid recomputing re-evaluations:
-            # "The objective has been evaluated at this point before."
-            # https://github.com/scikit-optimize/scikit-optimize/issues/302
-            memoized_run = lru_cache()(lambda tup: self.run(**dict(tup)))
+            memoized_run = lru_cache()(lambda tup: self.run(**dict(tup)))  # XXX: Reeval if this needed?
+            progress = iter(_tqdm(repeat(None), total=max_tries, leave=False, desc='Backtest.optimize'))
+            _names = tuple(kwargs.keys())
 
-            # np.inf/np.nan breaks sklearn, np.finfo(float).max breaks skopt.plots.plot_objective
-            INVALID = 1e300
-            progress = iter(_tqdm(repeat(None), total=max_tries, desc='Backtest.optimize'))
-
-            @use_named_args(dimensions=dimensions)
-            def objective_function(**params):
+            def objective_function(x):
+                nonlocal progress, memoized_run, constraint, _names
                 next(progress)
-                # Check constraints
-                # TODO: Adjust after https://github.com/scikit-optimize/scikit-optimize/pull/971
-                if not constraint(AttrDict(params)):
-                    return INVALID
-                res = memoized_run(tuple(params.items()))
+                res = memoized_run(tuple(zip(_names, x)))
                 value = -maximize(res)
-                if np.isnan(value):
-                    return INVALID
-                return value
+                return 0 if np.isnan(value) else value
 
-            with warnings.catch_warnings():
-                warnings.filterwarnings(
-                    'ignore', 'The objective has been evaluated at this point before.')
+            def cons(x):
+                nonlocal constraint, _names
+                return constraint(AttrDict(zip(_names, x)))
 
-                res = forest_minimize(
-                    func=objective_function,
-                    dimensions=dimensions,
-                    n_calls=max_tries,
-                    base_estimator=ExtraTreesRegressor(n_estimators=20, min_samples_leaf=2),
-                    acq_func='LCB',
-                    kappa=3,
-                    n_initial_points=min(max_tries, 20 + 3 * len(kwargs)),
-                    initial_point_generator='lhs',  # 'sobel' requires n_initial_points ~ 2**N
-                    callback=DeltaXStopper(9e-7),
-                    random_state=random_state)
+            res = sambo.minimize(
+                fun=objective_function,
+                bounds=dimensions,
+                constraints=cons,
+                max_iter=max_tries,
+                method='sceua',
+                rng=random_state)
 
             stats = self.run(**dict(zip(kwargs.keys(), res.x)))
             output = [stats]
 
             if return_heatmap:
-                heatmap = pd.Series(dict(zip(map(tuple, res.x_iters), -res.func_vals)),
+                heatmap = pd.Series(dict(zip(map(tuple, res.xv), -res.funv)),
                                     name=maximize_key)
                 heatmap.index.names = kwargs.keys()
-                heatmap = heatmap[heatmap != -INVALID]
                 heatmap.sort_index(inplace=True)
                 output.append(heatmap)
 
             if return_optimization:
-                valid = res.func_vals != INVALID
-                res.x_iters = list(compress(res.x_iters, valid))
-                res.func_vals = res.func_vals[valid]
                 output.append(res)
 
             return stats if len(output) == 1 else tuple(output)
 
         if method == 'grid':
             output = _optimize_grid()
-        elif method == 'skopt':
-            output = _optimize_skopt()
+        elif method in ('sambo', 'skopt'):
+            output = _optimize_sambo()
         else:
-            raise ValueError(f"Method should be 'grid' or 'skopt', not {method!r}")
+            raise ValueError(f"Method should be 'grid' or 'sambo', not {method!r}")
         return output
 
     @staticmethod
