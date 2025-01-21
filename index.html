@@ -12,7 +12,7 @@
     <link rel="preload stylesheet" as="style" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/styles/github.min.css" integrity="sha512-7QTQ5Qsc/IL1k8UU2bkNFjpKTfwnvGuPYE6fzm6yeneWTEGiA3zspgjcTsSgln9m0cn3MgyE7EnDNkF1bB/uCw==" crossorigin>
     <link rel="preconnect" href="https://cdn.bokeh.org">
     <script async src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/10.1.1/highlight.min.js" integrity="sha512-lnOllyZZlRk/gQIyjS3+h+LUy54uyM4aGq2zbGc82KTvBlp/fodSpdh/pywPztpU9zUqHcJr+jP+a1zLa9oCJw==" crossorigin
-            onload="hljs.configure({languages:['python']}); hljs.initHighlightingOnLoad()"></script>
+            onload="hljs.configure({languages:['python']}); hljs.highlightAll()"></script>
 
     <style>
         blockquote.card p:first-child:before { content: '“' }
@@ -223,7 +223,7 @@
         <div class="columns is-multiline is-centered is-vcentered">
             <div class="column is-5 is-4-widescreen">
                 <div class="control has-icons-left has-icons-right">
-                    <input class="input is-medium is-dark" readonly value="pip3 install backtesting"
+                    <input class="input is-medium is-dark" readonly value="pip install backtesting"
                            style="background:#ffd; cursor:pointer; caret-color:transparent; font-family:monospace;"
                            onclick="getSelection().removeAllRanges(); this.select();"
                            data-ga-on="click,auxclick,contextmenu" data-ga-event-category="cmdline" data-ga-event-action="select">
