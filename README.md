@@ -62,6 +62,7 @@ Return [%]                             589.35
 Buy & Hold Return [%]                  703.46
 Return (Ann.) [%]                       25.42
 Volatility (Ann.) [%]                   38.43
+CAGR [%]                                16.80
 Sharpe Ratio                             0.66
 Sortino Ratio                            1.30
 Calmar Ratio                             0.77
