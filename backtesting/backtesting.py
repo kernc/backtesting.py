@@ -701,7 +701,7 @@ class Trade:
 class _Broker:
     def __init__(self, *, data, cash, spread, commission, margin,
                  trade_on_close, hedging, exclusive_orders, index):
-        assert 0 < cash, f"cash should be >0, is {cash}"
+        assert cash > 0, f"cash should be > 0, is {cash}"
         assert 0 < margin <= 1, f"margin should be between 0 and 1, is {margin}"
         self._data: _Data = data
         self._cash = cash
