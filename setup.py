@@ -49,7 +49,7 @@ if __name__ == '__main__':
                 'sambo',
             ],
             'dev': [
-                'ruff==0.0.160',
+                'flake8',
                 'coverage',
                 'mypy',
             ],

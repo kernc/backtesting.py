@@ -39,14 +39,14 @@ jobs:
       - run: pip install -U .[test]
 
       - if: matrix.test-type == 'lint'
-        run: ruff backtesting
+        run: flake8 backtesting setup.py
       - if: matrix.test-type == 'lint'
         run: mypy backtesting
       - if: matrix.test-type == 'lint'
         env: { BOKEH_BROWSER: none }
         run: time catchsegv coverage run -m backtesting.test
       - if: matrix.test-type == 'lint'
-        run: bash <(curl -s https://codecov.io/bash)
+        run: coverage report
 
       - if: '! matrix.test-type'
         env: { BOKEH_BROWSER: none }

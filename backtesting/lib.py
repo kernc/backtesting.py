@@ -305,7 +305,7 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
             strategy_I = frame.f_locals['self'].I             # type: ignore
             break
     else:
-        def strategy_I(func, *args, **kwargs):
+        def strategy_I(func, *args, **kwargs):  # noqa: F811
             return func(*args, **kwargs)
 
     def wrap_func(resampled, *args, **kwargs):

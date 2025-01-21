@@ -750,8 +750,8 @@ class TestPlot(TestCase):
         bt = Backtest(GOOG, SmaCross)
         bt.run()
         import backtesting._plotting
-        with _tempfile() as f,\
-                patch.object(backtesting._plotting, '_MAX_CANDLES', 10),\
+        with _tempfile() as f, \
+                patch.object(backtesting._plotting, '_MAX_CANDLES', 10), \
                 self.assertWarns(UserWarning):
             bt.plot(filename=f, resample=True)
             # Give browser time to open before tempfile is removed
