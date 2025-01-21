@@ -672,7 +672,7 @@ class TestPlot(TestCase):
 
     def test_resolutions(self):
         with _tempfile() as f:
-            for rule in 'LSTHDWM':
+            for rule in 'ms s min h D W ME'.split():
                 with self.subTest(rule=rule):
                     df = EURUSD.iloc[:2].resample(rule).agg(OHLCV_AGG).dropna().iloc[:1100]
                     bt = Backtest(df, SmaCross)
@@ -980,7 +980,8 @@ class TestRegressions(TestCase):
             'Low': [100, 100, 100, 50, 50],
             'Close': [100, 100, 100, 50, 50],
         })
-        bt = Backtest(df, S, cash=100, trade_on_close=True)
+        with self.assertWarnsRegex(UserWarning, 'index is not datetime'):
+            bt = Backtest(df, S, cash=100, trade_on_close=True)
         self.assertEqual(bt.run()._trades['ExitPrice'][0], 50)
 
 

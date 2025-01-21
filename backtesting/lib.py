@@ -194,7 +194,7 @@ def compute_stats(
         equity[:] = stats._equity_curve.Equity.iloc[0]
         for t in trades.itertuples(index=False):
             equity.iloc[t.EntryBar:] += t.PnL
-    return _compute_stats(trades=trades, equity=equity, ohlc_data=data,
+    return _compute_stats(trades=trades, equity=equity.values, ohlc_data=data,
                           risk_free_rate=risk_free_rate, strategy_instance=stats._strategy)
 
 

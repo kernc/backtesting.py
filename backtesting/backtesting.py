@@ -1444,13 +1444,12 @@ class Backtest:
             finally:
                 del Backtest._mp_backtests[backtest_uuid]
 
-            best_params = heatmap.idxmax()
-
-            if pd.isnull(best_params):
+            if pd.isnull(heatmap).all():
                 # No trade was made in any of the runs. Just make a random
                 # run so we get some, if empty, results
                 stats = self.run(**param_combos[0])
             else:
+                best_params = heatmap.idxmax(skipna=True)
                 stats = self.run(**dict(zip(heatmap.index.names, best_params)))
 
             if return_heatmap:
