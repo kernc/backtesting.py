@@ -5,6 +5,30 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
+### 0.5.0
+(2025-01-21)
+
+* Enhancements:
+  * New `Backtest.optimize(method="sambo")`;
+    uses [SAMBO](https://sambo-optimization.github.io):
+    to replace `method="skopt"`.
+  * New 'CAGR [%]' (compound annual growth rate) statistic.
+* Bug fixes:
+  * "stop-loss executed at a higher than market price".
+  * Bug with buy/sell size=0.
+  * `Order.__repr__` issue with non-numeric `Order.tag`.
+* Other small fixes, deprecations and docs updates.
+
+
+### 0.4.0
+(2025-01-21)
+
+* Enhancements:
+  * 'Kelly Criterion' statistic (#640)
+  * `Backtest.plot(plot_trades=)` parameter
+  * Order.tag for tracking orders and trades (#200)
+* Small bug fixes, deprecation removals and documentation updates.
+
 
 ### 0.3.3
 (2021-12-13)
