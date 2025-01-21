@@ -1,8 +1,8 @@
 import os
 import sys
 
-if sys.version_info < (3, 6):
-    sys.exit('ERROR: Backtesting.py requires Python 3.6+')
+if sys.version_info < (3, 9):
+    sys.exit('ERROR: Backtesting.py requires Python 3.9+')
 
 
 if __name__ == '__main__':
@@ -55,7 +55,7 @@ if __name__ == '__main__':
             ],
         },
         test_suite="backtesting.test",
-        python_requires='>=3.6',
+        python_requires='>=3.9',
         author='Zach Lûster',
         classifiers=[
             'Intended Audience :: Financial and Insurance Industry',
