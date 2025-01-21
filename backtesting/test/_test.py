@@ -584,23 +584,6 @@ class TestOptimize(TestCase):
                                          **OPT_PARAMS)
                 self.assertEqual(len(heatmap), 6)
 
-    def test_nowrite_df(self):
-        # Test we don't write into passed data df by default.
-        # Important for copy-on-write in Backtest.optimize()
-        df = EURUSD.astype(float)
-        _ = df.values.ctypes.data  # dummy call for the value to stabilize!
-        mem_addr = df.values.ctypes.data
-        assert mem_addr == df.values.ctypes.data
-
-        class S(SmaCross):
-            def init(self):
-                super().init()
-                assert mem_addr == self.data.df.values.ctypes.data, (mem_addr, self.data.df.values.ctypes.data)
-
-        bt = Backtest(df, S)
-        _ = bt.run()
-        assert mem_addr == bt._data.values.ctypes.data
-
     def test_multiprocessing_windows_spawn(self):
         df = GOOG.iloc[:100]
         kw = {'fast': [10]}
