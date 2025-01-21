@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import re
 import sys
@@ -144,7 +146,7 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
         def f(s, new_index=pd.Index(df.index.view(int)), bars=trades[column]):
             if s.size:
                 # Via int64 because on pandas recently broken datetime
-                mean_time = int(bars.loc[s.index].view(int).mean())
+                mean_time = int(bars.loc[s.index].astype(int).mean())
                 new_bar_idx = new_index.get_indexer([mean_time], method='nearest')[0]
                 return new_bar_idx
         return f
@@ -440,11 +442,11 @@ return this.labels[index] || "";
         """Superimposed, downsampled vbars"""
         time_resolution = pd.DatetimeIndex(df['datetime']).resolution
         resample_rule = (superimpose if isinstance(superimpose, str) else
-                         dict(day='M',
+                         dict(day='ME',
                               hour='D',
-                              minute='H',
-                              second='T',
-                              millisecond='S').get(time_resolution))
+                              minute='h',
+                              second='min',
+                              millisecond='s').get(time_resolution))
         if not resample_rule:
             warnings.warn(
                 f"'Can't superimpose OHLC data with rule '{resample_rule}'"
@@ -537,10 +539,23 @@ return this.labels[index] || "";
             colors = value._opts['color']
             colors = colors and cycle(_as_list(colors)) or (
                 cycle([next(ohlc_colors)]) if is_overlay else colorgen())
-            legend_label = LegendStr(value.name)
-            for j, arr in enumerate(value, 1):
+
+            if isinstance(value.name, str):
+                tooltip_label = value.name
+                if len(value) == 1:
+                    legend_labels = [LegendStr(value.name)]
+                else:
+                    legend_labels = [
+                        LegendStr(f"{value.name}[{i}]")
+                        for i in range(len(value))
+                    ]
+            else:
+                tooltip_label = ", ".join(value.name)
+                legend_labels = [LegendStr(item) for item in value.name]
+
+            for j, arr in enumerate(value):
                 color = next(colors)
-                source_name = f'{legend_label}_{i}_{j}'
+                source_name = f'{legend_labels[j]}_{i}_{j}'
                 if arr.dtype == bool:
                     arr = arr.astype(int)
                 source.add(arr, source_name)
@@ -548,26 +563,26 @@ return this.labels[index] || "";
                 if is_overlay:
                     ohlc_extreme_values[source_name] = arr
                     if is_scatter:
-                        fig.scatter(
+                        fig.circle(
                             'index', source_name, source=source,
-                            legend_label=legend_label, color=color,
+                            legend_label=legend_labels[j], color=color,
                             line_color='black', fill_alpha=.8,
-                            marker='circle', radius=BAR_WIDTH / 2 * 1.5)
+                            radius=BAR_WIDTH / 2 * .9)
                     else:
                         fig.line(
                             'index', source_name, source=source,
-                            legend_label=legend_label, line_color=color,
+                            legend_label=legend_labels[j], line_color=color,
                             line_width=1.3)
                 else:
                     if is_scatter:
-                        r = fig.scatter(
+                        r = fig.circle(
                             'index', source_name, source=source,
-                            legend_label=LegendStr(legend_label), color=color,
-                            marker='circle', radius=BAR_WIDTH / 2 * .9)
+                            legend_label=legend_labels[j], color=color,
+                            radius=BAR_WIDTH / 2 * .6)
                     else:
                         r = fig.line(
                             'index', source_name, source=source,
-                            legend_label=LegendStr(legend_label), line_color=color,
+                            legend_label=legend_labels[j], line_color=color,
                             line_width=1.3)
                     # Add dashed centerline just because
                     mean = float(pd.Series(arr).mean())
@@ -578,9 +593,9 @@ return this.labels[index] || "";
                                             line_color='#666666', line_dash='dashed',
                                             line_width=.5))
             if is_overlay:
-                ohlc_tooltips.append((legend_label, NBSP.join(tooltips)))
+                ohlc_tooltips.append((tooltip_label, NBSP.join(tooltips)))
             else:
-                set_tooltips(fig, [(legend_label, NBSP.join(tooltips))], vline=True, renderers=[r])
+                set_tooltips(fig, [(tooltip_label, NBSP.join(tooltips))], vline=True, renderers=[r])
                 # If the sole indicator line on this figure,
                 # have the legend only contain text without the glyph
                 if len(value) == 1:
@@ -675,6 +690,9 @@ def plot_heatmaps(heatmap: pd.Series, agg: Union[Callable, str], ncols: int,
             isinstance(heatmap.index, pd.MultiIndex)):
         raise ValueError('heatmap must be heatmap Series as returned by '
                          '`Backtest.optimize(..., return_heatmap=True)`')
+    if len(heatmap.index.levels) < 2:
+        raise ValueError('`plot_heatmap()` requires at least two optimization '
+                         'variables to plot')
 
     _bokeh_reset(filename)
 
