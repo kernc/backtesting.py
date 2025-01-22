@@ -105,18 +105,18 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
             return df, indicators, equity_data, trades
 
         freq_minutes = pd.Series({
-            "1T": 1,
-            "5T": 5,
-            "10T": 10,
-            "15T": 15,
-            "30T": 30,
-            "1H": 60,
-            "2H": 60*2,
-            "4H": 60*4,
-            "8H": 60*8,
+            "1min": 1,
+            "5min": 5,
+            "10min": 10,
+            "15min": 15,
+            "30min": 30,
+            "1h": 60,
+            "2h": 60*2,
+            "4h": 60*4,
+            "8h": 60*8,
             "1D": 60*24,
             "1W": 60*24*7,
-            "1M": np.inf,
+            "1ME": np.inf,
         })
         timespan = df.index[-1] - df.index[0]
         require_minutes = (timespan / _MAX_CANDLES).total_seconds() // 60
