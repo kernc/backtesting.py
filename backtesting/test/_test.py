@@ -333,10 +333,15 @@ class TestBacktest(TestCase):
 
         self.assertEqual(len(stats['_trades']), 66)
 
+        indicator_columns = [
+            f'{entry}_SMA(C,{n})'
+            for entry in ('Entry', 'Exit')
+            for n in (SmaCross.fast, SmaCross.slow)]
         self.assertSequenceEqual(
             sorted(stats['_trades'].columns),
             sorted(['Size', 'EntryBar', 'ExitBar', 'EntryPrice', 'ExitPrice', 'SL', 'TP',
-                    'PnL', 'ReturnPct', 'EntryTime', 'ExitTime', 'Duration', 'Tag']))
+                    'PnL', 'ReturnPct', 'EntryTime', 'ExitTime', 'Duration', 'Tag',
+                    *indicator_columns]))
 
     def test_compute_stats_bordercase(self):
 
