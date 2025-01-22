@@ -64,13 +64,15 @@ def compute_stats(
             'ExitBar': [t.exit_bar for t in trades],
             'EntryPrice': [t.entry_price for t in trades],
             'ExitPrice': [t.exit_price for t in trades],
+            'SL': [t.sl for t in trades],
+            'TP': [t.tp for t in trades],
             'PnL': [t.pl for t in trades],
             'ReturnPct': [t.pl_pct for t in trades],
             'EntryTime': [t.entry_time for t in trades],
             'ExitTime': [t.exit_time for t in trades],
-            'Tag': [t.tag for t in trades],
         })
         trades_df['Duration'] = trades_df['ExitTime'] - trades_df['EntryTime']
+        trades_df['Tag'] = [t.tag for t in trades]
         commissions = sum(t._commissions for t in trades)
     del trades
 
