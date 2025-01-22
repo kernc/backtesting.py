@@ -17,7 +17,7 @@ from collections import OrderedDict
 from inspect import currentframe
 from itertools import compress
 from numbers import Number
-from typing import Callable, Optional, Sequence, Union
+from typing import Callable, Generator, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
@@ -332,7 +332,7 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
 
 
 def random_ohlc_data(example_data: pd.DataFrame, *,
-                     frac=1., random_state: Optional[int] = None) -> pd.DataFrame:
+                     frac=1., random_state: Optional[int] = None) -> Generator[pd.DataFrame, None, None]:
     """
     OHLC data generator. The generated OHLC data has basic
     [descriptive statistics](https://en.wikipedia.org/wiki/Descriptive_statistics)
