@@ -71,26 +71,14 @@ def compute_stats(
             'EntryTime': [t.entry_time for t in trades],
             'ExitTime': [t.exit_time for t in trades],
         })
-
-        # Retrieve the DataFrame of all indicators from the strategy instance
-        indicators_df = strategy_instance.get_indicators_dataframe()
-
-        # Iterate over the trades and get the indicator values
-        for i, trade in trades_df.iterrows():
-            entry_bar = trade['EntryBar']
-            exit_bar = trade['ExitBar']
-
-            # Get the indicators at the entry and exit bars
-            entry_indicators = indicators_df.loc[ohlc_data.index[entry_bar]]
-            exit_indicators = indicators_df.loc[ohlc_data.index[exit_bar]]
-
-            # Add the indicator values to the trades_df
-            for column in entry_indicators.index:
-                trades_df.at[i, f'Entry_{column}'] = entry_indicators[column]
-                trades_df.at[i, f'Exit_{column}'] = exit_indicators[column]
-
         trades_df['Duration'] = trades_df['ExitTime'] - trades_df['EntryTime']
         trades_df['Tag'] = [t.tag for t in trades]
+
+        # Add indicator values
+        for ind in strategy_instance._indicators:
+            trades_df[f'Entry_{ind.name}'] = ind[trades_df['EntryBar'].values]
+            trades_df[f'Exit_{ind.name}'] = ind[trades_df['ExitBar'].values]
+
         commissions = sum(t._commissions for t in trades)
     del trades
 
