@@ -17,7 +17,7 @@ from collections import OrderedDict
 from inspect import currentframe
 from itertools import compress
 from numbers import Number
-from typing import Callable, Optional, Sequence, Union
+from typing import Callable, Generator, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
