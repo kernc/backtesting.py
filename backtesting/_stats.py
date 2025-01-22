@@ -73,6 +73,16 @@ def compute_stats(
         })
         trades_df['Duration'] = trades_df['ExitTime'] - trades_df['EntryTime']
         trades_df['Tag'] = [t.tag for t in trades]
+
+        # Add indicator values
+        if len(trades_df):
+            for ind in strategy_instance._indicators:
+                ind = np.atleast_2d(ind)
+                for i, values in enumerate(ind):  # multi-d indicators
+                    suffix = f'_{i}' if len(ind) > 1 else ''
+                    trades_df[f'Entry_{ind.name}{suffix}'] = values[trades_df['EntryBar'].values]
+                    trades_df[f'Exit_{ind.name}{suffix}'] = values[trades_df['ExitBar'].values]
+
         commissions = sum(t._commissions for t in trades)
     del trades
 
