@@ -1,4 +1,7 @@
 """Data and utilities for testing."""
+
+from __future__ import annotations
+
 import pandas as pd
 
 
@@ -6,7 +9,7 @@ def _read_file(filename):
     from os.path import dirname, join
 
     return pd.read_csv(join(dirname(__file__), filename),
-                       index_col=0, parse_dates=True, infer_datetime_format=True)
+                       index_col=0, parse_dates=True)
 
 
 GOOG = _read_file('GOOG.csv')
