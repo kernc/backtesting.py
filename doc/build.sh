@@ -55,9 +55,6 @@ PYTHONWARNINGS='ignore::UserWarning,ignore::RuntimeWarning' \
 if [ "$IS_RELEASE" ]; then
     echo -e '\nAdding GAnalytics code\n'
 
-    ANALYTICS="<script>window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;ga('create','UA-43663477-4','auto');ga('require','cleanUrlTracker',{indexFilename:'index.html',trailingSlash:'add'});ga('require','outboundLinkTracker',{events:['click','auxclick','contextmenu']});ga('require', 'maxScrollTracker');ga('require', 'pageVisibilityTracker');ga('send', 'pageview');setTimeout(function(){ga('send','event','pageview','view')},15000);</script><script async src='https://www.google-analytics.com/analytics.js'></script><script async src='https://cdnjs.cloudflare.com/ajax/libs/autotrack/2.4.1/autotrack.js'></script>"
-    find "$BUILDROOT" -name '*.html' -print0 |
-        xargs -0 -- sed -i "s#</body>#$ANALYTICS</body>#i"
     ANALYTICS="<script async src='https://www.googletagmanager.com/gtag/js?id=G-C4YF12M4PY'></script><script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','G-C4YF12M4PY');</script>"
     find "$BUILDROOT" -name '*.html' -print0 |
         xargs -0 -- sed -i "s#</head>#$ANALYTICS</head>#i"
@@ -70,6 +67,9 @@ fi
 echo
 echo 'Testing for broken links'
 echo
+problematic_urls='
+https://www.gnu.org/licenses/agpl-3.0.html
+'
 pushd "$BUILDROOT" >/dev/null
 WEBSITE='https://kernc\.github\.io/backtesting\.py'
 grep -PR '<a .*?href=' |
@@ -98,7 +98,10 @@ print(html.unescape(unquote(sys.argv[-1])))' "$url")"
             if [ -f "$target_file" ]; then continue; fi
 
             url="${url// /%20}"
-            curl --silent --fail --retry 5 --retry-delay 5 --user-agent 'Mozilla/5.0 Firefox 101' "$url" >/dev/null 2>&1 ||
+            echo "$url"
+            curl --silent --fail --retry 2 --retry-delay 2 --connect-timeout 10 \
+                    --user-agent 'Mozilla/5.0 Firefox 128' "$url" >/dev/null 2>&1 ||
+                grep -qF "$url" <(echo "$problematic_urls") ||
                 die "broken link in $file:  $url"
         done
     done
