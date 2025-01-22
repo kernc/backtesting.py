@@ -57,6 +57,8 @@ kindly have a look at some similar alternative Python backtesting frameworks:
   stock picking, backtesting, and unified visualization. Documentation in Chinese.
 - [AwesomeQuant](https://github.com/wilsonfreitas/awesome-quant#trading--backtesting) -
   A somewhat curated list of libraries, packages, and resources for quants.
+- [LiuAlgoTrader](https://amor71.github.io/LiuAlgoTrader/) -
+  A scalable, multi-process ML-ready framework for effective algorithmic trading.
 
 #### Obsolete / Unmaintained
 
