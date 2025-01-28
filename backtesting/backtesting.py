@@ -119,6 +119,13 @@ class Strategy(metaclass=ABCMeta):
 
             def init():
                 self.sma = self.I(ta.SMA, self.data.Close, self.n_sma)
+
+        .. warning::
+            Rolling indicators may front-pad warm-up values with NaNs.
+            In this case, the **backtest will only begin on the first bar when
+            all declared indicators have non-NaN values** (e.g. bar 201 for a
+            strategy that uses a 200-bar MA).
+            This can affect results.
         """
         def _format_name(name: str) -> str:
             return name.format(*map(_as_str, args),
