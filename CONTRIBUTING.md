@@ -9,8 +9,8 @@ have been fixed already.
 
 To have your issue dealt with promptly, it's best to construct a
 [minimal working example] that exposes the issue in a clear and
-reproducible manner. Make sure to understand
-[how to report bugs effectively][bugs] and how to
+reproducible manner. Review [how to report bugs effectively][bugs]
+and, particularly, how to
 [craft useful bug reports][bugs2] in Python.
 
 In case of bugs, please submit full tracebacks
@@ -23,7 +23,7 @@ Many thanks from the maintainers!
 [minimal working example]: https://en.wikipedia.org/wiki/Minimal_working_example
 [bugs]: https://www.chiark.greenend.org.uk/~sgtatham/bugs.html
 [bugs2]: https://matthewrocklin.com/blog/work/2018/02/28/minimal-bug-reports
-[fenced code blocks]: https://www.markdownguide.org/extended-syntax/#fenced-code-blocks
+[fenced code blocks]: https://www.markdownguide.org/extended-syntax/#syntax-highlighting
 
 
 Installation

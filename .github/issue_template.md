@@ -1,11 +1,13 @@
 ### Expected Behavior
 
+...
 
 ### Actual Behavior
 
-<!-- In case of a bug, attach full exception traceback. Please
-     wrap verbatim code/output in Markdown fenced code blocks:
-     https://bit.ly/3nEvlHP -->
+<!-- 
+    In case of a bug, attach full exception traceback.
+    Please wrap verbatim code/output in Markdown fenced code blocks.
+-->
 
 
 ### Steps to Reproduce
@@ -25,8 +27,4 @@ python code goes here
 
 ### Additional info
 
-<!-- screenshots, code snippets, ... -->
-
-- Backtesting version: 0.?.?   <!-- From backtesting.__version__ -->
-- `bokeh.__version__`:
-- OS:
+<!-- screenshots, code snippets, versions ... -->
