@@ -1,0 +1,83 @@
+name: Bug report
+description: File a new bug report. Please use the search
+title: "Short title loaded with keywords"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for putting in the effort to submit this bug report! Note, the
+        best bug reports are accompanied with fixing patches / pull-requests.
+
+  - type: checkboxes
+    attributes:
+      label: Contributing guidelines
+      description: |
+        I have read and will follow
+        [Contributing Guidelines](https://github.com/kernc/backtesting.py/blob/master/CONTRIBUTING.md).
+      options:
+        - label: I agree to follow this project's Contributing Guidelines
+          required: true
+
+  - type: textarea
+    id: expected
+    validations:
+      required: true
+    attributes:
+      label: Expected behavior
+      description: You run the code below and expect what to happen?
+      placeholder: When I run this code ... the program should ...
+
+  - type: textarea
+    id: code
+    validations:
+      required: false
+    attributes:
+      label: Code sample
+      description: Code snippet that clearly reproduces the issue
+      render: python
+      placeholder: |
+        from backtesting import Backtest, Strategy
+        from backtesting.test import GOOG
+
+        class Example(Strategy):
+            ...
+
+        bt = Backtest(GOOG, Example)
+        ...
+
+  - type: textarea
+    id: actual
+    validations:
+      required: true
+    attributes:
+      label: Actual behavior
+      description: What happened unexpectedly when you ran the code above?
+      placeholder: When I ran the code above ... the program did ...
+
+  - type: textarea
+    id: steps
+    validations:
+      required: false
+    attributes:
+      label: Additional info, steps to reproduce, full crash traceback, screenshots
+      description: |
+        Attach any additional info you think might be helpful and
+        result in quicker resolution of your bug.
+      placeholder: |
+        1. Do ...
+        2. ...
+        3. Boom.
+
+  - type: textarea
+    id: versions
+    validations:
+      required: false
+    attributes:
+      label: Software versions
+      description: |
+        Versions of the relevant software / packages.
+      value: |
+        <!-- From `backtesting.__version__`. If git, use commit hash -->
+        - Backtesting version: 0.?.?
+        - `bokeh.__version__`:
+        - OS:

@@ -1,6 +1,6 @@
 """
 
-![xkcd.com/1570](https://imgs.xkcd.com/comics/engineer_syllogism.png)
+![xkcd.com/1570](https://imgs.xkcd.com/comics/engineer_syllogism.png){: height=263}
 
 ## Manuals
 

@@ -1,0 +1,46 @@
+name: Enhancement proposal
+description: Describe the enhancement you'd like to see
+title: "Short title loaded with keywords"
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to give feedback on this software!
+
+  - type: checkboxes
+    attributes:
+      label: Contributing guidelines
+      description: |
+        I have read and will follow
+        [Contributing Guidelines](https://github.com/kernc/backtesting.py/blob/master/CONTRIBUTING.md).
+      options:
+        - label: I agree to follow this project's Contributing Guidelines
+          required: true
+
+  - type: textarea
+    id: expected
+    validations:
+      required: true
+    attributes:
+      label: Enhancement description
+      description: What would you want to see in the software that doesn't appear to be presently included?
+      placeholder: I absolutely love your software, but I'm missing a way to ...
+
+  - type: textarea
+    id: code
+    validations:
+      required: false
+    attributes:
+      label: Code sample
+      description: Code snippet relevant to the new feature
+      render: python
+
+  - type: textarea
+    id: steps
+    validations:
+      required: false
+    attributes:
+      label: Additional info, images
+      description: |
+        Extra information you think might be helpful or interesting.

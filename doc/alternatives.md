@@ -10,6 +10,9 @@ If after reviewing the docs and examples perchance you find
 [_Backtesting.py_](https://kernc.github.io/backtesting.py) not your cup of tea,
 kindly have a look at some similar alternative Python backtesting frameworks:
 
+-  [AutoTrader](https://github.com/kieran-mackle/AutoTrader) -
+  an automated trading framework with an emphasis on cryptocurrency markets
+  that includes a [robust backtesting API](https://github.com/kieran-mackle/AutoTrader/blob/main/docs/source/tutorials/backtesting.md)
 - [bt](http://pmorissette.github.io/bt/) -
   a framework based on reusable and flexible blocks of
   strategy logic that support multiple instruments and
@@ -54,6 +57,13 @@ kindly have a look at some similar alternative Python backtesting frameworks:
   stock picking, backtesting, and unified visualization. Documentation in Chinese.
 - [AwesomeQuant](https://github.com/wilsonfreitas/awesome-quant#trading--backtesting) -
   A somewhat curated list of libraries, packages, and resources for quants.
+- [Nautilus Trader](https://github.com/nautechsystems/nautilus_trader) -
+  high-performance, production-grade algorithmic trading platform written in Rust/Python,
+  with event-driven engine to backtest portfolios of automated trading strategies,
+  and also deploy those same strategies live, with no code changes.
+- [LiuAlgoTrader](https://amor71.github.io/LiuAlgoTrader/) -
+  A scalable, multi-process ML-ready framework for effective algorithmic trading.
+
 
 #### Obsolete / Unmaintained
 
