@@ -1088,7 +1088,8 @@ class Backtest:
                  margin: float = 1.,
                  trade_on_close=False,
                  hedging=False,
-                 exclusive_orders=False
+                 exclusive_orders=False,
+                 finalize_trades=False,
                  ):
         """
         Initialize a backtest. Requires data and a strategy to test.
@@ -1155,8 +1156,13 @@ class Backtest:
         trade/position, making at most a single trade (long or short) in effect
         at each time.
 
+        If `finalize_trades` is `True`, the trades that are still
+        [active and ongoing] at the end of the backtest will be closed on
+        the last bar and will contribute to the computed backtest statistics.
+
         [FIFO]: https://www.investopedia.com/terms/n/nfa-compliance-rule-2-43b.asp
-        """
+        [active and ongoing]: https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Strategy.trades
+        """  # noqa: E501
 
         if not (isinstance(strategy, type) and issubclass(strategy, Strategy)):
             raise TypeError('`strategy` must be a Strategy sub-type')
@@ -1218,6 +1224,7 @@ class Backtest:
         )
         self._strategy = strategy
         self._results: Optional[pd.Series] = None
+        self._finalize_trades = bool(finalize_trades)
 
     def run(self, **kwargs) -> pd.Series:
         """
@@ -1304,14 +1311,15 @@ class Backtest:
                 # Next tick, a moment before bar close
                 strategy.next()
             else:
-                # Close any remaining open trades so they produce some stats
-                for trade in broker.trades:
-                    trade.close()
+                if self._finalize_trades is True:
+                    # Close any remaining open trades so they produce some stats
+                    for trade in broker.trades:
+                        trade.close()
 
-                # Re-run broker one last time to handle orders placed in the last strategy
-                # iteration. Use the same OHLC values as in the last broker iteration.
-                if start < len(self._data):
-                    try_(broker.next, exception=_OutOfMoneyError)
+                    # HACK: Re-run broker one last time to handle close orders placed in the last
+                    #  strategy iteration. Use the same OHLC values as in the last broker iteration.
+                    if start < len(self._data):
+                        try_(broker.next, exception=_OutOfMoneyError)
 
             # Set data back to full length
             # for future `indicator._opts['data'].index` calls to work
