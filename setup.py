@@ -1,15 +1,15 @@
 import os
 import sys
 
-if sys.version_info < (3, 6):
-    sys.exit('ERROR: Backtesting.py requires Python 3.6+')
+if sys.version_info < (3, 9):
+    sys.exit('ERROR: Backtesting.py requires Python 3.9+')
 
 
 if __name__ == '__main__':
     from setuptools import setup, find_packages
 
     setup(
-        name='Backtesting',
+        name='backtesting',
         description="Backtest trading strategies in Python",
         license='AGPL-3.0',
         url='https://kernc.github.io/backtesting.py/',
@@ -33,7 +33,7 @@ if __name__ == '__main__':
         install_requires=[
             'numpy >= 1.17.0',
             'pandas >= 0.25.0, != 0.25.0',
-            'bokeh >= 1.4.0',
+            'bokeh >= 1.4.0, != 3.0.*',
         ],
         extras_require={
             'doc': [
@@ -44,19 +44,18 @@ if __name__ == '__main__':
                 'jupyter_client',  # for nbconvert
             ],
             'test': [
-                'seaborn',
                 'matplotlib',
-                'scikit-learn <= 1.1.3',  # Pinned due to boken scikit-optimize
-                'scikit-optimize',
+                'scikit-learn',
+                'sambo',
             ],
             'dev': [
-                'ruff==0.0.160',
+                'flake8',
                 'coverage',
                 'mypy',
             ],
         },
         test_suite="backtesting.test",
-        python_requires='>=3.6',
+        python_requires='>=3.9',
         author='Zach Lûster',
         classifiers=[
             'Intended Audience :: Financial and Insurance Industry',

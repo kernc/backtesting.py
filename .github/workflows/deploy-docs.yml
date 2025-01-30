@@ -9,33 +9,26 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Set up Python
-        uses: actions/setup-python@v2
+      - uses: actions/setup-python@v5
         with:
-          python-version: 3.8
+          python-version: 3.11
 
-      - uses: actions/cache@v2
-        name: Set up caches
+      - uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}
 
-      - name: Checkout repo
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 3
       - name: Fetch tags
         run: git fetch --depth=1 origin +refs/tags/*:refs/tags/*
 
-      - name: Install dependencies
-        run: |
-          pip install -U pip setuptools wheel
-          pip install -U -e .[doc,test]
+      - run: pip install -U pip setuptools wheel
+      - run: pip install -U -e .[doc,test]
 
-      - name: Build docs
-        run: time catchsegv doc/build.sh
+      - run: time doc/build.sh
 
-      - name: Deploy docs
+      - run: .github/deploy-gh-pages.sh
         env:
           GH_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
-        run: .github/deploy-gh-pages.sh
