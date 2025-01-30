@@ -1567,16 +1567,20 @@ class Backtest:
                 else:
                     dimensions.append(values.tolist())
 
-            # Avoid recomputing re-evaluations:
-            memoized_run = lru_cache()(lambda tup: self.run(**dict(tup)))  # XXX: Reeval if this needed?
+            # Avoid recomputing re-evaluations
+            @lru_cache()
+            def memoized_run(tup):
+                nonlocal maximize, self
+                stats = self.run(**dict(tup))
+                return -maximize(stats)
+
             progress = iter(_tqdm(repeat(None), total=max_tries, leave=False, desc='Backtest.optimize'))
             _names = tuple(kwargs.keys())
 
             def objective_function(x):
                 nonlocal progress, memoized_run, constraint, _names
                 next(progress)
-                res = memoized_run(tuple(zip(_names, x)))
-                value = -maximize(res)
+                value = memoized_run(tuple(zip(_names, x)))
                 return 0 if np.isnan(value) else value
 
             def cons(x):
