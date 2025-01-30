@@ -282,7 +282,7 @@ class TestBacktest(TestCase):
         np.testing.assert_array_equal(peaks, pd.Series([7, 4], index=[3, 5]).reindex(dd.index))
 
     def test_compute_stats(self):
-        stats = Backtest(GOOG, SmaCross, close_all_at_end=True).run()
+        stats = Backtest(GOOG, SmaCross, finalize_trades=True).run()
         expected = pd.Series({
                 # NOTE: These values are also used on the website!
                 '# Trades': 66,
@@ -438,32 +438,8 @@ class TestBacktest(TestCase):
                 elif len(self.data) == len(SHORT_DATA):
                     self.position.close()
 
-        self.assertTrue(Backtest(SHORT_DATA, S).run()._trades.empty)
-
-    def test_dont_close_orders_from_last_strategy_iteration(self):
-        class S(Strategy):
-            def init(self): pass
-
-            def next(self):
-                if not self.position:
-                    self.buy()
-                elif len(self.data) == len(SHORT_DATA):
-                    self.position.close()
-        self.assertEqual(len(
-            Backtest(SHORT_DATA, S, close_all_at_end=False).run()._strategy.closed_trades), 0)
-        self.assertEqual(len(
-            Backtest(SHORT_DATA, S, close_all_at_end=False).run()._strategy.trades), 1)
-
-    def test_dont_close_orders_trades_from_last_strategy_iteration(self):
-        class S(Strategy):
-            def init(self): pass
-
-            def next(self):
-                if not self.position:
-                    self.buy()
-
-        self.assertEqual(len(
-            Backtest(SHORT_DATA, S, close_all_at_end=False).run()._strategy.trades), 1)
+        self.assertTrue(Backtest(SHORT_DATA, S, finalize_trades=False).run()._trades.empty)
+        self.assertFalse(Backtest(SHORT_DATA, S, finalize_trades=True).run()._trades.empty)
 
     def test_check_adjusted_price_when_placing_order(self):
         class S(Strategy):
@@ -565,7 +541,7 @@ class TestStrategy(TestCase):
         def coroutine(self):
             yield self.buy()
 
-        stats = self._Backtest(coroutine, close_all_at_end=True).run()
+        stats = self._Backtest(coroutine, finalize_trades=True).run()
         self.assertEqual(len(stats._trades), 1)
 
     def test_order_tag(self):

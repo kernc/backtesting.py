@@ -5,7 +5,6 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
-
 ### 0.5.0
 (2025-01-21)
 
