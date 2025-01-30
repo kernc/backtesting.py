@@ -588,7 +588,7 @@ class TestOptimize(TestCase):
             bt.plot(filename=f, open_browser=False)
 
     def test_method_sambo(self):
-        bt = Backtest(GOOG.iloc[:100], SmaCross)
+        bt = Backtest(GOOG.iloc[:100], SmaCross, finalize_trades=True)
         res, heatmap, sambo_results = bt.optimize(
             fast=range(2, 20), slow=np.arange(2, 20, dtype=object),
             constraint=lambda p: p.fast < p.slow,
