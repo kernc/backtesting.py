@@ -1580,7 +1580,7 @@ class Backtest:
             def objective_function(x):
                 nonlocal progress, memoized_run, constraint, _names
                 next(progress)
-                values = memoized_run(tuple(zip(_names, x)))
+                value = memoized_run(tuple(zip(_names, x)))
                 return 0 if np.isnan(value) else value
 
             def cons(x):
