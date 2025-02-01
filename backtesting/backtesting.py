@@ -83,7 +83,8 @@ class Strategy(metaclass=ABCMeta):
           name=None, plot=True, overlay=None, color=None, scatter=False,
           **kwargs) -> np.ndarray:
         """
-        Declare an indicator. An indicator is just an array of values,
+        Declare an indicator. An indicator is just an array of values
+        (or a tuple of such arrays in case of, e.g., MACD indicator),
         but one that is revealed gradually in
         `backtesting.backtesting.Strategy.next` much like
         `backtesting.backtesting.Strategy.data` is.
@@ -94,7 +95,7 @@ class Strategy(metaclass=ABCMeta):
 
         In the plot legend, the indicator is labeled with
         function name, unless `name` overrides it. If `func` returns
-        multiple arrays, `name` can be a sequence of strings, and
+        a tuple of arrays, `name` can be a sequence of strings, and
         its size must agree with the number of arrays returned.
 
         If `plot` is `True`, the indicator is plotted on the resulting
