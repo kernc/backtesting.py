@@ -229,6 +229,10 @@ class Strategy(metaclass=ABCMeta):
         """
         Place a new long order and return it. For explanation of parameters, see `Order`
         and its properties.
+        Unless you're running `Backtest(..., trade_on_close=True)`,
+        market orders are filled on next bar's open,
+        whereas other order types (limit, stop-limit, stop-market) are filled when
+        the respective conditions are met.
 
         See `Position.close()` and `Trade.close()` for closing existing positions.
 
