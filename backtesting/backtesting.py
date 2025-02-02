@@ -1418,8 +1418,9 @@ class Backtest:
         maximize_key = None
         if isinstance(maximize, str):
             maximize_key = str(maximize)
-            stats = self._results if self._results is not None else self.run()
-            if maximize not in stats:
+            stats_keys = compute_stats(
+                [], np.r_[[np.nan]], pd.DataFrame({col: [np.nan] for col in ('Close',)}), None, 0).index
+            if maximize not in stats_keys:
                 raise ValueError('`maximize`, if str, must match a key in pd.Series '
                                  'result of backtest.run()')
 
