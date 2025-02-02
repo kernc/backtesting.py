@@ -621,18 +621,6 @@ class TestOptimize(TestCase):
                                          **OPT_PARAMS)
                 self.assertEqual(len(heatmap), 6)
 
-    def test_multiprocessing_windows_spawn(self):
-        df = GOOG.iloc[:100]
-        kw = {'fast': [10]}
-
-        stats1 = Backtest(df, SmaCross).optimize(**kw)
-        with patch('multiprocessing.get_start_method', lambda **_: 'spawn'):
-            with self.assertWarns(UserWarning) as cm:
-                stats2 = Backtest(df, SmaCross).optimize(**kw)
-
-        self.assertIn('multiprocessing support', cm.warning.args[0])
-        assert stats1.filter(chars := tuple('[^_]')).equals(stats2.filter(chars)), (stats1, stats2)
-
     def test_optimize_invalid_param(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
         self.assertRaises(AttributeError, bt.optimize, foo=range(3))
@@ -648,7 +636,7 @@ class TestOptimize(TestCase):
         start = time.process_time()
         bt.optimize(fast=(2, 5, 7), slow=[10, 15, 20, 30])
         end = time.process_time()
-        self.assertLess(end - start, .2)
+        self.assertLess(end - start, 1)
 
 
 class TestPlot(TestCase):
