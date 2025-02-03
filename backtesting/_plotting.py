@@ -143,7 +143,7 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
         return ((df['Size'].abs() * df['ReturnPct']) / df['Size'].abs().sum()).sum()
 
     def _group_trades(column):
-        def f(s, new_index=pd.Index(df.index.view(int)), bars=trades[column]):
+        def f(s, new_index=pd.Index(df.index.astype(int)), bars=trades[column]):
             if s.size:
                 # Via int64 because on pandas recently broken datetime
                 mean_time = int(bars.loc[s.index].astype(int).mean())
