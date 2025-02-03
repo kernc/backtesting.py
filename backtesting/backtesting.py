@@ -718,7 +718,7 @@ class Trade:
 
     def __set_contingent(self, type, price):
         assert type in ('sl', 'tp')
-        assert price is None or 0 < price < np.inf
+        assert price is None or 0 < price < np.inf, f'Make sure 0 < price < inf! price: {price}'
         attr = f'_{self.__class__.__qualname__}__{type}_order'
         order: Order = getattr(self, attr)
         if order:
