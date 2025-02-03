@@ -1035,6 +1035,11 @@ class TestRegressions(TestCase):
             bt = Backtest(df, S, cash=100, trade_on_close=True)
         self.assertEqual(bt.run()._trades['ExitPrice'][0], 50)
 
+    def test_stats_annualized(self):
+        stats = Backtest(GOOG.resample('W').agg(OHLCV_AGG), SmaCross).run()
+        self.assertFalse(np.isnan(stats['Return (Ann.) [%]']))
+        self.assertEqual(round(stats['Return (Ann.) [%]']), -3)
+
 
 if __name__ == '__main__':
     warnings.filterwarnings('error')
