@@ -1040,6 +1040,19 @@ class TestRegressions(TestCase):
         self.assertFalse(np.isnan(stats['Return (Ann.) [%]']))
         self.assertEqual(round(stats['Return (Ann.) [%]']), -3)
 
+    def test_cancel_orders(self):
+        class S(Strategy):
+            def init(self): pass
+
+            def next(self):
+                self.buy(sl=1, tp=1e3)
+                if self.position:
+                    self.position.close()
+                    for order in self.orders:
+                        order.cancel()
+
+        Backtest(SHORT_DATA, S).run()
+
 
 if __name__ == '__main__':
     warnings.filterwarnings('error')
