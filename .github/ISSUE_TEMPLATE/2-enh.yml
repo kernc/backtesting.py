@@ -12,10 +12,24 @@ body:
     attributes:
       label: Contributing guidelines
       description: |
-        I have read and will follow
+        Please kindly follow this project's
         [Contributing Guidelines](https://github.com/kernc/backtesting.py/blob/master/CONTRIBUTING.md).
+        The guidelines contain short technical notes on how to best contribute to this project.
       options:
-        - label: I agree to follow this project's Contributing Guidelines
+        - label: |
+            I agree to follow this project's
+            [Contributing Guidelines](https://github.com/kernc/backtesting.py/blob/master/CONTRIBUTING.md)
+            which, I understand, contain short technical notes on how to best contribute to this project.
+          required: true
+
+  - type: checkboxes
+    attributes:
+      label: Own due diligence
+      options:
+        - label: |
+            I verify my due dilligence—I have went through the **tutorials** and the **API docs** and
+            have used the **search** on **Issues** and GitHub **Disucussions**, as well all Google,
+            with all the relevant search keywords.
           required: true
 
   - type: textarea

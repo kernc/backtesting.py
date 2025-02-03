@@ -8,6 +8,9 @@
 
 ## Tutorials
 
+The tutorials encompass most framework features, so it's important
+and advisable to go through all of them. They are short.
+
 * [Library of Utilities and Composable Base Strategies](../examples/Strategies Library.html)
 * [Multiple Time Frames](../examples/Multiple Time Frames.html)
 * [**Parameter Heatmap & Optimization**](../examples/Parameter Heatmap &amp; Optimization.html)

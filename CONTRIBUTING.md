@@ -13,22 +13,36 @@ reproducible manner. Review [how to report bugs effectively][bugs]
 and, particularly, how to
 [craft useful bug reports][bugs2] in Python.
 
-In case of bugs, please submit full tracebacks
+In case of bugs, please submit **full** tracebacks.
 
-Wrap verbatim example code/traceback in [fenced code blocks],
-and use the preview function!
+Remember that GitHub Issues supports [markdown] syntax, so
+please **wrap verbatim example code**/traceback in
+triple-backtick-[fenced code blocks],
+such as:
+~~~markdown
+```python
+def foo():
+    ...
+```
+~~~
+and use the post preview function before posting!
 
 Many thanks from the maintainers!
+
+Note, In most cases, the issues are most readily dealt with when
+accompanied by [respective fixes/PRs].
 
 [minimal working example]: https://en.wikipedia.org/wiki/Minimal_working_example
 [bugs]: https://www.chiark.greenend.org.uk/~sgtatham/bugs.html
 [bugs2]: https://matthewrocklin.com/blog/work/2018/02/28/minimal-bug-reports
+[markdown]: https://www.markdownguide.org/cheat-sheet/
 [fenced code blocks]: https://www.markdownguide.org/extended-syntax/#syntax-highlighting
+[respective fixes/PRs]: https://github.com/kernc/backtesting.py/blob/master/CONTRIBUTING.md#pull-requests
 
 
 Installation
 ------------
-To install a developmental version of the project,
+To install a _developmental_ version of the project,
 first [fork the project]. Then:
 
     git clone git@github.com:YOUR_USERNAME/backtesting.py
@@ -48,14 +62,14 @@ Before submitting a PR, ensure the tests pass:
 
 Also ensure that idiomatic code style is respected by running:
 
-    flake8  
+    flake8 backtesting
     mypy backtesting
 
 
 Documentation
 -------------
 See _doc/README.md_. Besides Jupyter Notebook examples, all documentation
-is generated from [pdoc]-compatible docstrings in code.
+is generated from [pdoc]-compatible markdown docstrings in code.
 
 [pdoc]: https://pdoc3.github.io/pdoc
 
@@ -67,5 +81,8 @@ A general recommended reading:
 Please use explicit commit messages. See [NumPy's development workflow]
 for inspiration.
 
+Please help review [existing PRs] you wish to see included.
+
 [code-review]: https://mtlynch.io/code-review-love/
 [NumPy's development workflow]: https://numpy.org/doc/stable/dev/development_workflow.html
+[existing PRs]: https://github.com/kernc/backtesting.py/pulls

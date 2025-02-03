@@ -6,16 +6,30 @@ body:
     attributes:
       value: |
         Thanks for putting in the effort to submit this bug report! Note, the
-        best bug reports are accompanied with fixing patches / pull-requests.
+        best bug reports are accompanied with fixing patches / pull-requests. 🙏
 
   - type: checkboxes
     attributes:
       label: Contributing guidelines
       description: |
-        I have read and will follow
+        Please kindly follow this project's
         [Contributing Guidelines](https://github.com/kernc/backtesting.py/blob/master/CONTRIBUTING.md).
+        The guidelines contain short technical notes on how to best contribute to this project.
       options:
-        - label: I agree to follow this project's Contributing Guidelines
+        - label: |
+            I agree to follow this project's
+            [Contributing Guidelines](https://github.com/kernc/backtesting.py/blob/master/CONTRIBUTING.md)
+            which, I understand, contain short technical notes on how to best contribute to this project.
+          required: true
+
+  - type: checkboxes
+    attributes:
+      label: Own due diligence
+      options:
+        - label: |
+            I verify my due dilligence—I have went through the **tutorials** and the **API docs** and
+            have used the **search** on **Issues** and GitHub **Disucussions**, as well all Google,
+            with all the relevant search keywords.
           required: true
 
   - type: textarea
@@ -67,6 +81,7 @@ body:
         1. Do ...
         2. ...
         3. Boom.
+        4. See attached screenshots where I highlight the relevant parts.
 
   - type: textarea
     id: versions
