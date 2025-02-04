@@ -65,7 +65,7 @@ module directly, e.g.</p>
 <dl>
 <dt id="backtesting.backtesting.Backtest"><code class="flex name class">
 <span>class <span class="ident">Backtest</span></span>
-<span>(</span><span>data,<br>strategy,<br>*,<br>cash=10000,<br>commission=0.0,<br>margin=1.0,<br>trade_on_close=False,<br>hedging=False,<br>exclusive_orders=False)</span>
+<span>(</span><span>data,<br>strategy,<br>*,<br>cash=10000,<br>spread=0.0,<br>commission=0.0,<br>margin=1.0,<br>trade_on_close=False,<br>hedging=False,<br>exclusive_orders=False,<br>finalize_trades=False)</span>
 </code></dt>
 <dd>
 <div class="desc"><p>Backtest a particular (parameterized) strategy
@@ -88,11 +88,25 @@ or a monotonic range index (i.e. a sequence of periods).</p>
 <p><code>strategy</code> is a <code><a title="backtesting.backtesting.Strategy" href="#backtesting.backtesting.Strategy">Strategy</a></code>
 <em>subclass</em> (not an instance).</p>
 <p><code>cash</code> is the initial cash to start with.</p>
-<p><code>commission</code> is the commission ratio. E.g. if your broker's commission
-is 1% of trade value, set commission to <code>0.01</code>. Note, if you wish to
-account for bid-ask spread, you can approximate doing so by increasing
-the commission, e.g. set it to <code>0.0002</code> for commission-less forex
-trading where the average spread is roughly 0.2‰ of asking price.</p>
+<p><code>spread</code> is the the constant bid-ask spread rate (relative to the price).
+E.g. set it to <code>0.0002</code> for commission-less forex
+trading where the average spread is roughly 0.2‰ of the asking price.</p>
+<p><code>commission</code> is the commission rate. E.g. if your broker's commission
+is 1% of order value, set commission to <code>0.01</code>.
+The commission is applied twice: at trade entry and at trade exit.
+Besides one single floating value, <code>commission</code> can also be a tuple of floating
+values <code>(fixed, relative)</code>. E.g. set it to <code>(100, .01)</code>
+if your broker charges minimum $100 + 1%.
+Additionally, <code>commission</code> can be a callable
+<code>func(order_size: int, price: float) -&gt; float</code>
+(note, order size is negative for short orders),
+which can be used to model more complex commission structures.
+Negative commission values are interpreted as market-maker's rebates.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Before v0.4.0, the commission was only applied once, like <code>spread</code> is now.
+If you want to keep the old behavior, simply set <code>spread</code> instead.</p>
+</div>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
 <p>With nonzero <code>commission</code>, long and short orders will be placed
@@ -114,7 +128,10 @@ If <code>False</code>, the opposite-facing orders first close existing trades in
 a <a href="https://www.investopedia.com/terms/n/nfa-compliance-rule-2-43b.asp">FIFO</a> manner.</p>
 <p>If <code>exclusive_orders</code> is <code>True</code>, each new order auto-closes the previous
 trade/position, making at most a single trade (long or short) in effect
-at each time.</p></div>
+at each time.</p>
+<p>If <code>finalize_trades</code> is <code>True</code>, the trades that are still
+<a href="https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Strategy.trades">active and ongoing</a> at the end of the backtest will be closed on
+the last bar and will contribute to the computed backtest statistics.</p></div>
 <h3>Methods</h3>
 <dl>
 <dt id="backtesting.backtesting.Backtest.optimize"><code class="name flex">
@@ -468,7 +485,8 @@ as a <strong>DataFrame</strong>, use <code>.df</code> accessor (i.e. <code>data.
 <span>def <span class="ident">I</span></span>(<span>self, func, *args, name=None, plot=True, overlay=None, color=None, scatter=False, **kwargs)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Declare an indicator. An indicator is just an array of values,
+<div class="desc"><p>Declare an indicator. An indicator is just an array of values
+(or a tuple of such arrays in case of, e.g., MACD indicator),
 but one that is revealed gradually in
 <code><a title="backtesting.backtesting.Strategy.next" href="#backtesting.backtesting.Strategy.next">Strategy.next()</a></code> much like
 <code><a title="backtesting.backtesting.Strategy.data" href="#backtesting.backtesting.Strategy.data">Strategy.data</a></code> is.
@@ -476,7 +494,9 @@ Returns <code>np.ndarray</code> of indicator values.</p>
 <p><code>func</code> is a function that returns the indicator array(s) of
 same length as <code><a title="backtesting.backtesting.Strategy.data" href="#backtesting.backtesting.Strategy.data">Strategy.data</a></code>.</p>
 <p>In the plot legend, the indicator is labeled with
-function name, unless <code>name</code> overrides it.</p>
+function name, unless <code>name</code> overrides it. If <code>func</code> returns
+a tuple of arrays, <code>name</code> can be a sequence of strings, and
+its size must agree with the number of arrays returned.</p>
 <p>If <code>plot</code> is <code>True</code>, the indicator is plotted on the resulting
 <code><a title="backtesting.backtesting.Backtest.plot" href="#backtesting.backtesting.Backtest.plot">Backtest.plot()</a></code>.</p>
 <p>If <code>overlay</code> is <code>True</code>, the indicator is plotted overlaying the
@@ -493,13 +513,26 @@ be used for parameters.</p>
 <p>For example, using simple moving average function from TA-Lib:</p>
 <pre><code>def init():
     self.sma = self.I(ta.SMA, self.data.Close, self.n_sma)
-</code></pre></div>
+</code></pre>
+<div class="admonition warning">
+<p class="admonition-title">Warning</p>
+<p>Rolling indicators may front-pad warm-up values with NaNs.
+In this case, the <strong>backtest will only begin on the first bar when
+all declared indicators have non-NaN values</strong> (e.g. bar 201 for a
+strategy that uses a 200-bar MA).
+This can affect results.</p>
+</div></div>
 </dd>
 <dt id="backtesting.backtesting.Strategy.buy"><code class="name flex">
 <span>def <span class="ident">buy</span></span>(<span>self, *, size=.9999, limit=None, stop=None, sl=None, tp=None, tag=None)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Place a new long order. For explanation of parameters, see <code><a title="backtesting.backtesting.Order" href="#backtesting.backtesting.Order">Order</a></code> and its properties.</p>
+<div class="desc"><p>Place a new long order and return it. For explanation of parameters, see <code><a title="backtesting.backtesting.Order" href="#backtesting.backtesting.Order">Order</a></code>
+and its properties.
+Unless you're running <code>Backtest(..., trade_on_close=True)</code>,
+market orders are filled on next bar's open,
+whereas other order types (limit, stop-limit, stop-market) are filled when
+the respective conditions are met.</p>
 <p>See <code><a title="backtesting.backtesting.Position.close" href="#backtesting.backtesting.Position.close">Position.close()</a></code> and <code><a title="backtesting.backtesting.Trade.close" href="#backtesting.backtesting.Trade.close">Trade.close()</a></code> for closing existing positions.</p>
 <p>See also <code><a title="backtesting.backtesting.Strategy.sell" href="#backtesting.backtesting.Strategy.sell">Strategy.sell()</a></code>.</p></div>
 </dd>
@@ -536,7 +569,14 @@ make sure to call:</p>
 <span>def <span class="ident">sell</span></span>(<span>self, *, size=.9999, limit=None, stop=None, sl=None, tp=None, tag=None)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Place a new short order. For explanation of parameters, see <code><a title="backtesting.backtesting.Order" href="#backtesting.backtesting.Order">Order</a></code> and its properties.</p>
+<div class="desc"><p>Place a new short order and return it. For explanation of parameters, see <code><a title="backtesting.backtesting.Order" href="#backtesting.backtesting.Order">Order</a></code>
+and its properties.</p>
+<div class="admonition caution">
+<p class="admonition-title">Caution</p>
+<p>Keep in mind that <code>self.sell(size=.1)</code> doesn't close existing <code>self.buy(size=.1)</code>
+trade unless the underlying asset price hasn't changed yet.
+Use <code><a title="backtesting.backtesting.Trade.close" href="#backtesting.backtesting.Trade.close">Trade.close()</a></code> or <code><a title="backtesting.backtesting.Position.close" href="#backtesting.backtesting.Position.close">Position.close()</a></code> to exit trades.</p>
+</div>
 <p>See also <code><a title="backtesting.backtesting.Strategy.buy" href="#backtesting.backtesting.Strategy.buy">Strategy.buy()</a></code>.</p>
 <div class="admonition note">
 <p class="admonition-title">Note</p>
@@ -738,7 +778,7 @@ data-gaCategoryParameter="backtesting.backtesting">
 </main>
 <footer id="footer">
 <p>
-<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.5.0</a>
+<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.6.0</a>
 <span style="color:#ddd">&#21328;</span>
 </p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
