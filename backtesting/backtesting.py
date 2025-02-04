@@ -34,7 +34,7 @@ except ImportError:
 
 from ._plotting import plot  # noqa: I001
 from ._stats import compute_stats
-from ._util import _as_str, _Indicator, _Data, try_
+from ._util import _as_str, _Indicator, _Data, _indicator_warmup_nbars, _strategy_indicators, try_
 
 __pdoc__ = {
     'Strategy.__init__': False,
@@ -1290,14 +1290,11 @@ class Backtest:
         data._update()  # Strategy.init might have changed/added to data.df
 
         # Indicators used in Strategy.next()
-        indicator_attrs = {attr: indicator
-                           for attr, indicator in strategy.__dict__.items()
-                           if isinstance(indicator, _Indicator)}.items()
+        indicator_attrs = _strategy_indicators(strategy)
 
         # Skip first few candles where indicators are still "warming up"
         # +1 to have at least two entries available
-        start = 1 + max((np.isnan(indicator.astype(float)).argmin(axis=-1).max()
-                         for _, indicator in indicator_attrs), default=0)
+        start = 1 + _indicator_warmup_nbars(strategy)
 
         # Disable "invalid value encountered in ..." warnings. Comparison
         # np.nan >= 3 is not invalid; it's False.

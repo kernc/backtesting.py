@@ -291,7 +291,7 @@ class TestBacktest(TestCase):
                 'Avg. Trade Duration': pd.Timedelta('46 days 00:00:00'),
                 'Avg. Trade [%]': 2.531715975158555,
                 'Best Trade [%]': 53.59595229490424,
-                'Buy & Hold Return [%]': 703.4582419772772,
+                'Buy & Hold Return [%]': 522.0601851851852,
                 'Calmar Ratio': 0.4414380935608377,
                 'Duration': pd.Timedelta('3116 days 00:00:00'),
                 'End': pd.Timestamp('2013-03-01 00:00:00'),

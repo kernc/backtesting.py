@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, List, Union, cast
 import numpy as np
 import pandas as pd
 
-from ._util import _data_period
+from ._util import _data_period, _indicator_warmup_nbars
 
 if TYPE_CHECKING:
     from .backtesting import Strategy, Trade
@@ -111,8 +111,9 @@ def compute_stats(
     if commissions:
         s.loc['Commissions [$]'] = commissions
     s.loc['Return [%]'] = (equity[-1] - equity[0]) / equity[0] * 100
+    first_trading_bar = _indicator_warmup_nbars(strategy_instance)
     c = ohlc_data.Close.values
-    s.loc['Buy & Hold Return [%]'] = (c[-1] - c[0]) / c[0] * 100  # long-only return
+    s.loc['Buy & Hold Return [%]'] = (c[-1] - c[first_trading_bar]) / c[first_trading_bar] * 100  # long-only return
 
     gmean_day_return: float = 0
     day_returns = np.array(np.nan)

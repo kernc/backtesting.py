@@ -42,6 +42,20 @@ def _data_period(index) -> Union[pd.Timedelta, Number]:
     return values.diff().dropna().median()
 
 
+def _strategy_indicators(strategy):
+    return {attr: indicator
+            for attr, indicator in strategy.__dict__.items()
+            if isinstance(indicator, _Indicator)}.items()
+
+
+def _indicator_warmup_nbars(strategy):
+    if strategy is None:
+        return 0
+    nbars = max((np.isnan(indicator.astype(float)).argmin(axis=-1).max()
+                 for _, indicator in _strategy_indicators(strategy)), default=0)
+    return nbars
+
+
 class _Array(np.ndarray):
     """
     ndarray extended to supply .name and other arbitrary properties
