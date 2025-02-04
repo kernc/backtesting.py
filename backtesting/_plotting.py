@@ -40,7 +40,7 @@ from bokeh.layouts import gridplot
 from bokeh.palettes import Category10
 from bokeh.transform import factor_cmap
 
-from backtesting._util import _data_period, _as_list, _Indicator
+from backtesting._util import _data_period, _as_list, _Indicator, try_
 
 with open(os.path.join(os.path.dirname(__file__), 'autoscale_cb.js'),
           encoding='utf-8') as _f:
@@ -128,8 +128,15 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
     from .lib import OHLCV_AGG, TRADES_AGG, _EQUITY_AGG
     df = df.resample(freq, label='right').agg(OHLCV_AGG).dropna()
 
-    indicators = [_Indicator(i.df.resample(freq, label='right').mean()
-                             .dropna().reindex(df.index).values.T,
+    def try_mean_first(indicator):
+        nonlocal freq
+        resampled = indicator.df.fillna(np.nan).resample(freq, label='right')
+        try:
+            return resampled.mean()
+        except Exception:
+            return resampled.first()
+
+    indicators = [_Indicator(try_mean_first(i).dropna().reindex(df.index).values.T,
                              **dict(i._opts, name=i.name,
                                     # Replace saved index with the resampled one
                                     index=df.index))
@@ -586,7 +593,7 @@ return this.labels[index] || "";
                             legend_label=legend_labels[j], line_color=color,
                             line_width=1.3)
                     # Add dashed centerline just because
-                    mean = float(pd.Series(arr).mean())
+                    mean = try_(lambda: float(pd.Series(arr).mean()), default=np.nan)
                     if not np.isnan(mean) and (abs(mean) < .1 or
                                                round(abs(mean), 1) == .5 or
                                                round(abs(mean), -1) in (50, 100, 200)):

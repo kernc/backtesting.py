@@ -767,7 +767,12 @@ class TestPlot(TestCase):
             time.sleep(1)
 
     def test_resample(self):
-        bt = Backtest(GOOG, SmaCross)
+        class S(SmaCross):
+            def init(self):
+                self.I(lambda: ['x'] * len(self.data))  # categorical indicator, GH-309
+                super().init()
+
+        bt = Backtest(GOOG, S)
         bt.run()
         import backtesting._plotting
         with _tempfile() as f, \
