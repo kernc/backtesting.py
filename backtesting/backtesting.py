@@ -254,6 +254,11 @@ class Strategy(metaclass=ABCMeta):
         Place a new short order and return it. For explanation of parameters, see `Order`
         and its properties.
 
+        .. caution::
+            Keep in mind that `self.sell(size=.1)` doesn't close existing `self.buy(size=.1)`
+            trade unless the underlying asset price hasn't changed yet.
+            Use `Trade.close()` or `Position.close()` to exit trades.
+
         See also `Strategy.buy()`.
 
         .. note::
