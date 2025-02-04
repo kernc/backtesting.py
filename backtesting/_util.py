@@ -52,7 +52,8 @@ def _indicator_warmup_nbars(strategy):
     if strategy is None:
         return 0
     nbars = max((np.isnan(indicator.astype(float)).argmin(axis=-1).max()
-                 for _, indicator in _strategy_indicators(strategy)), default=0)
+                 for _, indicator in _strategy_indicators(strategy)
+                 if not indicator._opts['scatter']), default=0)
     return nbars
 
 
