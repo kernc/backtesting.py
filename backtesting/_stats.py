@@ -38,7 +38,7 @@ def compute_stats(
         trades: Union[List['Trade'], pd.DataFrame],
         equity: np.ndarray,
         ohlc_data: pd.DataFrame,
-        strategy_instance: 'Strategy',
+        strategy_instance: Strategy | None,
         risk_free_rate: float = 0,
 ) -> pd.Series:
     assert -1 < risk_free_rate < 1
@@ -75,7 +75,7 @@ def compute_stats(
         trades_df['Tag'] = [t.tag for t in trades]
 
         # Add indicator values
-        if len(trades_df):
+        if len(trades_df) and strategy_instance:
             for ind in strategy_instance._indicators:
                 ind = np.atleast_2d(ind)
                 for i, values in enumerate(ind):  # multi-d indicators
