@@ -5,6 +5,14 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
+### 0.6.1
+(2025-02-04)
+
+Enhancement: Use `joblib.Parallel` for optimization.
+This should vastly improve performance on Windows while not
+affecting other platforms too much.
+
+
 ### 0.6.0
 (2025-02-04)
 
