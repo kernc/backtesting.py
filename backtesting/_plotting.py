@@ -46,7 +46,8 @@ with open(os.path.join(os.path.dirname(__file__), 'autoscale_cb.js'),
           encoding='utf-8') as _f:
     _AUTOSCALE_JS_CALLBACK = _f.read()
 
-IS_JUPYTER_NOTEBOOK = 'JPY_PARENT_PID' in os.environ
+IS_JUPYTER_NOTEBOOK = ('JPY_PARENT_PID' in os.environ or
+                       'inline' in os.environ.get('MPLBACKEND', ''))
 
 if IS_JUPYTER_NOTEBOOK:
     warnings.warn('Jupyter Notebook detected. '
