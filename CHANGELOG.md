@@ -5,6 +5,28 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
+### 0.6.0
+(2025-02-04)
+
+* Enhancements:
+  * Add `Backtest(spread=)`; change `Backtest(commission=)` to apply twice per trade
+  * Show paid "Commissions [$]" key in trade stats
+  * Allow multiple names for vector indicators (#980)
+  * Add columns SL and TP to `stats['trades']` (#1039)
+  * Add entry/exit indicator values to `stats['trades']` (#1116)
+  * Optionally finalize trades at the end of backtest run (#393)
+* Bug fixes, including for some long-standing bugs:
+  * Fix bug in Sharpe ratio with non-zero risk-free rate (#904)
+  * Change price comparisons to lte/gte to align with TradingView
+  * Reduce optimization memory footprint (#884)
+  * Fix annualized stats with weekly/monthly data
+  * Fix `AssertionError` on `for o in self.orders: o.cancel()`
+  * Fix plot not shown in VSCode Jupyter
+  * Buy&Hold duration now matches trading duration
+  * Fix `bt.plot(resample=True)` with categorical indicators
+* Several other small bug fixes, deprecations and docs updates.
+
+
 ### 0.5.0
 (2025-01-21)
 
