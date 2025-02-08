@@ -437,7 +437,8 @@ return this.labels[index] || "";
 
     def _plot_volume_section():
         """Volume section"""
-        fig = new_indicator_figure(y_axis_label="Volume")
+        fig = new_indicator_figure(height=70, y_axis_label="Volume")
+        fig.yaxis.ticker.desired_num_ticks = 3
         fig.xaxis.formatter = fig_ohlc.xaxis[0].formatter
         fig.xaxis.visible = True
         fig_ohlc.xaxis.visible = False  # Show only Volume's xaxis
