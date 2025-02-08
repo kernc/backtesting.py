@@ -670,7 +670,11 @@ return this.labels[index] || "";
                                                   code=_AUTOSCALE_JS_CALLBACK))
 
     figs = figs_above_ohlc + [fig_ohlc] + figs_below_ohlc
-    linked_crosshair = CrosshairTool(dimensions='both')
+    linked_crosshair = CrosshairTool(
+        dimensions='both', line_color='lightgrey',
+        overlay=(Span(dimension="width", line_dash="dotted", line_width=1),
+                 Span(dimension="height", line_dash="dotted", line_width=1)),
+    )
 
     for f in figs:
         if f.legend:
