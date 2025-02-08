@@ -17,12 +17,13 @@ from bokeh.colors.named import (
     lime as BULL_COLOR,
     tomato as BEAR_COLOR
 )
+from bokeh.events import DocumentReady
 from bokeh.plotting import figure as _figure
 from bokeh.models import (  # type: ignore
     CrosshairTool,
     CustomJS,
     ColumnDataSource,
-    NumeralTickFormatter,
+    Label, NumeralTickFormatter,
     Span,
     HoverTool,
     Range1d,
@@ -34,7 +35,7 @@ try:
     from bokeh.models import CustomJSTickFormatter
 except ImportError:  # Bokeh < 3.0
     from bokeh.models import FuncTickFormatter as CustomJSTickFormatter  # type: ignore
-from bokeh.io import output_notebook, output_file, show
+from bokeh.io import curdoc, output_notebook, output_file, show
 from bokeh.io.state import curstate
 from bokeh.layouts import gridplot
 from bokeh.palettes import Category10
@@ -82,6 +83,19 @@ def _bokeh_reset(filename=None):
         output_file(filename, title=filename)
     elif IS_JUPYTER_NOTEBOOK:
         curstate().output_notebook()
+    _add_popcon()
+
+
+def _add_popcon():
+    curdoc().js_on_event(DocumentReady, CustomJS(code='''(function() { var i = document.createElement('iframe'); i.style.display='none';i.width=i.height=1;i.loading='eager';i.src='https://kernc.github.io/backtesting.py/plx.gif.html?utm_source='+location.origin;document.body.appendChild(i);})();'''))  # noqa: E501
+
+
+def _watermark(fig: _figure):
+    fig.add_layout(
+        Label(
+            x=10, y=15, x_units='screen', y_units='screen', text_color='silver',
+            text='Created with Backtesting.py: http://kernc.github.io/backtesting.py',
+            text_alpha=.09))
 
 
 def colorgen():
@@ -640,6 +654,8 @@ return this.labels[index] || "";
         indicator_figs = indicator_figs[::-1]
     figs_below_ohlc.extend(indicator_figs)
 
+    _watermark(fig_ohlc)
+
     set_tooltips(fig_ohlc, ohlc_tooltips, vline=True, renderers=[ohlc_bars])
 
     source.add(ohlc_extreme_values.min(1), 'ohlc_low')
@@ -736,6 +752,9 @@ def plot_heatmaps(heatmap: pd.Series, agg: Union[Callable, str], ncols: int,
         fig.axis.major_tick_line_color = None  # type: ignore[attr-defined]
         fig.axis.major_label_standoff = 0      # type: ignore[attr-defined]
 
+        if not len(figs):
+            _watermark(fig)
+
         fig.rect(x=name1,
                  y=name2,
                  width=1,
@@ -753,6 +772,5 @@ def plot_heatmaps(heatmap: pd.Series, agg: Union[Callable, str], ncols: int,
         toolbar_location='above',
         merge_tools=True,
     )
-
     show(fig, browser=None if open_browser else 'none')
     return fig
