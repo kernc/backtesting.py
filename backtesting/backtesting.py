@@ -79,6 +79,7 @@ class Strategy(metaclass=ABCMeta):
     def I(self,  # noqa: E743
           func: Callable, *args,
           name=None, plot=True, overlay=None, color=None, scatter=False,
+          plot_group=None,
           **kwargs) -> np.ndarray:
         """
         Declare an indicator. An indicator is just an array of values
@@ -104,6 +105,11 @@ class Strategy(metaclass=ABCMeta):
         If `False`, the indicator is plotted standalone below the
         candlestick chart. By default, a heuristic is used which decides
         correctly most of the time.
+
+        For non-overlaying indicators, if `plot_group` is set,
+        indicators with the same `plot_group` value will be combined
+        on one chart which is useful for displaying crossing indicators
+        like Aroon.
 
         `color` can be string hex RGB triplet or X11 color name.
         By default, the next available color is assigned.
@@ -179,7 +185,7 @@ class Strategy(metaclass=ABCMeta):
         value = _Indicator(value, name=name, plot=plot, overlay=overlay,
                            color=color, scatter=scatter,
                            # _Indicator.s Series accessor uses this:
-                           index=self.data.index)
+                           index=self.data.index, plot_group=plot_group)
         self._indicators.append(value)
         return value
 

@@ -527,6 +527,7 @@ return this.labels[index] || "";
 
         ohlc_colors = colorgen()
         indicator_figs = []
+        plot_group_to_fig = {}
 
         for i, value in enumerate(indicators):
             value = np.atleast_2d(value)
@@ -541,8 +542,14 @@ return this.labels[index] || "";
             if is_overlay:
                 fig = fig_ohlc
             else:
-                fig = new_indicator_figure()
-                indicator_figs.append(fig)
+                if (value._opts['plot_group'] is not None and
+                    value._opts['plot_group'] in plot_group_to_fig):
+                    fig = plot_group_to_fig[value._opts['plot_group']]
+                else:
+                    fig = new_indicator_figure()
+                    indicator_figs.append(fig)
+                    if value._opts['plot_group'] is not None:
+                        plot_group_to_fig[value._opts['plot_group']] = fig
             tooltips = []
             colors = value._opts['color']
             colors = colors and cycle(_as_list(colors)) or (
