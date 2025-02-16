@@ -653,10 +653,10 @@ return this.labels[index] || "";
     fig_ohlc.x_range.js_on_change('end', CustomJS(args=custom_js_args,
                                                   code=_AUTOSCALE_JS_CALLBACK))
 
-    plots = figs_above_ohlc + [fig_ohlc] + figs_below_ohlc
+    figs = figs_above_ohlc + [fig_ohlc] + figs_below_ohlc
     linked_crosshair = CrosshairTool(dimensions='both')
 
-    for f in plots:
+    for f in figs:
         if f.legend:
             f.legend.visible = show_legend
             f.legend.location = 'top_left'
@@ -682,7 +682,7 @@ return this.labels[index] || "";
         kwargs['sizing_mode'] = 'stretch_width'
 
     fig = gridplot(
-        plots,
+        figs,
         ncols=1,
         toolbar_location='right',
         toolbar_options=dict(logo=None),
@@ -708,7 +708,7 @@ def plot_heatmaps(heatmap: pd.Series, agg: Union[Callable, str], ncols: int,
     param_combinations = combinations(heatmap.index.names, 2)
     dfs = [heatmap.groupby(list(dims)).agg(agg).to_frame(name='_Value')
            for dims in param_combinations]
-    plots = []
+    figs = []
     cmap = LinearColorMapper(palette='Viridis256',
                              low=min(df.min().min() for df in dfs),
                              high=max(df.max().max() for df in dfs),
@@ -744,10 +744,10 @@ def plot_heatmaps(heatmap: pd.Series, agg: Union[Callable, str], ncols: int,
                  line_color=None,
                  fill_color=dict(field='_Value',
                                  transform=cmap))
-        plots.append(fig)
+        figs.append(fig)
 
     fig = gridplot(
-        plots,  # type: ignore
+        figs,  # type: ignore
         ncols=ncols,
         toolbar_options=dict(logo=None),
         toolbar_location='above',
