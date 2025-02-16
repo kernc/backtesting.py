@@ -219,7 +219,7 @@ def plot(*, results: pd.Series,
     equity_data = equity_data.reset_index(drop=True)
     index = df.index
 
-    new_bokeh_figure = partial(
+    new_bokeh_figure = partial(  # type: ignore[call-arg]
         _figure,
         x_axis_type='linear',
         width=plot_width,
@@ -230,11 +230,11 @@ def plot(*, results: pd.Series,
 
     pad = (index[-1] - index[0]) / 20
 
-    _kwargs = dict(x_range=Range1d(index[0], index[-1],
+    _kwargs = dict(x_range=Range1d(index[0], index[-1],  # type: ignore[call-arg]
                                    min_interval=10,
                                    bounds=(index[0] - pad,
                                            index[-1] + pad))) if index.size > 1 else {}
-    fig_ohlc = new_bokeh_figure(**_kwargs)
+    fig_ohlc = new_bokeh_figure(**_kwargs)  # type: ignore[arg-type]
     figs_above_ohlc, figs_below_ohlc = [], []
 
     source = ColumnDataSource(df)
@@ -255,7 +255,7 @@ def plot(*, results: pd.Series,
     trades_cmap = factor_cmap('returns_positive', colors_darker, ['0', '1'])
 
     if is_datetime_index:
-        fig_ohlc.xaxis.formatter = CustomJSTickFormatter(
+        fig_ohlc.xaxis.formatter = CustomJSTickFormatter(  # type: ignore[attr-defined]
             args=dict(axis=fig_ohlc.xaxis[0],
                       formatter=DatetimeTickFormatter(days='%a, %d %b',
                                                       months='%m/%Y'),
@@ -649,7 +649,7 @@ return this.labels[index] || "";
     if plot_volume:
         custom_js_args.update(volume_range=fig_volume.y_range)
 
-    fig_ohlc.x_range.js_on_change('end', CustomJS(args=custom_js_args,  # type: ignore
+    fig_ohlc.x_range.js_on_change('end', CustomJS(args=custom_js_args,
                                                   code=_AUTOSCALE_JS_CALLBACK))
 
     plots = figs_above_ohlc + [fig_ohlc] + figs_below_ohlc
@@ -674,7 +674,7 @@ return this.labels[index] || "";
 
         f.add_tools(linked_crosshair)
         wheelzoom_tool = next(wz for wz in f.tools if isinstance(wz, WheelZoomTool))
-        wheelzoom_tool.maintain_focus = False  # type: ignore
+        wheelzoom_tool.maintain_focus = False
 
     kwargs = {}
     if plot_width is None:
@@ -720,7 +720,7 @@ def plot_heatmaps(heatmap: pd.Series, agg: Union[Callable, str], ncols: int,
         df[name1] = df[name1].astype('str')
         df[name2] = df[name2].astype('str')
 
-        fig = _figure(x_range=level1,
+        fig = _figure(x_range=level1,  # type: ignore[call-arg]
                       y_range=level2,
                       x_axis_label=name1,
                       y_axis_label=name2,
@@ -730,10 +730,10 @@ def plot_heatmaps(heatmap: pd.Series, agg: Union[Callable, str], ncols: int,
                       tooltips=[(name1, '@' + name1),
                                 (name2, '@' + name2),
                                 ('Value', '@_Value{0.[000]}')])
-        fig.grid.grid_line_color = None
-        fig.axis.axis_line_color = None
-        fig.axis.major_tick_line_color = None
-        fig.axis.major_label_standoff = 0
+        fig.grid.grid_line_color = None        # type: ignore[attr-defined]
+        fig.axis.axis_line_color = None        # type: ignore[attr-defined]
+        fig.axis.major_tick_line_color = None  # type: ignore[attr-defined]
+        fig.axis.major_label_standoff = 0      # type: ignore[attr-defined]
 
         fig.rect(x=name1,
                  y=name2,
