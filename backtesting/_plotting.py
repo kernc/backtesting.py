@@ -728,7 +728,7 @@ def plot_heatmaps(heatmap: pd.Series, agg: Union[Callable, str], ncols: int,
     param_combinations = combinations(heatmap.index.names, 2)
     dfs = [heatmap.groupby(list(dims)).agg(agg).to_frame(name='_Value')
            for dims in param_combinations]
-    figs = []
+    figs: list[_figure] = []
     cmap = LinearColorMapper(palette='Viridis256',
                              low=min(df.min().min() for df in dfs),
                              high=max(df.max().max() for df in dfs),
