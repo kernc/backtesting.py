@@ -22,7 +22,7 @@
 # [basic framework usage](https://kernc.github.io/backtesting.py/doc/examples/Quick%20Start%20User%20Guide.html).
 #
 # We will put to the test this long-only, supposed
-# [400%-a-year trading strategy](http://jbmarwood.com/stock-trading-strategy-300/),
+# [400%-a-year trading strategy](https://web.archive.org/web/20180515044054/http://jbmarwood.com/stock-trading-strategy-300/),
 # which uses daily and weekly
 # [relative strength index](https://en.wikipedia.org/wiki/Relative_strength_index)
 # (RSI) values and moving averages (MA).
