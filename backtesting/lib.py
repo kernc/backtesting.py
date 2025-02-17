@@ -25,7 +25,7 @@ import pandas as pd
 from ._plotting import plot_heatmaps as _plot_heatmaps
 from ._stats import compute_stats as _compute_stats
 from ._util import _Array, _as_str
-from .backtesting import Strategy
+from .backtesting import Backtest, Strategy
 
 __pdoc__ = {}
 
@@ -487,6 +487,30 @@ class TrailingStrategy(Strategy):
             else:
                 trade.sl = min(trade.sl or np.inf,
                                self.data.Close[index] + self.__atr[index] * self.__n_atr)
+
+
+class FractionalBacktest(Backtest):
+    """
+    A `backtesting.Backtest` that supports fractional share trading
+    by simple composition. It applies roughly the transformation:
+
+        df = (df / satoshi).assign(Volume=df.Volume * satoshi)
+
+    as unchallenged in [this FAQ entry on GitHub](https://github.com/kernc/backtesting.py/issues/134),
+    then passes `data`, `args*`, and `**kwargs` to its super.
+
+    Parameter `satoshi` tells the amount of scaling to do. E.g. for
+    μBTC trading, pass `satoshi=1e6`.
+    """
+    def __init__(self,
+                 data,
+                 *args,
+                 satoshi=int(100e6),
+                 **kwargs):
+        data = data.copy()
+        data[['Open', 'High', 'Low', 'Close']] /= satoshi
+        data['Volume'] *= satoshi
+        super().__init__(data, *args, **kwargs)
 
 
 # Prevent pdoc3 documenting __init__ signature of Strategy subclasses

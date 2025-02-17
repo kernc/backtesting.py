@@ -20,7 +20,7 @@ from backtesting import Backtest, Strategy
 from backtesting._stats import compute_drawdown_duration_peaks
 from backtesting._util import _Array, _as_str, _Indicator, try_
 from backtesting.lib import (
-    OHLCV_AGG,
+    FractionalBacktest, OHLCV_AGG,
     SignalStrategy,
     TrailingStrategy,
     barssince,
@@ -32,7 +32,7 @@ from backtesting.lib import (
     random_ohlc_data,
     resample_apply,
 )
-from backtesting.test import EURUSD, GOOG, SMA
+from backtesting.test import BTCUSD, EURUSD, GOOG, SMA
 
 SHORT_DATA = GOOG.iloc[:20]  # Short data for fast tests with no indicator lag
 
@@ -936,6 +936,11 @@ class TestLib(TestCase):
 
         stats = Backtest(GOOG, S).run()
         self.assertEqual(stats['# Trades'], 56)
+
+    def test_FractionalBacktest(self):
+        ubtc_bt = FractionalBacktest(BTCUSD['2015':], SmaCross, satoshi=1e6, cash=100)
+        stats = ubtc_bt.run(fast=2, slow=3)
+        self.assertEqual(stats['# Trades'], 41)
 
 
 class TestUtil(TestCase):
