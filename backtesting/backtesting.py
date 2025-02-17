@@ -1536,7 +1536,7 @@ class Backtest:
                 if values.dtype.kind in 'mM':  # timedelta, datetime64
                     # these dtypes are unsupported in SAMBO, so convert to raw int
                     # TODO: save dtype and convert back later
-                    values = values.astype(int)
+                    values = values.astype(np.int64)
 
                 if values.dtype.kind in 'iumM':
                     dimensions.append((values.min(), values.max() + 1))
