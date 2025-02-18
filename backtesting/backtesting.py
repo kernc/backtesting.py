@@ -1320,7 +1320,7 @@ class Backtest:
             else:
                 if self._finalize_trades is True:
                     # Close any remaining open trades so they produce some stats
-                    for trade in broker.trades:
+                    for trade in reversed(broker.trades):
                         trade.close()
 
                     # HACK: Re-run broker one last time to handle close orders placed in the last
