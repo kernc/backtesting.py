@@ -1763,3 +1763,14 @@ class Backtest:
             reverse_indicators=reverse_indicators,
             show_legend=show_legend,
             open_browser=open_browser)
+
+
+# NOTE: Don't put anything public below this __all__ list
+
+__all__ = [getattr(v, '__name__', k)
+           for k, v in globals().items()                        # export
+           if ((callable(v) and v.__module__ == __name__ or     # callables from this module
+                k.isupper()) and                                # or CONSTANTS
+               not getattr(v, '__name__', k).startswith('_'))]  # neither marked internal
+
+# NOTE: Don't put anything public below here. See above.
