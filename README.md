@@ -5,16 +5,16 @@ Backtesting.py
 [![Build Status](https://img.shields.io/github/actions/workflow/status/kernc/backtesting.py/ci.yml?branch=master&style=for-the-badge)](https://github.com/kernc/backtesting.py/actions)
 [![Code Coverage](https://img.shields.io/codecov/c/gh/kernc/backtesting.py.svg?style=for-the-badge)](https://codecov.io/gh/kernc/backtesting.py)
 [![Backtesting on PyPI](https://img.shields.io/pypi/v/backtesting.svg?color=blue&style=for-the-badge)](https://pypi.org/project/backtesting)
-[![PyPI downloads](https://img.shields.io/pypi/dd/backtesting.svg?color=skyblue&style=for-the-badge)](https://pypi.org/project/backtesting)
-[![Total downloads](https://img.shields.io/pepy/dt/backtesting?style=for-the-badge&label=%E2%88%91&color=skyblue)](https://pypi.org/project/backtesting)
+[![PyPI downloads](https://img.shields.io/pypi/dd/backtesting.svg?color=skyblue&style=for-the-badge)](https://pypistats.org/packages/backtesting)
+[![Total downloads](https://img.shields.io/pepy/dt/backtesting?style=for-the-badge&label=%E2%88%91&color=skyblue)](https://pypistats.org/packages/backtesting)
 [![GitHub Sponsors](https://img.shields.io/github/sponsors/kernc?color=pink&style=for-the-badge&label=%E2%99%A5)](https://github.com/sponsors/kernc)
 
 Backtest trading strategies with Python.
 
-[**Project website**](https://kernc.github.io/backtesting.py) + [Documentation]
+[**Project website**](https://kernc.github.io/backtesting.py) + [Documentation] &nbsp;&nbsp;|&nbsp; [YouTube]
 
 [Documentation]: https://kernc.github.io/backtesting.py/doc/backtesting/
-
+[YouTube]: https://www.youtube.com/?q=%22backtesting.py%22
 
 Installation
 ------------
