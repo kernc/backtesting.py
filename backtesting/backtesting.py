@@ -8,9 +8,12 @@ module directly, e.g.
 
 from __future__ import annotations
 
+import multiprocessing as mp
+import os
 import sys
 import warnings
 from abc import ABCMeta, abstractmethod
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import copy
 from functools import lru_cache, partial
 from itertools import chain, product, repeat
@@ -20,7 +23,6 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
-from joblib import Parallel, delayed
 from numpy.random import default_rng
 
 try:
@@ -1495,15 +1497,41 @@ class Backtest:
                                     [p.values() for p in param_combos],
                                     names=next(iter(param_combos)).keys()))
 
-            with Parallel(prefer='threads', require='sharedmem', max_nbytes='50M',
-                          n_jobs=-2, return_as='generator') as parallel:
-                results = _tqdm(
-                    parallel(delayed(self._mp_task)(self, params, maximize=maximize)
-                             for params in param_combos),
-                    total=len(param_combos),
-                    desc='Backtest.optimize')
-                for value, params in zip(results, param_combos):
-                    heatmap[tuple(params.values())] = value
+            def _batch(seq):
+                n = np.clip(int(len(seq) // (os.cpu_count() or 1)), 1, 300)
+                for i in range(0, len(seq), n):
+                    yield seq[i:i + n]
+
+            # Save necessary objects into "global" state; pass into concurrent executor
+            # (and thus pickle) nothing but two numbers; receive nothing but numbers.
+            # With start method "fork", children processes will inherit parent address space
+            # in a copy-on-write manner, achieving better performance/RAM benefit.
+            backtest_uuid = np.random.random()
+            param_batches = list(_batch(param_combos))
+            Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)
+            try:
+                # If multiprocessing start method is 'fork' (i.e. on POSIX), use
+                # a pool of processes to compute results in parallel.
+                # Otherwise (i.e. on Windos), sequential computation will be "faster".
+                if mp.get_start_method(allow_none=False) == 'fork':
+                    with ProcessPoolExecutor() as executor:
+                        futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
+                                   for i in range(len(param_batches))]
+                        for future in _tqdm(as_completed(futures), total=len(futures),
+                                            desc='Backtest.optimize'):
+                            batch_index, values = future.result()
+                            for value, params in zip(values, param_batches[batch_index]):
+                                heatmap[tuple(params.values())] = value
+                else:
+                    if os.name == 'posix':
+                        warnings.warn("For multiprocessing support in `Backtest.optimize()` "
+                                      "set multiprocessing start method to 'fork'.")
+                    for batch_index in _tqdm(range(len(param_batches))):
+                        _, values = Backtest._mp_task(backtest_uuid, batch_index)
+                        for value, params in zip(values, param_batches[batch_index]):
+                            heatmap[tuple(params.values())] = value
+            finally:
+                del Backtest._mp_backtests[backtest_uuid]
 
             if pd.isnull(heatmap).all():
                 # No trade was made in any of the runs. Just make a random
@@ -1552,7 +1580,7 @@ class Backtest:
                 stats = self.run(**dict(tup))
                 return -maximize(stats)
 
-            progress = iter(_tqdm(repeat(None), total=max_tries, desc='Backtest.optimize'))
+            progress = iter(_tqdm(repeat(None), total=max_tries, leave=False, desc='Backtest.optimize'))
             _names = tuple(kwargs.keys())
 
             def objective_function(x):
@@ -1597,9 +1625,11 @@ class Backtest:
         return output
 
     @staticmethod
-    def _mp_task(bt, params, *, maximize):
-        stats = bt.run(**params)
-        return maximize(stats) if stats['# Trades'] else np.nan
+    def _mp_task(backtest_uuid, batch_index):
+        bt, param_batches, maximize_func = Backtest._mp_backtests[backtest_uuid]
+        return batch_index, [maximize_func(stats) if stats['# Trades'] else np.nan
+                             for stats in (bt.run(**params)
+                                           for params in param_batches[batch_index])]
 
     _mp_backtests: Dict[float, Tuple['Backtest', List, Callable]] = {}
 

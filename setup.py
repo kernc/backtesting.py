@@ -34,7 +34,6 @@ if __name__ == '__main__':
             'numpy >= 1.17.0',
             'pandas >= 0.25.0, != 0.25.0',
             'bokeh >= 1.4.0, != 3.0.*, != 3.2.*',
-            'joblib',
         ],
         extras_require={
             'doc': [
