@@ -1508,12 +1508,15 @@ class Backtest:
             with mp.Pool() as pool, \
                     SharedMemoryManager() as smm:
 
+                shm_refs = []  # https://stackoverflow.com/questions/74193377/filenotfounderror-when-passing-a-shared-memory-to-a-new-process#comment130999060_74194875  # noqa: E501
+
                 def arr2shm(vals):
                     nonlocal smm
                     shm = smm.SharedMemory(size=vals.nbytes)
                     buf = np.ndarray(vals.shape, dtype=vals.dtype, buffer=shm.buf)
                     buf[:] = vals[:]  # Copy into shared memory
                     assert vals.ndim == 1, (vals.ndim, vals.shape, vals)
+                    shm_refs.append(shm)
                     return shm.name, vals.shape, vals.dtype
 
                 data_shm = tuple((
