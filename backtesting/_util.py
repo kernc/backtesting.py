@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import warnings
+from contextlib import contextmanager
 from numbers import Number
 from typing import Dict, List, Optional, Sequence, Union, cast
 
@@ -13,6 +14,20 @@ def try_(lazy_func, default=None, exception=Exception):
         return lazy_func()
     except exception:
         return default
+
+
+@contextmanager
+def patch(obj, attr, newvalue):
+    had_attr = hasattr(obj, attr)
+    orig_value = getattr(obj, attr, None)
+    setattr(obj, attr, newvalue)
+    try:
+        yield
+    finally:
+        if had_attr:
+            setattr(obj, attr, orig_value)
+        else:
+            delattr(obj, attr)
 
 
 def _as_str(value) -> str:
