@@ -13,13 +13,12 @@ import os
 import sys
 import warnings
 from abc import ABCMeta, abstractmethod
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from copy import copy
 from functools import lru_cache, partial
 from itertools import chain, product, repeat
 from math import copysign
 from numbers import Number
-from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
+from typing import Callable, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
@@ -34,7 +33,10 @@ except ImportError:
 
 from ._plotting import plot  # noqa: I001
 from ._stats import compute_stats
-from ._util import _as_str, _Indicator, _Data, _indicator_warmup_nbars, _strategy_indicators, try_
+from ._util import (
+    SharedMemory, SharedMemoryManager, _as_str, _Indicator, _Data, _indicator_warmup_nbars,
+    _strategy_indicators, patch, try_,
+)
 
 __pdoc__ = {
     'Strategy.__init__': False,
@@ -1498,40 +1500,40 @@ class Backtest:
                                     names=next(iter(param_combos)).keys()))
 
             def _batch(seq):
+                # XXX: Replace with itertools.batched
                 n = np.clip(int(len(seq) // (os.cpu_count() or 1)), 1, 300)
                 for i in range(0, len(seq), n):
                     yield seq[i:i + n]
 
-            # Save necessary objects into "global" state; pass into concurrent executor
-            # (and thus pickle) nothing but two numbers; receive nothing but numbers.
-            # With start method "fork", children processes will inherit parent address space
-            # in a copy-on-write manner, achieving better performance/RAM benefit.
-            backtest_uuid = np.random.random()
-            param_batches = list(_batch(param_combos))
-            Backtest._mp_backtests[backtest_uuid] = (self, param_batches, maximize)
-            try:
-                # If multiprocessing start method is 'fork' (i.e. on POSIX), use
-                # a pool of processes to compute results in parallel.
-                # Otherwise (i.e. on Windos), sequential computation will be "faster".
-                if mp.get_start_method(allow_none=False) == 'fork':
-                    with ProcessPoolExecutor() as executor:
-                        futures = [executor.submit(Backtest._mp_task, backtest_uuid, i)
-                                   for i in range(len(param_batches))]
-                        for future in _tqdm(as_completed(futures), total=len(futures),
-                                            desc='Backtest.optimize'):
-                            batch_index, values = future.result()
-                            for value, params in zip(values, param_batches[batch_index]):
-                                heatmap[tuple(params.values())] = value
-                else:
-                    if os.name == 'posix':
-                        warnings.warn("For multiprocessing support in `Backtest.optimize()` "
-                                      "set multiprocessing start method to 'fork'.")
-                    for batch_index in _tqdm(range(len(param_batches))):
-                        _, values = Backtest._mp_task(backtest_uuid, batch_index)
-                        for value, params in zip(values, param_batches[batch_index]):
-                            heatmap[tuple(params.values())] = value
-            finally:
-                del Backtest._mp_backtests[backtest_uuid]
+            with mp.Pool() as pool, \
+                    SharedMemoryManager() as smm:
+
+                def arr2shm(vals):
+                    nonlocal smm
+                    shm = smm.SharedMemory(size=vals.nbytes)
+                    buf = np.ndarray(vals.shape, dtype=vals.dtype, buffer=shm.buf)
+                    buf[:] = vals[:]  # Copy into shared memory
+                    assert vals.ndim == 1, (vals.ndim, vals.shape, vals)
+                    return shm.name, vals.shape, vals.dtype
+
+                data_shm = tuple((
+                    (column, *arr2shm(values))
+                    for column, values in chain([(Backtest._mp_task_INDEX_COL, self._data.index)],
+                                                self._data.items())
+                ))
+                with patch(self, '_data', None):
+                    bt = copy(self)  # bt._data will be reassigned in _mp_task worker
+                results = _tqdm(
+                    pool.imap(Backtest._mp_task,
+                              ((bt, data_shm, params_batch)
+                               for params_batch in _batch(param_combos))),
+                    total=len(param_combos),
+                    desc='Backtest.optimize'
+                )
+                for param_batch, result in zip(_batch(param_combos), results):
+                    for params, stats in zip(param_batch, result):
+                        if stats is not None:
+                            heatmap[tuple(params.values())] = maximize(stats)
 
             if pd.isnull(heatmap).all():
                 # No trade was made in any of the runs. Just make a random
@@ -1625,13 +1627,28 @@ class Backtest:
         return output
 
     @staticmethod
-    def _mp_task(backtest_uuid, batch_index):
-        bt, param_batches, maximize_func = Backtest._mp_backtests[backtest_uuid]
-        return batch_index, [maximize_func(stats) if stats['# Trades'] else np.nan
-                             for stats in (bt.run(**params)
-                                           for params in param_batches[batch_index])]
+    def _mp_task(arg):
+        bt, data_shm, params_batch = arg
+        shm = [SharedMemory(name=shm_name, create=False, track=False)
+               for _, shm_name, *_ in data_shm]
+        try:
+            def shm2arr(shm, shape, dtype):
+                arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
+                arr.setflags(write=False)
+                return arr
 
-    _mp_backtests: Dict[float, Tuple['Backtest', List, Callable]] = {}
+            bt._data = df = pd.DataFrame({
+                col: shm2arr(shm, shape, dtype)
+                for shm, (col, _, shape, dtype) in zip(shm, data_shm)})
+            df.set_index(Backtest._mp_task_INDEX_COL, drop=True, inplace=True)
+            return [stats.filter(regex='^[^_]') if stats['# Trades'] else None
+                    for stats in (bt.run(**params)
+                                  for params in params_batch)]
+        finally:
+            for shmem in shm:
+                shmem.close()
+
+    _mp_task_INDEX_COL = '__bt_index'
 
     def plot(self, *, results: pd.Series = None, filename=None, plot_width=None,
              plot_equity=True, plot_return=False, plot_pl=True,

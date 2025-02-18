@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import sys
 import warnings
 from contextlib import contextmanager
+from multiprocessing import resource_tracker as _mprt
+from multiprocessing import shared_memory as _mpshm
 from numbers import Number
+from threading import Lock
 from typing import Dict, List, Optional, Sequence, Union, cast
 
 import numpy as np
@@ -225,3 +229,47 @@ class _Data:
 
     def __setstate__(self, state):
         self.__dict__ = state
+
+
+if sys.version_info >= (3, 13):
+    SharedMemory = _mpshm.SharedMemory
+    from multiprocessing.managers import SharedMemoryManager  # noqa: F401
+else:
+    class SharedMemory(_mpshm.SharedMemory):
+        # From https://github.com/python/cpython/issues/82300#issuecomment-2169035092
+        __lock = Lock()
+
+        def __init__(self, *args, track: bool = True, **kwargs):
+            self._track = track
+            if track:
+                return super().__init__(*args, **kwargs)
+            with self.__lock:
+                with patch(_mprt, 'register', lambda *a, **kw: None):  # TODO lambda
+                    super().__init__(*args, **kwargs)
+
+        def unlink(self):
+            if _mpshm._USE_POSIX and self._name:
+                _mpshm._posixshmem.shm_unlink(self._name)
+                if self._track:
+                    _mprt.unregister(self._name, "shared_memory")
+
+    class SharedMemoryManager:
+        def __init__(self) -> None:
+            self._shms: list[SharedMemory] = []
+
+        def SharedMemory(self, size):
+            shm = SharedMemory(create=True, size=size, track=True)
+            self._shms.append(shm)
+            return shm
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args, **kwargs):
+            for shm in self._shms:
+                try:
+                    shm.close()
+                    shm.unlink()
+                except Exception:
+                    warnings.warn(f'Failed to unlink shared memory {shm.name!r}',
+                                  category=ResourceWarning, stacklevel=2)
