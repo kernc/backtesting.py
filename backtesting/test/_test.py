@@ -1,4 +1,5 @@
 import inspect
+import multiprocessing
 import os
 import sys
 import time
@@ -10,7 +11,6 @@ from glob import glob
 from runpy import run_path
 from tempfile import NamedTemporaryFile, gettempdir
 from unittest import TestCase
-from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -18,7 +18,7 @@ from pandas.testing import assert_frame_equal
 
 from backtesting import Backtest, Strategy
 from backtesting._stats import compute_drawdown_duration_peaks
-from backtesting._util import _Array, _as_str, _Indicator, try_
+from backtesting._util import _Array, _as_str, _Indicator, patch, try_
 from backtesting.lib import (
     FractionalBacktest, OHLCV_AGG,
     SignalStrategy,
@@ -626,7 +626,7 @@ class TestOptimize(TestCase):
         kw = {'fast': [10]}
 
         stats1 = Backtest(df, SmaCross).optimize(**kw)
-        with patch('multiprocessing.get_start_method', lambda **_: 'spawn'):
+        with patch(multiprocessing, 'get_start_method', lambda **_: 'spawn'):
             with self.assertWarns(UserWarning) as cm:
                 stats2 = Backtest(df, SmaCross).optimize(**kw)
 
@@ -776,7 +776,7 @@ class TestPlot(TestCase):
         bt.run()
         import backtesting._plotting
         with _tempfile() as f, \
-                patch.object(backtesting._plotting, '_MAX_CANDLES', 10), \
+                patch(backtesting._plotting, '_MAX_CANDLES', 10), \
                 self.assertWarns(UserWarning):
             bt.plot(filename=f, resample=True)
             # Give browser time to open before tempfile is removed
@@ -975,6 +975,15 @@ class TestUtil(TestCase):
         self.assertEqual(_as_str(lambda x: x), 'λ')
         for s in ('Open', 'High', 'Low', 'Close', 'Volume'):
             self.assertEqual(_as_str(_Array([1], name=s)), s[0])
+
+    def test_patch(self):
+        class Object:
+            pass
+        o = Object()
+        o.attr = False
+        with patch(o, 'attr', True):
+            self.assertTrue(o.attr)
+        self.assertFalse(o.attr)
 
     def test_pandas_accessors(self):
         class S(Strategy):
