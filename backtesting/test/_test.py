@@ -3,7 +3,6 @@ import os
 import sys
 import time
 import unittest
-import warnings
 from concurrent.futures.process import ProcessPoolExecutor
 from contextlib import contextmanager
 from glob import glob
@@ -1059,8 +1058,3 @@ class TestRegressions(TestCase):
                         order.cancel()
 
         Backtest(SHORT_DATA, S).run()
-
-
-if __name__ == '__main__':
-    warnings.filterwarnings('error')
-    unittest.main()
