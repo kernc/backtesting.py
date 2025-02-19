@@ -926,6 +926,7 @@ class TestLib(TestCase):
             def init(self):
                 super().init()
                 self.set_atr_periods(40)
+                self.set_trailing_pct(.1)
                 self.set_trailing_sl(3)
                 self.sma = self.I(lambda: self.data.Close.s.rolling(10).mean())
 

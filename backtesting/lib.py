@@ -474,10 +474,23 @@ class TrailingStrategy(Strategy):
 
     def set_trailing_sl(self, n_atr: float = 6):
         """
-        Sets the future trailing stop-loss as some multiple (`n_atr`)
+        Set the future trailing stop-loss as some multiple (`n_atr`)
         average true bar ranges away from the current price.
         """
         self.__n_atr = n_atr
+
+    def set_trailing_pct(self, pct: float = .05):
+        """
+        Set the future trailing stop-loss as some percent (`0 < pct < 1`)
+        below the current price (default 5% below).
+
+        .. note:: Stop-loss set by `pct` is inexact
+            Stop-loss set by `set_trailing_pct` is converted to units of ATR
+            with `mean(Close * pct / atr)` and set with `set_trailing_sl`.
+        """
+        assert 0 < pct < 1, 'Need pct= as rate, i.e. 5% == 0.05'
+        pct_in_atr = np.mean(self.data.Close * pct / self.__atr)  # type: ignore
+        self.set_trailing_sl(pct_in_atr)
 
     def next(self):
         super().next()
