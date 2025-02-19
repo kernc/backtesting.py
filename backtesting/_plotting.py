@@ -435,6 +435,10 @@ return this.labels[index] || "";
         trade_source.add(size, 'marker_size')
         if 'count' in trades:
             trade_source.add(trades['count'], 'count')
+        trade_source.add(trades[['EntryBar', 'ExitBar']].values.tolist(), 'lines')
+        trade_source.add([[0, r] for r in trades['ReturnPct'].values], 'returns_both')
+        fig.multi_line(xs='lines', ys='returns_both',
+                       source=trade_source, color='#bbb', line_width=1)
         r1 = fig.scatter('index', 'returns_long', source=trade_source, fill_color=cmap,
                          marker='triangle', line_color='black', size='marker_size')
         r2 = fig.scatter('index', 'returns_short', source=trade_source, fill_color=cmap,
