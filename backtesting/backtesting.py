@@ -1307,7 +1307,7 @@ class Backtest:
         # np.nan >= 3 is not invalid; it's False.
         with np.errstate(invalid='ignore'):
 
-            for i in range(start, len(self._data)):
+            for i in _tqdm(range(start, len(self._data)), desc=self.run.__qualname__):
                 # Prepare data and indicators for `next` call
                 data._set_length(i + 1)
                 for attr, indicator in indicator_attrs:
