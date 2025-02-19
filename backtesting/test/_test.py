@@ -450,7 +450,8 @@ class TestBacktest(TestCase):
 
 
 class TestStrategy(TestCase):
-    def _Backtest(self, strategy_coroutine, **kwargs):
+    @staticmethod
+    def _Backtest(strategy_coroutine, data=SHORT_DATA, **kwargs):
         class S(Strategy):
             def init(self):
                 self.step = strategy_coroutine(self)
@@ -458,7 +459,7 @@ class TestStrategy(TestCase):
             def next(self):
                 try_(self.step.__next__, None, StopIteration)
 
-        return Backtest(SHORT_DATA, S, **kwargs)
+        return Backtest(data, S, **kwargs)
 
     def test_position(self):
         def coroutine(self):
@@ -1032,12 +1033,8 @@ class TestRegressions(TestCase):
                 if self.data.Close[-1] == 100:
                     self.buy(size=1, sl=90)
 
-        df = pd.DataFrame({
-            'Open': [100, 100, 100, 50, 50],
-            'High': [100, 100, 100, 50, 50],
-            'Low': [100, 100, 100, 50, 50],
-            'Close': [100, 100, 100, 50, 50],
-        })
+        arr = np.r_[100, 100, 100, 50, 50]
+        df = pd.DataFrame({'Open': arr, 'High': arr, 'Low': arr, 'Close': arr})
         with self.assertWarnsRegex(UserWarning, 'index is not datetime'):
             bt = Backtest(df, S, cash=100, trade_on_close=True)
         self.assertEqual(bt.run()._trades['ExitPrice'][0], 50)
@@ -1059,3 +1056,44 @@ class TestRegressions(TestCase):
                         order.cancel()
 
         Backtest(SHORT_DATA, S).run()
+
+    def test_trade_on_close_closes_trades_on_close(self):
+        def coro(strat):
+            yield strat.buy(size=1, sl=90) and strat.buy(size=1, sl=80)
+            assert len(strat.trades) == 2
+            yield strat.trades[0].close()
+            yield
+
+        arr = np.r_[100, 101, 102, 50, 51]
+        df = pd.DataFrame({
+            'Open': arr - 10,
+            'Close': arr, 'High': arr, 'Low': arr})
+        with self.assertWarnsRegex(UserWarning, 'index is not datetime'):
+            trades = TestStrategy._Backtest(coro, df, cash=250, trade_on_close=True).run()._trades
+            # trades = Backtest(df, S, cash=250, trade_on_close=True).run()._trades
+            self.assertEqual(trades['EntryBar'][0], 1)
+            self.assertEqual(trades['ExitBar'][0], 2)
+            self.assertEqual(trades['EntryPrice'][0], 101)
+            self.assertEqual(trades['ExitPrice'][0], 102)
+            self.assertEqual(trades['EntryBar'][1], 1)
+            self.assertEqual(trades['ExitBar'][1], 3)
+            self.assertEqual(trades['EntryPrice'][1], 101)
+            self.assertEqual(trades['ExitPrice'][1], 40)
+
+        with self.assertWarnsRegex(UserWarning, 'index is not datetime'):
+            trades = TestStrategy._Backtest(coro, df, cash=250, trade_on_close=False).run()._trades
+            # trades = Backtest(df, S, cash=250, trade_on_close=False).run()._trades
+            self.assertEqual(trades['EntryBar'][0], 2)
+            self.assertEqual(trades['ExitBar'][0], 3)
+            self.assertEqual(trades['EntryPrice'][0], 92)
+            self.assertEqual(trades['ExitPrice'][0], 40)
+            self.assertEqual(trades['EntryBar'][1], 2)
+            self.assertEqual(trades['ExitBar'][1], 3)
+            self.assertEqual(trades['EntryPrice'][1], 92)
+            self.assertEqual(trades['ExitPrice'][1], 40)
+
+    def test_trades_dates_match_prices(self):
+        bt = Backtest(EURUSD, SmaCross, trade_on_close=True)
+        trades = bt.run()._trades
+        self.assertEqual(EURUSD.Close[trades['ExitTime']].tolist(),
+                         trades['ExitPrice'].tolist())

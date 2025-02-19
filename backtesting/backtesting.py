@@ -558,7 +558,9 @@ class Order:
         [contingent]: https://www.investopedia.com/terms/c/contingentorder.asp
         [OCO]: https://www.investopedia.com/terms/o/oco.asp
         """
-        return bool(self.__parent_trade)
+        return bool((parent := self.__parent_trade) and
+                    (self is parent._sl_order or
+                     self is parent._tp_order))
 
 
 class Trade:
@@ -916,7 +918,10 @@ class _Broker:
 
             # Determine entry/exit bar index
             is_market_order = not order.limit and not stop_price
-            time_index = (self._i - 1) if is_market_order and self._trade_on_close else self._i
+            time_index = (
+                (self._i - 1)
+                if is_market_order and self._trade_on_close and not order.is_contingent else
+                self._i)
 
             # If order is a SL/TP order, it should close an existing trade it was contingent upon
             if order.parent_trade:
