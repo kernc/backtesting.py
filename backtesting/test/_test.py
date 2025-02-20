@@ -18,7 +18,7 @@ from backtesting import Backtest, Strategy
 from backtesting._stats import compute_drawdown_duration_peaks
 from backtesting._util import _Array, _as_str, _Indicator, patch, try_
 from backtesting.lib import (
-    FractionalBacktest, OHLCV_AGG,
+    FractionalBacktest, MultiBacktest, OHLCV_AGG,
     SignalStrategy,
     TrailingStrategy,
     barssince,
@@ -942,6 +942,16 @@ class TestLib(TestCase):
         ubtc_bt = FractionalBacktest(BTCUSD['2015':], SmaCross, satoshi=1e6, cash=100)
         stats = ubtc_bt.run(fast=2, slow=3)
         self.assertEqual(stats['# Trades'], 41)
+
+    def test_MultiBacktest(self):
+        btm = MultiBacktest([GOOG, EURUSD, BTCUSD], SmaCross, cash=100_000)
+        res = btm.run(fast=2)
+        self.assertIsInstance(res, pd.DataFrame)
+        self.assertEqual(res.columns.tolist(), [0, 1, 2])
+        heatmap = btm.optimize(fast=[2, 4], slow=[10, 20])
+        self.assertIsInstance(heatmap, pd.DataFrame)
+        self.assertEqual(heatmap.columns.tolist(), [0, 1, 2])
+        plot_heatmaps(heatmap.mean(axis=1), open_browser=False)
 
 
 class TestUtil(TestCase):
