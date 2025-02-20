@@ -160,6 +160,8 @@ _ = (
 # We can use
 # [`backtesting.lib.plot_heatmaps()`](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html#backtesting.lib.plot_heatmaps)
 # function to plot interactive heatmaps of all parameter combinations simultaneously.
+#
+# <a id=plot-heatmaps></a>
 
 # +
 from backtesting.lib import plot_heatmaps

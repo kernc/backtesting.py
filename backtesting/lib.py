@@ -123,12 +123,15 @@ def plot_heatmaps(heatmap: pd.Series,
                   open_browser: bool = True):
     """
     Plots a grid of heatmaps, one for every pair of parameters in `heatmap`.
+    See example in [the tutorial].
+
+    [the tutorial]: https://kernc.github.io/backtesting.py/doc/examples/Parameter%20Heatmap%20&%20Optimization.html#plot-heatmap  # noqa: E501
 
     `heatmap` is a Series as returned by
     `backtesting.backtesting.Backtest.optimize` when its parameter
     `return_heatmap=True`.
 
-    When projecting the n-dimensional heatmap onto 2D, the values are
+    When projecting the n-dimensional (n > 2) heatmap onto 2D, the values are
     aggregated by 'max' function by default. This can be tweaked
     with `agg` parameter, which accepts any argument pandas knows
     how to aggregate by.
@@ -491,7 +494,7 @@ class TrailingStrategy(Strategy):
 
 class FractionalBacktest(Backtest):
     """
-    A `backtesting.Backtest` that supports fractional share trading
+    A `backtesting.backtesting.Backtest` that supports fractional share trading
     by simple composition. It applies roughly the transformation:
 
         df = (df / satoshi).assign(Volume=df.Volume * satoshi)
