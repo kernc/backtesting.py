@@ -29,7 +29,7 @@ urlpath=lab%2Ftree%2Fdoc%2Fexamples%2FQuick%20Start%20User%20Guide.ipynb
 ## Video Tutorials
 
 * Some [**coverage on YouTube**](https://github.com/kernc/backtesting.py/discussions/677).
-* [YouTube search](https://www.youtube.com/?q=%22backtesting.py%22)
+* [YouTube search](https://www.youtube.com/results?q=%22backtesting.py%22)
 
 ## Example Strategies
 
