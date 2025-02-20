@@ -959,6 +959,9 @@ class _Broker:
                                     // adjusted_price_plus_commission), size)
                 # Not enough cash/margin even for a single unit
                 if not size:
+                    warnings.warn(
+                        f'time={self._i}: Broker canceled the relative-sized '
+                        f'order due to insufficient margin.', category=UserWarning)
                     # XXX: The order is canceled by the broker?
                     self.orders.remove(order)
                     continue
