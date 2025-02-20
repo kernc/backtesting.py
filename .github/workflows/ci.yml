@@ -34,7 +34,12 @@ jobs:
     timeout-minutes: 3
     strategy:
       matrix:
-        python-version: [3.11, 3.12, 3.13]
+        python-version: [3.12, 3.13]
+        experimental: [false]
+        include:
+          - python-version: '3.*'
+            experimental: true
+    continue-on-error: ${{ matrix.experimental }}
     steps:
       - uses: actions/setup-python@v5
         with:
