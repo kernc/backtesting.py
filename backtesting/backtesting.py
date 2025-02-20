@@ -9,7 +9,6 @@ module directly, e.g.
 from __future__ import annotations
 
 import multiprocessing as mp
-import os
 import sys
 import warnings
 from abc import ABCMeta, abstractmethod
@@ -24,18 +23,11 @@ import numpy as np
 import pandas as pd
 from numpy.random import default_rng
 
-try:
-    from tqdm.auto import tqdm as _tqdm
-    _tqdm = partial(_tqdm, leave=False)
-except ImportError:
-    def _tqdm(seq, **_):
-        return seq
-
 from ._plotting import plot  # noqa: I001
 from ._stats import compute_stats
 from ._util import (
-    SharedMemory, SharedMemoryManager, _as_str, _Indicator, _Data, _indicator_warmup_nbars,
-    _strategy_indicators, patch, try_,
+    SharedMemoryManager, _as_str, _Indicator, _Data, _batch, _indicator_warmup_nbars,
+    _strategy_indicators, patch, try_, _tqdm,
 )
 
 __pdoc__ = {
@@ -1507,36 +1499,14 @@ class Backtest:
                                     [p.values() for p in param_combos],
                                     names=next(iter(param_combos)).keys()))
 
-            def _batch(seq):
-                # XXX: Replace with itertools.batched
-                n = np.clip(int(len(seq) // (os.cpu_count() or 1)), 1, 300)
-                for i in range(0, len(seq), n):
-                    yield seq[i:i + n]
-
             with mp.Pool() as pool, \
                     SharedMemoryManager() as smm:
 
-                shm_refs = []  # https://stackoverflow.com/questions/74193377/filenotfounderror-when-passing-a-shared-memory-to-a-new-process#comment130999060_74194875  # noqa: E501
-
-                def arr2shm(vals):
-                    nonlocal smm
-                    shm = smm.SharedMemory(size=vals.nbytes)
-                    buf = np.ndarray(vals.shape, dtype=vals.dtype, buffer=shm.buf)
-                    buf[:] = vals[:]  # Copy into shared memory
-                    assert vals.ndim == 1, (vals.ndim, vals.shape, vals)
-                    shm_refs.append(shm)
-                    return shm.name, vals.shape, vals.dtype
-
-                data_shm = tuple((
-                    (column, *arr2shm(values))
-                    for column, values in chain([(Backtest._mp_task_INDEX_COL, self._data.index)],
-                                                self._data.items())
-                ))
                 with patch(self, '_data', None):
                     bt = copy(self)  # bt._data will be reassigned in _mp_task worker
                 results = _tqdm(
                     pool.imap(Backtest._mp_task,
-                              ((bt, data_shm, params_batch)
+                              ((bt, smm.df2shm(self._data), params_batch)
                                for params_batch in _batch(param_combos))),
                     total=len(param_combos),
                     desc='Backtest.optimize'
@@ -1640,26 +1610,14 @@ class Backtest:
     @staticmethod
     def _mp_task(arg):
         bt, data_shm, params_batch = arg
-        shm = [SharedMemory(name=shm_name, create=False, track=False)
-               for _, shm_name, *_ in data_shm]
+        bt._data, shm = SharedMemoryManager.shm2df(data_shm)
         try:
-            def shm2arr(shm, shape, dtype):
-                arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
-                arr.setflags(write=False)
-                return arr
-
-            bt._data = df = pd.DataFrame({
-                col: shm2arr(shm, shape, dtype)
-                for shm, (col, _, shape, dtype) in zip(shm, data_shm)})
-            df.set_index(Backtest._mp_task_INDEX_COL, drop=True, inplace=True)
             return [stats.filter(regex='^[^_]') if stats['# Trades'] else None
                     for stats in (bt.run(**params)
                                   for params in params_batch)]
         finally:
             for shmem in shm:
                 shmem.close()
-
-    _mp_task_INDEX_COL = '__bt_index'
 
     def plot(self, *, results: pd.Series = None, filename=None, plot_width=None,
              plot_equity=True, plot_return=False, plot_pl=True,
