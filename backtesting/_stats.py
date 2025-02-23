@@ -131,20 +131,6 @@ def compute_stats(
         day_returns = equity_df['Equity'].resample(freq).last().dropna().pct_change()
         gmean_day_return = geometric_mean(day_returns)
 
-    # Save daily returns into array to define covariance matrix 
-    equity_returns = []
-    market_returns = []
-    # Calculate returns for each period
-    for i in range(1, len(equity)):
-        equity_return = (equity[i] - equity[i - 1]) / equity[i - 1]
-        market_return = (c[i] - c[i - 1]) / c[i - 1]
-        equity_returns.append(equity_return)
-        market_returns.append(market_return)
-    
-    equity_returns = np.array(equity_returns)
-    market_returns = np.array(market_returns)
-    cov_matrix = np.cov(equity_returns, market_returns)
-
     # Annualized return and risk metrics are computed based on the (mostly correct)
     # assumption that the returns are compounded. See: https://dx.doi.org/10.2139/ssrn.3054517
     # Our annualized return matches `empyrical.annual_return(day_returns)` whereas
@@ -166,6 +152,10 @@ def compute_stats(
         s.loc['Sortino Ratio'] = (annualized_return - risk_free_rate) / (np.sqrt(np.mean(day_returns.clip(-np.inf, 0)**2)) * np.sqrt(annual_trading_days))  # noqa: E501
     max_dd = -np.nan_to_num(dd.max())
     s.loc['Alpha [%]'] = s.loc['Return [%]'] - s.loc['Buy & Hold Return [%]']
+    # calculate returns using vectorized operations
+    equity_returns = np.diff(equity) / equity[:-1]
+    market_returns = np.diff(c) / c[:-1]
+    cov_matrix = np.cov(equity_returns, market_returns)
     s.loc['Beta'] = round(cov_matrix[0, 1] / cov_matrix[1, 1], 2)
     s.loc['Calmar Ratio'] = annualized_return / (-max_dd or np.nan)
     s.loc['Max. Drawdown [%]'] = max_dd * 100
