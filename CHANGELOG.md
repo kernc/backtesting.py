@@ -5,6 +5,20 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
+### 0.6.2
+(2025-02-19)
+
+* Enhancements:
+  * Grid optimization with mp.Pool & mp.shm.SharedMemory (#1222)
+  * `backtesting.lib.FractionalBacktest` that supports fractional trading
+  * `backtesting.__all__` for better `from backtesting import *` and suggestions
+* Bugs fixed:
+  * Fix remaining issues with `trade_on_close=True`
+  * Fix trades reported in reverse chronological order when `finalize_trades=True`
+  * Fix crosshair not linked across subplots
+  * Cast `datetime_arr.astype(np.int64)` to avoid Windos error
+
+
 ### 0.6.1
 (2025-02-04)
 

@@ -3,14 +3,12 @@ import os
 import sys
 import time
 import unittest
-import warnings
 from concurrent.futures.process import ProcessPoolExecutor
 from contextlib import contextmanager
 from glob import glob
 from runpy import run_path
 from tempfile import NamedTemporaryFile, gettempdir
 from unittest import TestCase
-from unittest.mock import patch
 
 import numpy as np
 import pandas as pd
@@ -18,9 +16,9 @@ from pandas.testing import assert_frame_equal
 
 from backtesting import Backtest, Strategy
 from backtesting._stats import compute_drawdown_duration_peaks
-from backtesting._util import _Array, _as_str, _Indicator, try_
+from backtesting._util import _Array, _as_str, _Indicator, patch, try_
 from backtesting.lib import (
-    OHLCV_AGG,
+    FractionalBacktest, MultiBacktest, OHLCV_AGG,
     SignalStrategy,
     TrailingStrategy,
     barssince,
@@ -32,7 +30,7 @@ from backtesting.lib import (
     random_ohlc_data,
     resample_apply,
 )
-from backtesting.test import EURUSD, GOOG, SMA
+from backtesting.test import BTCUSD, EURUSD, GOOG, SMA
 
 SHORT_DATA = GOOG.iloc[:20]  # Short data for fast tests with no indicator lag
 
@@ -452,7 +450,8 @@ class TestBacktest(TestCase):
 
 
 class TestStrategy(TestCase):
-    def _Backtest(self, strategy_coroutine, **kwargs):
+    @staticmethod
+    def _Backtest(strategy_coroutine, data=SHORT_DATA, **kwargs):
         class S(Strategy):
             def init(self):
                 self.step = strategy_coroutine(self)
@@ -460,7 +459,7 @@ class TestStrategy(TestCase):
             def next(self):
                 try_(self.step.__next__, None, StopIteration)
 
-        return Backtest(SHORT_DATA, S, **kwargs)
+        return Backtest(data, S, **kwargs)
 
     def test_position(self):
         def coroutine(self):
@@ -634,9 +633,10 @@ class TestOptimize(TestCase):
     def test_optimize_speed(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
         start = time.process_time()
-        bt.optimize(fast=(2, 5, 7), slow=[10, 15, 20, 30])
+        bt.optimize(fast=range(2, 20, 2), slow=range(10, 40, 2))
         end = time.process_time()
-        self.assertLess(end - start, 1)
+        print(end - start)
+        self.assertLess(end - start, .3)
 
 
 class TestPlot(TestCase):
@@ -764,7 +764,7 @@ class TestPlot(TestCase):
         bt.run()
         import backtesting._plotting
         with _tempfile() as f, \
-                patch.object(backtesting._plotting, '_MAX_CANDLES', 10), \
+                patch(backtesting._plotting, '_MAX_CANDLES', 10), \
                 self.assertWarns(UserWarning):
             bt.plot(filename=f, resample=True)
             # Give browser time to open before tempfile is removed
@@ -926,6 +926,7 @@ class TestLib(TestCase):
             def init(self):
                 super().init()
                 self.set_atr_periods(40)
+                self.set_trailing_pct(.1)
                 self.set_trailing_sl(3)
                 self.sma = self.I(lambda: self.data.Close.s.rolling(10).mean())
 
@@ -936,6 +937,21 @@ class TestLib(TestCase):
 
         stats = Backtest(GOOG, S).run()
         self.assertEqual(stats['# Trades'], 56)
+
+    def test_FractionalBacktest(self):
+        ubtc_bt = FractionalBacktest(BTCUSD['2015':], SmaCross, satoshi=1e6, cash=100)
+        stats = ubtc_bt.run(fast=2, slow=3)
+        self.assertEqual(stats['# Trades'], 41)
+
+    def test_MultiBacktest(self):
+        btm = MultiBacktest([GOOG, EURUSD, BTCUSD], SmaCross, cash=100_000)
+        res = btm.run(fast=2)
+        self.assertIsInstance(res, pd.DataFrame)
+        self.assertEqual(res.columns.tolist(), [0, 1, 2])
+        heatmap = btm.optimize(fast=[2, 4], slow=[10, 20])
+        self.assertIsInstance(heatmap, pd.DataFrame)
+        self.assertEqual(heatmap.columns.tolist(), [0, 1, 2])
+        plot_heatmaps(heatmap.mean(axis=1), open_browser=False)
 
 
 class TestUtil(TestCase):
@@ -958,6 +974,15 @@ class TestUtil(TestCase):
         self.assertEqual(_as_str(lambda x: x), 'λ')
         for s in ('Open', 'High', 'Low', 'Close', 'Volume'):
             self.assertEqual(_as_str(_Array([1], name=s)), s[0])
+
+    def test_patch(self):
+        class Object:
+            pass
+        o = Object()
+        o.attr = False
+        with patch(o, 'attr', True):
+            self.assertTrue(o.attr)
+        self.assertFalse(o.attr)
 
     def test_pandas_accessors(self):
         class S(Strategy):
@@ -986,6 +1011,7 @@ class TestUtil(TestCase):
 class TestDocs(TestCase):
     DOCS_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'doc')
 
+    @unittest.skipIf('win' in sys.platform, "Locks up with `ModuleNotFoundError: No module named '<run_path>'`")
     @unittest.skipUnless(os.path.isdir(DOCS_DIR), "docs dir doesn't exist")
     def test_examples(self):
         examples = glob(os.path.join(self.DOCS_DIR, 'examples', '*.py'))
@@ -1018,12 +1044,8 @@ class TestRegressions(TestCase):
                 if self.data.Close[-1] == 100:
                     self.buy(size=1, sl=90)
 
-        df = pd.DataFrame({
-            'Open': [100, 100, 100, 50, 50],
-            'High': [100, 100, 100, 50, 50],
-            'Low': [100, 100, 100, 50, 50],
-            'Close': [100, 100, 100, 50, 50],
-        })
+        arr = np.r_[100, 100, 100, 50, 50]
+        df = pd.DataFrame({'Open': arr, 'High': arr, 'Low': arr, 'Close': arr})
         with self.assertWarnsRegex(UserWarning, 'index is not datetime'):
             bt = Backtest(df, S, cash=100, trade_on_close=True)
         self.assertEqual(bt.run()._trades['ExitPrice'][0], 50)
@@ -1046,7 +1068,43 @@ class TestRegressions(TestCase):
 
         Backtest(SHORT_DATA, S).run()
 
+    def test_trade_on_close_closes_trades_on_close(self):
+        def coro(strat):
+            yield strat.buy(size=1, sl=90) and strat.buy(size=1, sl=80)
+            assert len(strat.trades) == 2
+            yield strat.trades[0].close()
+            yield
 
-if __name__ == '__main__':
-    warnings.filterwarnings('error')
-    unittest.main()
+        arr = np.r_[100, 101, 102, 50, 51]
+        df = pd.DataFrame({
+            'Open': arr - 10,
+            'Close': arr, 'High': arr, 'Low': arr})
+        with self.assertWarnsRegex(UserWarning, 'index is not datetime'):
+            trades = TestStrategy._Backtest(coro, df, cash=250, trade_on_close=True).run()._trades
+            # trades = Backtest(df, S, cash=250, trade_on_close=True).run()._trades
+            self.assertEqual(trades['EntryBar'][0], 1)
+            self.assertEqual(trades['ExitBar'][0], 2)
+            self.assertEqual(trades['EntryPrice'][0], 101)
+            self.assertEqual(trades['ExitPrice'][0], 102)
+            self.assertEqual(trades['EntryBar'][1], 1)
+            self.assertEqual(trades['ExitBar'][1], 3)
+            self.assertEqual(trades['EntryPrice'][1], 101)
+            self.assertEqual(trades['ExitPrice'][1], 40)
+
+        with self.assertWarnsRegex(UserWarning, 'index is not datetime'):
+            trades = TestStrategy._Backtest(coro, df, cash=250, trade_on_close=False).run()._trades
+            # trades = Backtest(df, S, cash=250, trade_on_close=False).run()._trades
+            self.assertEqual(trades['EntryBar'][0], 2)
+            self.assertEqual(trades['ExitBar'][0], 3)
+            self.assertEqual(trades['EntryPrice'][0], 92)
+            self.assertEqual(trades['ExitPrice'][0], 40)
+            self.assertEqual(trades['EntryBar'][1], 2)
+            self.assertEqual(trades['ExitBar'][1], 3)
+            self.assertEqual(trades['EntryPrice'][1], 92)
+            self.assertEqual(trades['ExitPrice'][1], 40)
+
+    def test_trades_dates_match_prices(self):
+        bt = Backtest(EURUSD, SmaCross, trade_on_close=True)
+        trades = bt.run()._trades
+        self.assertEqual(EURUSD.Close[trades['ExitTime']].tolist(),
+                         trades['ExitPrice'].tolist())

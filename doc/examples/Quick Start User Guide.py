@@ -52,7 +52,7 @@ GOOG.tail()
 # Let's create our first strategy to backtest on these Google data, a simple [moving average (MA) cross-over strategy](https://en.wikipedia.org/wiki/Moving_average_crossover).
 #
 # _Backtesting.py_ doesn't ship its own set of _technical analysis indicators_. Users favoring TA should probably refer to functions from proven indicator libraries, such as
-# [TA-Lib](https://github.com/mrjbq7/ta-lib) or
+# [TA-Lib](https://github.com/TA-Lib/ta-lib-python) or
 # [Tulipy](https://tulipindicators.org),
 # but for this example, we can define a simple helper moving average function ourselves:
 

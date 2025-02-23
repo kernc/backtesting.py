@@ -78,8 +78,11 @@ Pull requests
 -------------
 A general recommended reading:
 [How to make your code reviewer fall in love with you][code-review].
-Please use explicit commit messages. See [NumPy's development workflow]
+
+Use explicit commit messages — see [NumPy's development workflow]
 for inspiration.
+
+Every new feature must be accompanied by a unit test.
 
 Please help review [existing PRs] you wish to see included.
 

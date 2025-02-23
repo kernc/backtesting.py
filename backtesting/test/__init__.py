@@ -12,6 +12,9 @@ def _read_file(filename):
                        index_col=0, parse_dates=True)
 
 
+BTCUSD = _read_file('BTCUSD.csv')
+"""DataFrame of monthly BTC/USD histrical index data from 2012 through 2024 (12 years)."""
+
 GOOG = _read_file('GOOG.csv')
 """DataFrame of daily NASDAQ:GOOG (Google/Alphabet) stock price data from 2004 to 2013."""
 

@@ -8,6 +8,7 @@ module directly, e.g.
 
 from __future__ import annotations
 
+import multiprocessing as mp
 import sys
 import warnings
 from abc import ABCMeta, abstractmethod
@@ -16,23 +17,18 @@ from functools import lru_cache, partial
 from itertools import chain, product, repeat
 from math import copysign
 from numbers import Number
-from typing import Callable, Dict, List, Optional, Sequence, Tuple, Type, Union
+from typing import Callable, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
-from joblib import Parallel, delayed
 from numpy.random import default_rng
-
-try:
-    from tqdm.auto import tqdm as _tqdm
-    _tqdm = partial(_tqdm, leave=False)
-except ImportError:
-    def _tqdm(seq, **_):
-        return seq
 
 from ._plotting import plot  # noqa: I001
 from ._stats import compute_stats
-from ._util import _as_str, _Indicator, _Data, _indicator_warmup_nbars, _strategy_indicators, try_
+from ._util import (
+    SharedMemoryManager, _as_str, _Indicator, _Data, _batch, _indicator_warmup_nbars,
+    _strategy_indicators, patch, try_, _tqdm,
+)
 
 __pdoc__ = {
     'Strategy.__init__': False,
@@ -167,7 +163,7 @@ class Strategy(metaclass=ABCMeta):
             raise ValueError(
                 'Indicators must return (optionally a tuple of) numpy.arrays of same '
                 f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}" '
-                f'shape: {getattr(value, "shape" , "")}, returned value: {value})')
+                f'shape: {getattr(value, "shape", "")}, returned value: {value})')
 
         if plot and overlay is None and np.issubdtype(value.dtype, np.number):
             x = value / self._data.Close
@@ -554,7 +550,9 @@ class Order:
         [contingent]: https://www.investopedia.com/terms/c/contingentorder.asp
         [OCO]: https://www.investopedia.com/terms/o/oco.asp
         """
-        return bool(self.__parent_trade)
+        return bool((parent := self.__parent_trade) and
+                    (self is parent._sl_order or
+                     self is parent._tp_order))
 
 
 class Trade:
@@ -912,7 +910,10 @@ class _Broker:
 
             # Determine entry/exit bar index
             is_market_order = not order.limit and not stop_price
-            time_index = (self._i - 1) if is_market_order and self._trade_on_close else self._i
+            time_index = (
+                (self._i - 1)
+                if is_market_order and self._trade_on_close and not order.is_contingent else
+                self._i)
 
             # If order is a SL/TP order, it should close an existing trade it was contingent upon
             if order.parent_trade:
@@ -950,6 +951,9 @@ class _Broker:
                                     // adjusted_price_plus_commission), size)
                 # Not enough cash/margin even for a single unit
                 if not size:
+                    warnings.warn(
+                        f'time={self._i}: Broker canceled the relative-sized '
+                        f'order due to insufficient margin.', category=UserWarning)
                     # XXX: The order is canceled by the broker?
                     self.orders.remove(order)
                     continue
@@ -1298,7 +1302,7 @@ class Backtest:
         # np.nan >= 3 is not invalid; it's False.
         with np.errstate(invalid='ignore'):
 
-            for i in range(start, len(self._data)):
+            for i in _tqdm(range(start, len(self._data)), desc=self.run.__qualname__):
                 # Prepare data and indicators for `next` call
                 data._set_length(i + 1)
                 for attr, indicator in indicator_attrs:
@@ -1316,7 +1320,7 @@ class Backtest:
             else:
                 if self._finalize_trades is True:
                     # Close any remaining open trades so they produce some stats
-                    for trade in broker.trades:
+                    for trade in reversed(broker.trades):
                         trade.close()
 
                     # HACK: Re-run broker one last time to handle close orders placed in the last
@@ -1495,15 +1499,22 @@ class Backtest:
                                     [p.values() for p in param_combos],
                                     names=next(iter(param_combos)).keys()))
 
-            with Parallel(prefer='threads', require='sharedmem', max_nbytes='50M',
-                          n_jobs=-2, return_as='generator') as parallel:
+            with mp.Pool() as pool, \
+                    SharedMemoryManager() as smm:
+
+                with patch(self, '_data', None):
+                    bt = copy(self)  # bt._data will be reassigned in _mp_task worker
                 results = _tqdm(
-                    parallel(delayed(self._mp_task)(self, params, maximize=maximize)
-                             for params in param_combos),
+                    pool.imap(Backtest._mp_task,
+                              ((bt, smm.df2shm(self._data), params_batch)
+                               for params_batch in _batch(param_combos))),
                     total=len(param_combos),
-                    desc='Backtest.optimize')
-                for value, params in zip(results, param_combos):
-                    heatmap[tuple(params.values())] = value
+                    desc='Backtest.optimize'
+                )
+                for param_batch, result in zip(_batch(param_combos), results):
+                    for params, stats in zip(param_batch, result):
+                        if stats is not None:
+                            heatmap[tuple(params.values())] = maximize(stats)
 
             if pd.isnull(heatmap).all():
                 # No trade was made in any of the runs. Just make a random
@@ -1536,7 +1547,7 @@ class Backtest:
                 if values.dtype.kind in 'mM':  # timedelta, datetime64
                     # these dtypes are unsupported in SAMBO, so convert to raw int
                     # TODO: save dtype and convert back later
-                    values = values.astype(int)
+                    values = values.astype(np.int64)
 
                 if values.dtype.kind in 'iumM':
                     dimensions.append((values.min(), values.max() + 1))
@@ -1552,7 +1563,7 @@ class Backtest:
                 stats = self.run(**dict(tup))
                 return -maximize(stats)
 
-            progress = iter(_tqdm(repeat(None), total=max_tries, desc='Backtest.optimize'))
+            progress = iter(_tqdm(repeat(None), total=max_tries, leave=False, desc='Backtest.optimize'))
             _names = tuple(kwargs.keys())
 
             def objective_function(x):
@@ -1597,11 +1608,16 @@ class Backtest:
         return output
 
     @staticmethod
-    def _mp_task(bt, params, *, maximize):
-        stats = bt.run(**params)
-        return maximize(stats) if stats['# Trades'] else np.nan
-
-    _mp_backtests: Dict[float, Tuple['Backtest', List, Callable]] = {}
+    def _mp_task(arg):
+        bt, data_shm, params_batch = arg
+        bt._data, shm = SharedMemoryManager.shm2df(data_shm)
+        try:
+            return [stats.filter(regex='^[^_]') if stats['# Trades'] else None
+                    for stats in (bt.run(**params)
+                                  for params in params_batch)]
+        finally:
+            for shmem in shm:
+                shmem.close()
 
     def plot(self, *, results: pd.Series = None, filename=None, plot_width=None,
              plot_equity=True, plot_return=False, plot_pl=True,
@@ -1713,3 +1729,14 @@ class Backtest:
             reverse_indicators=reverse_indicators,
             show_legend=show_legend,
             open_browser=open_browser)
+
+
+# NOTE: Don't put anything public below this __all__ list
+
+__all__ = [getattr(v, '__name__', k)
+           for k, v in globals().items()                        # export
+           if ((callable(v) and v.__module__ == __name__ or     # callables from this module
+                k.isupper()) and                                # or CONSTANTS
+               not getattr(v, '__name__', k).startswith('_'))]  # neither marked internal
+
+# NOTE: Don't put anything public below here. See above.

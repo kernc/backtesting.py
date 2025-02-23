@@ -26,6 +26,11 @@ These tutorials are also available as live Jupyter notebooks:
 urlpath=lab%2Ftree%2Fdoc%2Fexamples%2FQuick%20Start%20User%20Guide.ipynb
 [colab]: https://colab.research.google.com/github/kernc/backtesting.py/
 
+## Video Tutorials
+
+* Some [**coverage on YouTube**](https://github.com/kernc/backtesting.py/discussions/677).
+* [YouTube search](https://www.youtube.com/results?q=%22backtesting.py%22)
+
 ## Example Strategies
 
 * (contributions welcome)
@@ -33,7 +38,7 @@ urlpath=lab%2Ftree%2Fdoc%2Fexamples%2FQuick%20Start%20User%20Guide.ipynb
 
 .. tip::
     For an overview of recent changes, see
-    [What's New](https://github.com/kernc/backtesting.py/blob/master/CHANGELOG.md).
+    [What's New, i.e. the **Change Log**](https://github.com/kernc/backtesting.py/blob/master/CHANGELOG.md).
 
 
 ## FAQ

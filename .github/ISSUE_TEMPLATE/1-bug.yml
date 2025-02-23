@@ -4,33 +4,22 @@ title: "Short title loaded with keywords"
 body:
   - type: markdown
     attributes:
-      value: |
-        Thanks for putting in the effort to submit this bug report! Note, the
-        best bug reports are accompanied with fixing patches / pull-requests. 🙏
+      value: >
+        Thanks for putting in the effort to submit this bug report! Note, the best bug reports are accompanied with fixing patches / pull-requests. 🙏
 
-  - type: checkboxes
+  - type: markdown
     attributes:
-      label: Contributing guidelines
-      description: |
-        Please kindly follow this project's
-        [Contributing Guidelines](https://github.com/kernc/backtesting.py/blob/master/CONTRIBUTING.md).
-        The guidelines contain short technical notes on how to best contribute to this project.
-      options:
-        - label: |
-            I agree to follow this project's
-            [Contributing Guidelines](https://github.com/kernc/backtesting.py/blob/master/CONTRIBUTING.md)
-            which, I understand, contain short technical notes on how to best contribute to this project.
-          required: true
+      value: >
+        **Contributing guidelines** $\color{red}{*}$
 
-  - type: checkboxes
+        - [x] I agree to follow this project's [Contributing Guidelines](https://github.com/kernc/backtesting.py/blob/master/CONTRIBUTING.md) which, I understand, contain short technical notes on how to best contribute to this project.
+
+  - type: markdown
     attributes:
-      label: Own due diligence
-      options:
-        - label: |
-            I verify my due dilligence—I have went through the **tutorials** and the **API docs** and
-            have used the **search** on **Issues** and GitHub **Disucussions**, as well all Google,
-            with all the relevant search keywords.
-          required: true
+      value: >
+        **Own due diligence** $\color{red}{*}$
+
+        - [x] I verify my due dilligence—I have went through the [**tutorials**](https://kernc.github.io/backtesting.py/doc/backtesting/#manuals) and the [**API docs**](https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html) and have used the [**search** on **Issues**](https://github.com/kernc/backtesting.py/issues?q=(is%3Aissue%20OR%20is%3Apr)%20) and [GitHub **Disucussions**](https://github.com/kernc/backtesting.py/discussions), as well as Google, with all the relevant search keywords that also comprise the title (see above) of the new issue I'm opening.
 
   - type: textarea
     id: expected
@@ -39,7 +28,7 @@ body:
     attributes:
       label: Expected behavior
       description: You run the code below and expect what to happen?
-      placeholder: When I run this code ... the program should ...
+      placeholder: When I run the code below ... the program should ...
 
   - type: textarea
     id: code
@@ -53,7 +42,7 @@ body:
         from backtesting import Backtest, Strategy
         from backtesting.test import GOOG
 
-        class Example(Strategy):
+        class MinimalExample(Strategy):
             ...
 
         bt = Backtest(GOOG, Example)
@@ -74,9 +63,8 @@ body:
       required: false
     attributes:
       label: Additional info, steps to reproduce, full crash traceback, screenshots
-      description: |
-        Attach any additional info you think might be helpful and
-        result in quicker resolution of your bug.
+      description: >
+        Attach any additional info you think might be helpful and result in quicker resolution of your bug.
       placeholder: |
         1. Do ...
         2. ...
@@ -89,7 +77,7 @@ body:
       required: false
     attributes:
       label: Software versions
-      description: |
+      description: >
         Versions of the relevant software / packages.
       value: |
         <!-- From `backtesting.__version__`. If git, use commit hash -->
