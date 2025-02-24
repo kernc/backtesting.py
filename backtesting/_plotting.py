@@ -301,6 +301,7 @@ return this.labels[index] || "";
                                **kwargs)
         fig.xaxis.visible = False
         fig.yaxis.minor_tick_line_color = None
+        fig.yaxis.ticker.desired_num_ticks = 3
         return fig
 
     def set_tooltips(fig, tooltips=(), vline=True, renderers=()):
