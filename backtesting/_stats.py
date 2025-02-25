@@ -151,13 +151,13 @@ def compute_stats(
     with np.errstate(divide='ignore'):
         s.loc['Sortino Ratio'] = (annualized_return - risk_free_rate) / (np.sqrt(np.mean(day_returns.clip(-np.inf, 0)**2)) * np.sqrt(annual_trading_days))  # noqa: E501
     max_dd = -np.nan_to_num(dd.max())
-    s.loc['Alpha [%]'] = s.loc['Return [%]'] - s.loc['Buy & Hold Return [%]']
-    # calculate returns using vectorized operations
-    equity_returns = np.diff(equity) / equity[:-1]
-    market_returns = np.diff(c) / c[:-1]
-    cov_matrix = np.cov(equity_returns, market_returns)
-    s.loc['Beta'] = round(cov_matrix[0, 1] / cov_matrix[1, 1], 2)
     s.loc['Calmar Ratio'] = annualized_return / (-max_dd or np.nan)
+    # calculate returns using vectorized operations
+    equity_log_returns = np.log(equity[1:] / equity[:-1])
+    market_log_returns = np.log(c[1:] / c[:-1])
+    cov_matrix = np.cov(equity_log_returns, market_log_returns)
+    s.loc['Beta'] = cov_matrix[0, 1] / cov_matrix[1, 1]
+    s.loc['Alpha [%]'] = (s.loc['Return [%]'] - risk_free_rate * 100) - s.loc['Beta'] * (s.loc['Buy & Hold Return [%]'] - risk_free_rate * 100)
     s.loc['Max. Drawdown [%]'] = max_dd * 100
     s.loc['Avg. Drawdown [%]'] = -dd_peaks.mean() * 100
     s.loc['Max. Drawdown Duration'] = _round_timedelta(dd_dur.max())
