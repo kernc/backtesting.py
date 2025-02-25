@@ -216,6 +216,7 @@ def plot(*, results: pd.Series,
     plot_equity = plot_equity and not trades.empty
     plot_return = plot_return and not trades.empty
     plot_pl = plot_pl and not trades.empty
+    plot_trades = plot_trades and not trades.empty
     is_datetime_index = isinstance(df.index, pd.DatetimeIndex)
 
     from .lib import OHLCV_AGG
