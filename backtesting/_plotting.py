@@ -505,9 +505,10 @@ return this.labels[index] || "";
 
     def _plot_ohlc():
         """Main OHLC bars"""
-        fig_ohlc.segment('index', 'High', 'index', 'Low', source=source, color="black")
+        fig_ohlc.segment('index', 'High', 'index', 'Low', source=source, color="black",
+                         legend_label='OHLC')
         r = fig_ohlc.vbar('index', BAR_WIDTH, 'Open', 'Close', source=source,
-                          line_color="black", fill_color=inc_cmap)
+                          line_color="black", fill_color=inc_cmap, legend_label='OHLC')
         return r
 
     def _plot_ohlc_trades():
