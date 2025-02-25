@@ -567,13 +567,7 @@ return this.labels[index] || "";
 
             if isinstance(value.name, str):
                 tooltip_label = value.name
-                if len(value) == 1:
-                    legend_labels = [LegendStr(value.name)]
-                else:
-                    legend_labels = [
-                        LegendStr(f"{value.name}[{i}]")
-                        for i in range(len(value))
-                    ]
+                legend_labels = [LegendStr(value.name)] * len(value)
             else:
                 tooltip_label = ", ".join(value.name)
                 legend_labels = [LegendStr(item) for item in value.name]
