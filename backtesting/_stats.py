@@ -155,8 +155,9 @@ def compute_stats(
     equity_log_returns = np.log(equity[1:] / equity[:-1])
     market_log_returns = np.log(c[1:] / c[:-1])
     cov_matrix = np.cov(equity_log_returns, market_log_returns)
-    s.loc['Beta'] = cov_matrix[0, 1] / cov_matrix[1, 1]
-    s.loc['Alpha [%]'] = (s.loc['Return [%]'] - risk_free_rate * 100) - s.loc['Beta'] * (s.loc['Buy & Hold Return [%]'] - risk_free_rate * 100)
+    beta = cov_matrix[0, 1] / cov_matrix[1, 1]
+    s.loc['Alpha [%]'] = (s.loc['Return [%]'] - risk_free_rate * 100) - beta * (s.loc['Buy & Hold Return [%]'] - risk_free_rate * 100)
+    s.loc['Beta'] = beta
     s.loc['Max. Drawdown [%]'] = max_dd * 100
     s.loc['Avg. Drawdown [%]'] = -dd_peaks.mean() * 100
     s.loc['Max. Drawdown Duration'] = _round_timedelta(dd_dur.max())
