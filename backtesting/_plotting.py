@@ -240,7 +240,8 @@ def plot(*, results: pd.Series,
         x_axis_type='linear',
         width=plot_width,
         height=400,
-        tools="xpan,xwheel_zoom,box_zoom,undo,redo,reset,save",
+        # TODO: xwheel_pan on horizontal after https://github.com/bokeh/bokeh/issues/14363
+        tools="xpan,xwheel_zoom,xwheel_pan,box_zoom,undo,redo,reset,save",
         active_drag='xpan',
         active_scroll='xwheel_zoom')
 
