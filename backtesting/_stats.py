@@ -152,7 +152,6 @@ def compute_stats(
         s.loc['Sortino Ratio'] = (annualized_return - risk_free_rate) / (np.sqrt(np.mean(day_returns.clip(-np.inf, 0)**2)) * np.sqrt(annual_trading_days))  # noqa: E501
     max_dd = -np.nan_to_num(dd.max())
     s.loc['Calmar Ratio'] = annualized_return / (-max_dd or np.nan)
-    # calculate returns using vectorized operations
     equity_log_returns = np.log(equity[1:] / equity[:-1])
     market_log_returns = np.log(c[1:] / c[:-1])
     cov_matrix = np.cov(equity_log_returns, market_log_returns)
