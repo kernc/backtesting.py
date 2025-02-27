@@ -55,7 +55,7 @@ if IS_JUPYTER_NOTEBOOK:
     warnings.warn('Jupyter Notebook detected. '
                   'Setting Bokeh output to notebook. '
                   'This may not work in Jupyter clients without JavaScript '
-                  'support (e.g. PyCharm, Spyder IDE). '
+                  'support, such as old IDEs. '
                   'Reset with `backtesting.set_bokeh_output(notebook=False)`.')
     output_notebook()
 
