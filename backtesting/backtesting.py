@@ -250,8 +250,13 @@ class Strategy(metaclass=ABCMeta):
 
         .. caution::
             Keep in mind that `self.sell(size=.1)` doesn't close existing `self.buy(size=.1)`
-            trade unless the underlying asset price hasn't changed yet.
-            Use `Trade.close()` or `Position.close()` to exit trades.
+            trade unless:
+
+            * the backtest was run with `exclusive_orders=True`,
+            * the underlying asset price is equal in both cases and
+              the backtest was run with `spread = commission = 0`.
+
+            Use `Trade.close()` or `Position.close()` to explicitly exit trades.
 
         See also `Strategy.buy()`.
 
