@@ -470,7 +470,7 @@ class TrailingStrategy(Strategy):
         """
         hi, lo, c_prev = self.data.High, self.data.Low, pd.Series(self.data.Close).shift(1)
         tr = np.max([hi - lo, (c_prev - hi).abs(), (c_prev - lo).abs()], axis=0)
-        atr = pd.Series(tr).rolling(periods).mean().bfill().values
+        atr = pd.Series(tr).ffill().bfill().rolling(periods).mean().values
         self.__atr = atr
 
     def set_trailing_sl(self, n_atr: float = 6):
