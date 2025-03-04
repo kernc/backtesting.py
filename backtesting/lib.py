@@ -511,9 +511,9 @@ class FractionalBacktest(Backtest):
     A `backtesting.backtesting.Backtest` that supports fractional share trading
     by simple composition. It applies roughly the transformation:
 
-        df = (df / satoshi).assign(Volume=df.Volume * satoshi)
+        data = (data / satoshi).assign(Volume=data.Volume * satoshi)
 
-    as unchallenged in [this FAQ entry on GitHub](https://github.com/kernc/backtesting.py/issues/134),
+    as left unchallenged in [this FAQ entry on GitHub](https://github.com/kernc/backtesting.py/issues/134),
     then passes `data`, `args*`, and `**kwargs` to its super.
 
     Parameter `satoshi` tells the amount of scaling to do. E.g. for
