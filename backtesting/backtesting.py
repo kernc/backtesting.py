@@ -1735,8 +1735,7 @@ class Backtest:
 
 __all__ = [getattr(v, '__name__', k)
            for k, v in globals().items()                        # export
-           if ((callable(v) and v.__module__ == __name__ or     # callables from this module
-                k.isupper()) and                                # or CONSTANTS
+           if (((callable(v) and getattr(v, '__module__', None) == __name__ or k.isupper()) and                                # or CONSTANTS
                not getattr(v, '__name__', k).startswith('_'))]  # neither marked internal
 
 # NOTE: Don't put anything public below here. See above.
