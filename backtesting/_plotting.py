@@ -111,6 +111,7 @@ def lightness(color, lightness=.94):
 
 
 _MAX_CANDLES = 10_000
+_INDICATOR_HEIGHT = 50
 
 
 def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
@@ -295,7 +296,7 @@ return this.labels[index] || "";
         ('Volume', '@Volume{0,0}')]
 
     def new_indicator_figure(**kwargs):
-        kwargs.setdefault('height', 90)
+        kwargs.setdefault('height', _INDICATOR_HEIGHT)
         fig = new_bokeh_figure(x_range=fig_ohlc.x_range,
                                active_scroll='xwheel_zoom',
                                active_drag='xpan',
