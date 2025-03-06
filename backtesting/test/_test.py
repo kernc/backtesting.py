@@ -939,7 +939,7 @@ class TestLib(TestCase):
         self.assertEqual(stats['# Trades'], 56)
 
     def test_FractionalBacktest(self):
-        ubtc_bt = FractionalBacktest(BTCUSD['2015':], SmaCross, satoshi=1e6, cash=100)
+        ubtc_bt = FractionalBacktest(BTCUSD['2015':], SmaCross, fractional_unit=1/1e6, cash=100)
         stats = ubtc_bt.run(fast=2, slow=3)
         self.assertEqual(stats['# Trades'], 41)
 

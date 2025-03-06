@@ -1153,6 +1153,10 @@ class Backtest:
     [active and ongoing] at the end of the backtest will be closed on
     the last bar and will contribute to the computed backtest statistics.
 
+    .. tip:: Fractional trading
+        See also `backtesting.lib.FractionalBacktest` if you want to trade
+        fractional units (of e.g. bitcoin).
+
     [FIFO]: https://www.investopedia.com/terms/n/nfa-compliance-rule-2-43b.asp
     [active and ongoing]: https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Strategy.trades
     """  # noqa: E501

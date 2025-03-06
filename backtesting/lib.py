@@ -14,6 +14,7 @@ Please raise ideas for additions to this collection on the [issue tracker].
 from __future__ import annotations
 
 import multiprocessing as mp
+import warnings
 from collections import OrderedDict
 from inspect import currentframe
 from itertools import chain, compress, count
@@ -511,22 +512,31 @@ class FractionalBacktest(Backtest):
     A `backtesting.backtesting.Backtest` that supports fractional share trading
     by simple composition. It applies roughly the transformation:
 
-        data = (data / satoshi).assign(Volume=data.Volume * satoshi)
+        data = (data * fractional_unit).assign(Volume=data.Volume / fractional_unit)
 
     as left unchallenged in [this FAQ entry on GitHub](https://github.com/kernc/backtesting.py/issues/134),
     then passes `data`, `args*`, and `**kwargs` to its super.
 
-    Parameter `satoshi` tells the amount of scaling to do. E.g. for
-    μBTC trading, pass `satoshi=1e6`.
+    Parameter `fractional_unit` represents the smallest fraction of currency that can be traded
+    and defaults to one [satoshi]. For μBTC trading, pass `fractional_unit=1/1e6`.
+    Thus-transformed backtest does a whole-sized trading of `fractional_unit` units.
+
+    [satoshi]: https://en.wikipedia.org/wiki/Bitcoin#Units_and_divisibility
     """
     def __init__(self,
                  data,
                  *args,
-                 satoshi=int(100e6),
+                 fractional_unit=1 / 100e6,
                  **kwargs):
+        if 'satoshi' in kwargs:
+            warnings.warn(
+                'Parameter `FractionalBacktest(..., satoshi=)` is deprecated. '
+                'Use `FractionalBacktest(..., fractional_unit=)`.',
+                category=DeprecationWarning, stacklevel=2)
+            fractional_unit = 1 / kwargs.pop('satoshi')
         data = data.copy()
-        data[['Open', 'High', 'Low', 'Close']] /= satoshi
-        data['Volume'] *= satoshi
+        data[['Open', 'High', 'Low', 'Close']] *= fractional_unit
+        data['Volume'] /= fractional_unit
         super().__init__(data, *args, **kwargs)
 
 
