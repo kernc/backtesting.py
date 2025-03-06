@@ -1404,11 +1404,8 @@ class Backtest:
         code finds and returns the "best" of the 7 admissible (of the
         9 possible) parameter combinations:
 
-            backtest.optimize(sma1=[5, 10, 15], sma2=[10, 20, 40],
-                              constraint=lambda p: p.sma1 < p.sma2)
-
-        .. TODO::
-            Improve multiprocessing/parallel execution on Windos with start method 'spawn'.
+            best_stats = backtest.optimize(sma1=[5, 10, 15], sma2=[10, 20, 40],
+                                           constraint=lambda p: p.sma1 < p.sma2)
         """
         if not kwargs:
             raise ValueError('Need some strategy parameters to optimize')
