@@ -1005,6 +1005,12 @@ class _Broker:
                 if order.sl or order.tp:
                     if is_market_order:
                         reprocess_orders = True
+                    # Order.stop and TP hit within the same bar, but SL wasn't. This case
+                    # is not ambiguous, because stop and TP go in the same price direction.
+                    elif stop_price and not order.limit and order.tp and (
+                            (order.is_long and order.tp <= high and (order.sl or -np.inf) < low) or
+                            (order.is_short and order.tp >= low and (order.sl or np.inf) > high)):
+                        reprocess_orders = True
                     elif (low <= (order.sl or -np.inf) <= high or
                           low <= (order.tp or -np.inf) <= high):
                         warnings.warn(

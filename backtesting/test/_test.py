@@ -1106,3 +1106,14 @@ class TestRegressions(TestCase):
 
         trades = Backtest(SHORT_DATA, S).run()._trades
         self.assertEqual(trades['ExitPrice'].iloc[0], 104.95)
+
+    def test_stop_entry_and_tp_in_same_bar(self):
+        class S(_S):
+            def next(self):
+                i = len(self.data.index)
+                if i == 3:
+                    self.sell(stop=108, tp=105, sl=113)
+
+        trades = Backtest(SHORT_DATA, S).run()._trades
+        self.assertEqual(trades['ExitBar'].iloc[0], 3)
+        self.assertEqual(trades['ExitPrice'].iloc[0], 105)
