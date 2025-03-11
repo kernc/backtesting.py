@@ -68,6 +68,8 @@ CAGR [%]                                16.80
 Sharpe Ratio                             0.66
 Sortino Ratio                            1.30
 Calmar Ratio                             0.77
+Alpha [%]                              450.62
+Beta                                     0.02
 Max. Drawdown [%]                      -33.08
 Avg. Drawdown [%]                       -5.58
 Max. Drawdown Duration      688 days 00:00:00

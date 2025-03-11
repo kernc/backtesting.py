@@ -1262,6 +1262,8 @@ class Backtest:
             Sharpe Ratio                          0.58038
             Sortino Ratio                         1.08479
             Calmar Ratio                          0.44144
+            Alpha [%]                           394.37391
+            Beta                                  0.03803
             Max. Drawdown [%]                   -47.98013
             Avg. Drawdown [%]                    -5.92585
             Max. Drawdown Duration      584 days 00:00:00
