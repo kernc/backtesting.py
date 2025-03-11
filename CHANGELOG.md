@@ -5,12 +5,23 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
+### 0.6.3
+(2025-02-20)
+
+* Enhancements:
+  * Plot trade duration lines in the P&L plot section.
+  * `backtesting.lib.TrailingStrategy` supports setting trailing stop-loss by percentage.
+  * [`backtesting.lib.MultiBacktest`](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html#backtesting.lib.MultiBacktest)
+    multi-dataset backtesting wrapper.
+
+
 ### 0.6.2
 (2025-02-19)
 
 * Enhancements:
   * Grid optimization with mp.Pool & mp.shm.SharedMemory (#1222)
-  * `backtesting.lib.FractionalBacktest` that supports fractional trading
+  * [`backtesting.lib.FractionalBacktest`](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html#backtesting.lib.FractionalBacktest)
+    that supports fractional trading
   * `backtesting.__all__` for better `from backtesting import *` and suggestions
 * Bugs fixed:
   * Fix remaining issues with `trade_on_close=True`

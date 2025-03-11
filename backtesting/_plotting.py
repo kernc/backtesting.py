@@ -362,7 +362,7 @@ return this.labels[index] || "";
         source.add(equity, source_key)
         fig = new_indicator_figure(
             y_axis_label=yaxis_label,
-            **({} if plot_drawdown else dict(height=110)))
+            **(dict(height=80) if plot_drawdown else dict(height=100)))
 
         # High-watermark drawdown dents
         fig.patch('index', 'equity_dd',
@@ -413,7 +413,7 @@ return this.labels[index] || "";
 
     def _plot_drawdown_section():
         """Drawdown section"""
-        fig = new_indicator_figure(y_axis_label="Drawdown")
+        fig = new_indicator_figure(y_axis_label="Drawdown", height=80)
         drawdown = equity_data['DrawdownPct']
         argmax = drawdown.idxmax()
         source.add(drawdown, 'drawdown')
@@ -427,7 +427,7 @@ return this.labels[index] || "";
 
     def _plot_pl_section():
         """Profit/Loss markers section"""
-        fig = new_indicator_figure(y_axis_label="Profit / Loss")
+        fig = new_indicator_figure(y_axis_label="Profit / Loss", height=80)
         fig.add_layout(Span(location=0, dimension='width', line_color='#666666',
                             line_dash='dashed', level='underlay', line_width=1))
         trade_source.add(trades['ReturnPct'], 'returns')
