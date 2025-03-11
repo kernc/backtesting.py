@@ -6,13 +6,32 @@ These were the major changes contributing to each release:
 ### 0.x.x
 
 ### 0.6.3
-(2025-02-20)
+(2025-03-11)
 
 * Enhancements:
-  * Plot trade duration lines in the P&L plot section.
   * `backtesting.lib.TrailingStrategy` supports setting trailing stop-loss by percentage.
   * [`backtesting.lib.MultiBacktest`](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html#backtesting.lib.MultiBacktest)
     multi-dataset backtesting wrapper.
+  * `Backtest.run()` wrapped in `tqdm()`
+  * Rename parameter `lib.FractionalBacktest(fractional_unit=)`.
+  * Add market alpha & market beta stats (#1221)
+* Plot improvements:
+  * Plot trade duration lines in the P&L plot section.
+  * Simplify PL section, use circular markers.
+  * Only plot trades when some trades are present.
+  * Set `fig.yaxis.ticker.desired_num_ticks=3` for indicator subplots.
+  * Single legend item for indicators with singular/default names.
+  * Make "OHLC" itself a togglable legend item.
+  * Add xwheel_pan tool, conditioned on activation for now
+    (upvote [Bokeh issue](https://github.com/bokeh/bokeh/issues/14363)).
+  * Reduce height of indicator charts, introduce an overridable private
+    global `backtesting._plotting._INDICATOR_HEIGHT`.
+* Bug fixes:
+  * Fixed `Position.pl` occasionally not matching `Position.pl_pct` in sign.
+  * SL _always_ executes before TP when hit in the same bar.
+  * Fix `functools.partial` objects do not always have a `__module__` attr in Python 3.9 (#1233)
+  * Fix stop-market and TP hit within the same bar.
+* Documentation improvements (warnings, links, ...)
 
 
 ### 0.6.2
