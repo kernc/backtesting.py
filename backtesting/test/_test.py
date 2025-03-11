@@ -71,6 +71,11 @@ class SmaCross(Strategy):
             self.sell()
 
 
+class _S(Strategy):
+    def init(self):
+        super().init()
+
+
 class TestBacktest(TestCase):
     def test_run(self):
         bt = Backtest(EURUSD, SmaCross)
@@ -356,18 +361,12 @@ class TestBacktest(TestCase):
                 if self.position:
                     self.position.close()
 
-        class SinglePosition(Strategy):
-            def init(self):
-                pass
-
+        class SinglePosition(_S):
             def next(self):
                 if not self.position:
                     self.buy()
 
-        class NoTrade(Strategy):
-            def init(self):
-                pass
-
+        class NoTrade(_S):
             def next(self):
                 pass
 
@@ -385,16 +384,14 @@ class TestBacktest(TestCase):
     def test_trade_enter_hit_sl_on_same_day(self):
         the_day = pd.Timestamp("2012-10-17 00:00:00")
 
-        class S(Strategy):
-            def init(self): pass
-
+        class S(_S):
             def next(self):
                 if self.data.index[-1] == the_day:
                     self.buy(sl=720)
 
         self.assertEqual(Backtest(GOOG, S).run()._trades.iloc[0].ExitPrice, 720)
 
-        class S(S):
+        class S(_S):
             def next(self):
                 if self.data.index[-1] == the_day:
                     self.buy(stop=758, sl=720)
@@ -403,9 +400,7 @@ class TestBacktest(TestCase):
             self.assertEqual(Backtest(GOOG, S).run()._trades.iloc[0].ExitPrice, 705.58)
 
     def test_stop_price_between_sl_tp(self):
-        class S(Strategy):
-            def init(self): pass
-
+        class S(_S):
             def next(self):
                 if self.data.index[-1] == pd.Timestamp("2004-09-09 00:00:00"):
                     self.buy(stop=104, sl=103, tp=110)
@@ -429,9 +424,7 @@ class TestBacktest(TestCase):
         bt.run()
 
     def test_close_orders_from_last_strategy_iteration(self):
-        class S(Strategy):
-            def init(self): pass
-
+        class S(_S):
             def next(self):
                 if not self.position:
                     self.buy()
@@ -442,9 +435,7 @@ class TestBacktest(TestCase):
         self.assertFalse(Backtest(SHORT_DATA, S, finalize_trades=True).run()._trades.empty)
 
     def test_check_adjusted_price_when_placing_order(self):
-        class S(Strategy):
-            def init(self): pass
-
+        class S(_S):
             def next(self):
                 self.buy(tp=self.data.Close * 1.01)
 
@@ -724,10 +715,7 @@ class TestPlot(TestCase):
             time.sleep(5)
 
     def test_wellknown(self):
-        class S(Strategy):
-            def init(self):
-                pass
-
+        class S(_S):
             def next(self):
                 date = self.data.index[-1]
                 if date == pd.Timestamp('Thu 19 Oct 2006'):
@@ -941,7 +929,7 @@ class TestLib(TestCase):
         self.assertEqual(stats['# Trades'], 56)
 
     def test_FractionalBacktest(self):
-        ubtc_bt = FractionalBacktest(BTCUSD['2015':], SmaCross, satoshi=1e6, cash=100)
+        ubtc_bt = FractionalBacktest(BTCUSD['2015':], SmaCross, fractional_unit=1/1e6, cash=100)
         stats = ubtc_bt.run(fast=2, slow=3)
         self.assertEqual(stats['# Trades'], 41)
 
@@ -1039,9 +1027,7 @@ class TestDocs(TestCase):
 
 class TestRegressions(TestCase):
     def test_gh_521(self):
-        class S(Strategy):
-            def init(self): pass
-
+        class S(_S):
             def next(self):
                 if self.data.Close[-1] == 100:
                     self.buy(size=1, sl=90)
@@ -1058,9 +1044,7 @@ class TestRegressions(TestCase):
         self.assertEqual(round(stats['Return (Ann.) [%]']), -3)
 
     def test_cancel_orders(self):
-        class S(Strategy):
-            def init(self): pass
-
+        class S(_S):
             def next(self):
                 self.buy(sl=1, tp=1e3)
                 if self.position:
@@ -1110,3 +1094,28 @@ class TestRegressions(TestCase):
         trades = bt.run()._trades
         self.assertEqual(EURUSD.Close[trades['ExitTime']].tolist(),
                          trades['ExitPrice'].tolist())
+
+    def test_sl_always_before_tp(self):
+        class S(_S):
+            def next(self):
+                i = len(self.data.index)
+                if i == 4:
+                    self.buy()
+                if i == 5:
+                    t = self.trades[0]
+                    t.sl = 105
+                    t.tp = 107.9
+
+        trades = Backtest(SHORT_DATA, S).run()._trades
+        self.assertEqual(trades['ExitPrice'].iloc[0], 104.95)
+
+    def test_stop_entry_and_tp_in_same_bar(self):
+        class S(_S):
+            def next(self):
+                i = len(self.data.index)
+                if i == 3:
+                    self.sell(stop=108, tp=105, sl=113)
+
+        trades = Backtest(SHORT_DATA, S).run()._trades
+        self.assertEqual(trades['ExitBar'].iloc[0], 3)
+        self.assertEqual(trades['ExitPrice'].iloc[0], 105)

@@ -23,6 +23,7 @@ from bokeh.models import (  # type: ignore
     CrosshairTool,
     CustomJS,
     ColumnDataSource,
+    CustomJSTransform,
     Label, NumeralTickFormatter,
     Span,
     HoverTool,
@@ -39,7 +40,7 @@ from bokeh.io import curdoc, output_notebook, output_file, show
 from bokeh.io.state import curstate
 from bokeh.layouts import gridplot
 from bokeh.palettes import Category10
-from bokeh.transform import factor_cmap
+from bokeh.transform import factor_cmap, transform
 
 from backtesting._util import _data_period, _as_list, _Indicator, try_
 
@@ -54,7 +55,7 @@ if IS_JUPYTER_NOTEBOOK:
     warnings.warn('Jupyter Notebook detected. '
                   'Setting Bokeh output to notebook. '
                   'This may not work in Jupyter clients without JavaScript '
-                  'support (e.g. PyCharm, Spyder IDE). '
+                  'support, such as old IDEs. '
                   'Reset with `backtesting.set_bokeh_output(notebook=False)`.')
     output_notebook()
 
@@ -110,6 +111,7 @@ def lightness(color, lightness=.94):
 
 
 _MAX_CANDLES = 10_000
+_INDICATOR_HEIGHT = 50
 
 
 def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
@@ -216,6 +218,7 @@ def plot(*, results: pd.Series,
     plot_equity = plot_equity and not trades.empty
     plot_return = plot_return and not trades.empty
     plot_pl = plot_pl and not trades.empty
+    plot_trades = plot_trades and not trades.empty
     is_datetime_index = isinstance(df.index, pd.DatetimeIndex)
 
     from .lib import OHLCV_AGG
@@ -238,7 +241,8 @@ def plot(*, results: pd.Series,
         x_axis_type='linear',
         width=plot_width,
         height=400,
-        tools="xpan,xwheel_zoom,box_zoom,undo,redo,reset,save",
+        # TODO: xwheel_pan on horizontal after https://github.com/bokeh/bokeh/issues/14363
+        tools="xpan,xwheel_zoom,xwheel_pan,box_zoom,undo,redo,reset,save",
         active_drag='xpan',
         active_scroll='xwheel_zoom')
 
@@ -257,7 +261,6 @@ def plot(*, results: pd.Series,
     trade_source = ColumnDataSource(dict(
         index=trades['ExitBar'],
         datetime=trades['ExitTime'],
-        exit_price=trades['ExitPrice'],
         size=trades['Size'],
         returns_positive=(trades['ReturnPct'] > 0).astype(int).astype(str),
     ))
@@ -293,13 +296,14 @@ return this.labels[index] || "";
         ('Volume', '@Volume{0,0}')]
 
     def new_indicator_figure(**kwargs):
-        kwargs.setdefault('height', 90)
+        kwargs.setdefault('height', _INDICATOR_HEIGHT)
         fig = new_bokeh_figure(x_range=fig_ohlc.x_range,
                                active_scroll='xwheel_zoom',
                                active_drag='xpan',
                                **kwargs)
         fig.xaxis.visible = False
         fig.yaxis.minor_tick_line_color = None
+        fig.yaxis.ticker.desired_num_ticks = 3
         return fig
 
     def set_tooltips(fig, tooltips=(), vline=True, renderers=()):
@@ -425,31 +429,24 @@ return this.labels[index] || "";
         """Profit/Loss markers section"""
         fig = new_indicator_figure(y_axis_label="Profit / Loss")
         fig.add_layout(Span(location=0, dimension='width', line_color='#666666',
-                            line_dash='dashed', line_width=1))
-        returns_long = np.where(trades['Size'] > 0, trades['ReturnPct'], np.nan)
-        returns_short = np.where(trades['Size'] < 0, trades['ReturnPct'], np.nan)
+                            line_dash='dashed', level='underlay', line_width=1))
+        trade_source.add(trades['ReturnPct'], 'returns')
         size = trades['Size'].abs()
         size = np.interp(size, (size.min(), size.max()), (8, 20))
-        trade_source.add(returns_long, 'returns_long')
-        trade_source.add(returns_short, 'returns_short')
         trade_source.add(size, 'marker_size')
         if 'count' in trades:
             trade_source.add(trades['count'], 'count')
         trade_source.add(trades[['EntryBar', 'ExitBar']].values.tolist(), 'lines')
-        trade_source.add([[0, r] for r in trades['ReturnPct'].values], 'returns_both')
-        fig.multi_line(xs='lines', ys='returns_both',
-                       source=trade_source, color='#bbb', line_width=1)
-        r1 = fig.scatter('index', 'returns_long', source=trade_source, fill_color=cmap,
-                         marker='triangle', line_color='black', size='marker_size')
-        r2 = fig.scatter('index', 'returns_short', source=trade_source, fill_color=cmap,
-                         marker='inverted_triangle', line_color='black', size='marker_size')
+        fig.multi_line(xs='lines',
+                       ys=transform('returns', CustomJSTransform(v_func='return [...xs].map(i => [0, i]);')),
+                       source=trade_source, color='#999', line_width=1)
+        r1 = fig.scatter('index', 'returns', source=trade_source, fill_color=cmap,
+                         marker='circle', line_color='black', size='marker_size')
         tooltips = [("Size", "@size{0,0}")]
         if 'count' in trades:
             tooltips.append(("Count", "@count{0,0}"))
-        set_tooltips(fig, tooltips + [("P/L", "@returns_long{+0.[000]%}")],
+        set_tooltips(fig, tooltips + [("P/L", "@returns{+0.[000]%}")],
                      vline=False, renderers=[r1])
-        set_tooltips(fig, tooltips + [("P/L", "@returns_short{+0.[000]%}")],
-                     vline=False, renderers=[r2])
         fig.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
         return fig
 
@@ -510,9 +507,10 @@ return this.labels[index] || "";
 
     def _plot_ohlc():
         """Main OHLC bars"""
-        fig_ohlc.segment('index', 'High', 'index', 'Low', source=source, color="black")
+        fig_ohlc.segment('index', 'High', 'index', 'Low', source=source, color="black",
+                         legend_label='OHLC')
         r = fig_ohlc.vbar('index', BAR_WIDTH, 'Open', 'Close', source=source,
-                          line_color="black", fill_color=inc_cmap)
+                          line_color="black", fill_color=inc_cmap, legend_label='OHLC')
         return r
 
     def _plot_ohlc_trades():
@@ -569,13 +567,7 @@ return this.labels[index] || "";
 
             if isinstance(value.name, str):
                 tooltip_label = value.name
-                if len(value) == 1:
-                    legend_labels = [LegendStr(value.name)]
-                else:
-                    legend_labels = [
-                        LegendStr(f"{value.name}[{i}]")
-                        for i in range(len(value))
-                    ]
+                legend_labels = [LegendStr(value.name)] * len(value)
             else:
                 tooltip_label = ", ".join(value.name)
                 legend_labels = [LegendStr(item) for item in value.name]
@@ -618,7 +610,7 @@ return this.labels[index] || "";
                                                round(abs(mean), -1) in (50, 100, 200)):
                         fig.add_layout(Span(location=float(mean), dimension='width',
                                             line_color='#666666', line_dash='dashed',
-                                            line_width=.5))
+                                            level='underlay', line_width=.5))
             if is_overlay:
                 ohlc_tooltips.append((tooltip_label, NBSP.join(tooltips)))
             else:

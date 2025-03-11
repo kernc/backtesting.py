@@ -250,8 +250,13 @@ class Strategy(metaclass=ABCMeta):
 
         .. caution::
             Keep in mind that `self.sell(size=.1)` doesn't close existing `self.buy(size=.1)`
-            trade unless the underlying asset price hasn't changed yet.
-            Use `Trade.close()` or `Position.close()` to exit trades.
+            trade unless:
+
+            * the backtest was run with `exclusive_orders=True`,
+            * the underlying asset price is equal in both cases and
+              the backtest was run with `spread = commission = 0`.
+
+            Use `Trade.close()` or `Position.close()` to explicitly exit trades.
 
         See also `Strategy.buy()`.
 
@@ -368,10 +373,8 @@ class Position:
     @property
     def pl_pct(self) -> float:
         """Profit (positive) or loss (negative) of the current position in percent."""
-        weights = np.abs([trade.size for trade in self.__broker.trades])
-        weights = weights / weights.sum()
-        pl_pcts = np.array([trade.pl_pct for trade in self.__broker.trades])
-        return (pl_pcts * weights).sum()
+        total_invested = sum(trade.entry_price * abs(trade.size) for trade in self.__broker.trades)
+        return (self.pl / total_invested) * 100 if total_invested else 0
 
     @property
     def is_long(self) -> bool:
@@ -803,11 +806,8 @@ class _Broker:
                     f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})")
 
         order = Order(self, size, limit, stop, sl, tp, trade, tag)
-        # Put the new order in the order queue,
-        # inserting SL/TP/trade-closing orders in-front
-        if trade:
-            self.orders.insert(0, order)
-        else:
+
+        if not trade:
             # If exclusive orders (each new order auto-closes previous orders/position),
             # cancel all non-contingent orders and close all open trades beforehand
             if self._exclusive_orders:
@@ -817,7 +817,8 @@ class _Broker:
                 for t in self.trades:
                     t.close()
 
-            self.orders.append(order)
+        # Put the new order in the order queue, Ensure SL orders are processed first
+        self.orders.insert(0 if trade and stop else len(self.orders), order)
 
         return order
 
@@ -1004,6 +1005,12 @@ class _Broker:
                 if order.sl or order.tp:
                     if is_market_order:
                         reprocess_orders = True
+                    # Order.stop and TP hit within the same bar, but SL wasn't. This case
+                    # is not ambiguous, because stop and TP go in the same price direction.
+                    elif stop_price and not order.limit and order.tp and (
+                            (order.is_long and order.tp <= high and (order.sl or -np.inf) < low) or
+                            (order.is_short and order.tp >= low and (order.sl or np.inf) > high)):
+                        reprocess_orders = True
                     elif (low <= (order.sl or -np.inf) <= high or
                           low <= (order.tp or -np.inf) <= high):
                         warnings.warn(
@@ -1069,9 +1076,6 @@ class _Broker:
         # Apply broker commission at trade open
         self._cash -= self._commission(size, price)
         # Create SL/TP (bracket) orders.
-        # Make sure SL order is created first so it gets adversarially processed before TP order
-        # in case of an ambiguous tie (both hit within a single bar).
-        # Note, sl/tp orders are inserted at the front of the list, thus order reversed.
         if tp:
             trade.tp = tp
         if sl:
@@ -1083,11 +1087,85 @@ class Backtest:
     Backtest a particular (parameterized) strategy
     on particular data.
 
-    Upon initialization, call method
+    Initialize a backtest. Requires data and a strategy to test.
+    After initialization, you can call method
     `backtesting.backtesting.Backtest.run` to run a backtest
     instance, or `backtesting.backtesting.Backtest.optimize` to
     optimize it.
-    """
+
+    `data` is a `pd.DataFrame` with columns:
+    `Open`, `High`, `Low`, `Close`, and (optionally) `Volume`.
+    If any columns are missing, set them to what you have available,
+    e.g.
+
+        df['Open'] = df['High'] = df['Low'] = df['Close']
+
+    The passed data frame can contain additional columns that
+    can be used by the strategy (e.g. sentiment info).
+    DataFrame index can be either a datetime index (timestamps)
+    or a monotonic range index (i.e. a sequence of periods).
+
+    `strategy` is a `backtesting.backtesting.Strategy`
+    _subclass_ (not an instance).
+
+    `cash` is the initial cash to start with.
+
+    `spread` is the the constant bid-ask spread rate (relative to the price).
+    E.g. set it to `0.0002` for commission-less forex
+    trading where the average spread is roughly 0.2‰ of the asking price.
+
+    `commission` is the commission rate. E.g. if your broker's commission
+    is 1% of order value, set commission to `0.01`.
+    The commission is applied twice: at trade entry and at trade exit.
+    Besides one single floating value, `commission` can also be a tuple of floating
+    values `(fixed, relative)`. E.g. set it to `(100, .01)`
+    if your broker charges minimum $100 + 1%.
+    Additionally, `commission` can be a callable
+    `func(order_size: int, price: float) -> float`
+    (note, order size is negative for short orders),
+    which can be used to model more complex commission structures.
+    Negative commission values are interpreted as market-maker's rebates.
+
+    .. note::
+        Before v0.4.0, the commission was only applied once, like `spread` is now.
+        If you want to keep the old behavior, simply set `spread` instead.
+
+    .. note::
+        With nonzero `commission`, long and short orders will be placed
+        at an adjusted price that is slightly higher or lower (respectively)
+        than the current price. See e.g.
+        [#153](https://github.com/kernc/backtesting.py/issues/153),
+        [#538](https://github.com/kernc/backtesting.py/issues/538),
+        [#633](https://github.com/kernc/backtesting.py/issues/633).
+
+    `margin` is the required margin (ratio) of a leveraged account.
+    No difference is made between initial and maintenance margins.
+    To run the backtest using e.g. 50:1 leverge that your broker allows,
+    set margin to `0.02` (1 / leverage).
+
+    If `trade_on_close` is `True`, market orders will be filled
+    with respect to the current bar's closing price instead of the
+    next bar's open.
+
+    If `hedging` is `True`, allow trades in both directions simultaneously.
+    If `False`, the opposite-facing orders first close existing trades in
+    a [FIFO] manner.
+
+    If `exclusive_orders` is `True`, each new order auto-closes the previous
+    trade/position, making at most a single trade (long or short) in effect
+    at each time.
+
+    If `finalize_trades` is `True`, the trades that are still
+    [active and ongoing] at the end of the backtest will be closed on
+    the last bar and will contribute to the computed backtest statistics.
+
+    .. tip:: Fractional trading
+        See also `backtesting.lib.FractionalBacktest` if you want to trade
+        fractional units (of e.g. bitcoin).
+
+    [FIFO]: https://www.investopedia.com/terms/n/nfa-compliance-rule-2-43b.asp
+    [active and ongoing]: https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Strategy.trades
+    """  # noqa: E501
     def __init__(self,
                  data: pd.DataFrame,
                  strategy: Type[Strategy],
@@ -1101,79 +1179,6 @@ class Backtest:
                  exclusive_orders=False,
                  finalize_trades=False,
                  ):
-        """
-        Initialize a backtest. Requires data and a strategy to test.
-
-        `data` is a `pd.DataFrame` with columns:
-        `Open`, `High`, `Low`, `Close`, and (optionally) `Volume`.
-        If any columns are missing, set them to what you have available,
-        e.g.
-
-            df['Open'] = df['High'] = df['Low'] = df['Close']
-
-        The passed data frame can contain additional columns that
-        can be used by the strategy (e.g. sentiment info).
-        DataFrame index can be either a datetime index (timestamps)
-        or a monotonic range index (i.e. a sequence of periods).
-
-        `strategy` is a `backtesting.backtesting.Strategy`
-        _subclass_ (not an instance).
-
-        `cash` is the initial cash to start with.
-
-        `spread` is the the constant bid-ask spread rate (relative to the price).
-        E.g. set it to `0.0002` for commission-less forex
-        trading where the average spread is roughly 0.2‰ of the asking price.
-
-        `commission` is the commission rate. E.g. if your broker's commission
-        is 1% of order value, set commission to `0.01`.
-        The commission is applied twice: at trade entry and at trade exit.
-        Besides one single floating value, `commission` can also be a tuple of floating
-        values `(fixed, relative)`. E.g. set it to `(100, .01)`
-        if your broker charges minimum $100 + 1%.
-        Additionally, `commission` can be a callable
-        `func(order_size: int, price: float) -> float`
-        (note, order size is negative for short orders),
-        which can be used to model more complex commission structures.
-        Negative commission values are interpreted as market-maker's rebates.
-
-        .. note::
-            Before v0.4.0, the commission was only applied once, like `spread` is now.
-            If you want to keep the old behavior, simply set `spread` instead.
-
-        .. note::
-            With nonzero `commission`, long and short orders will be placed
-            at an adjusted price that is slightly higher or lower (respectively)
-            than the current price. See e.g.
-            [#153](https://github.com/kernc/backtesting.py/issues/153),
-            [#538](https://github.com/kernc/backtesting.py/issues/538),
-            [#633](https://github.com/kernc/backtesting.py/issues/633).
-
-        `margin` is the required margin (ratio) of a leveraged account.
-        No difference is made between initial and maintenance margins.
-        To run the backtest using e.g. 50:1 leverge that your broker allows,
-        set margin to `0.02` (1 / leverage).
-
-        If `trade_on_close` is `True`, market orders will be filled
-        with respect to the current bar's closing price instead of the
-        next bar's open.
-
-        If `hedging` is `True`, allow trades in both directions simultaneously.
-        If `False`, the opposite-facing orders first close existing trades in
-        a [FIFO] manner.
-
-        If `exclusive_orders` is `True`, each new order auto-closes the previous
-        trade/position, making at most a single trade (long or short) in effect
-        at each time.
-
-        If `finalize_trades` is `True`, the trades that are still
-        [active and ongoing] at the end of the backtest will be closed on
-        the last bar and will contribute to the computed backtest statistics.
-
-        [FIFO]: https://www.investopedia.com/terms/n/nfa-compliance-rule-2-43b.asp
-        [active and ongoing]: https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Strategy.trades
-        """  # noqa: E501
-
         if not (isinstance(strategy, type) and issubclass(strategy, Strategy)):
             raise TypeError('`strategy` must be a Strategy sub-type')
         if not isinstance(data, pd.DataFrame):
@@ -1411,11 +1416,8 @@ class Backtest:
         code finds and returns the "best" of the 7 admissible (of the
         9 possible) parameter combinations:
 
-            backtest.optimize(sma1=[5, 10, 15], sma2=[10, 20, 40],
-                              constraint=lambda p: p.sma1 < p.sma2)
-
-        .. TODO::
-            Improve multiprocessing/parallel execution on Windos with start method 'spawn'.
+            best_stats = backtest.optimize(sma1=[5, 10, 15], sma2=[10, 20, 40],
+                                           constraint=lambda p: p.sma1 < p.sma2)
         """
         if not kwargs:
             raise ValueError('Need some strategy parameters to optimize')
@@ -1737,7 +1739,7 @@ class Backtest:
 
 __all__ = [getattr(v, '__name__', k)
            for k, v in globals().items()                        # export
-           if ((callable(v) and v.__module__ == __name__ or     # callables from this module
+           if ((callable(v) and getattr(v, '__module__', None) == __name__ or  # callables from this module; getattr for Python 3.9; # noqa: E501
                 k.isupper()) and                                # or CONSTANTS
                not getattr(v, '__name__', k).startswith('_'))]  # neither marked internal
 
