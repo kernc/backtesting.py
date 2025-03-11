@@ -1735,7 +1735,7 @@ class Backtest:
 
 __all__ = [getattr(v, '__name__', k)
            for k, v in globals().items()                        # export
-           if (((callable(v) and getattr(v, '__module__', None) == __name__ or  # callables from this module; getattr for Python 3.9; noqa: E501
+           if ((callable(v) and getattr(v, '__module__', None) == __name__ or  # callables from this module; getattr for Python 3.9; noqa: E501
                 k.isupper()) and  # or CONSTANTS
                not getattr(v, '__name__', k).startswith('_'))]  # neither marked internal
 
