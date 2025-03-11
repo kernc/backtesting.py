@@ -70,11 +70,11 @@ module directly, e.g.</p>
 <dd>
 <div class="desc"><p>Backtest a particular (parameterized) strategy
 on particular data.</p>
-<p>Upon initialization, call method
+<p>Initialize a backtest. Requires data and a strategy to test.
+After initialization, you can call method
 <code><a title="backtesting.backtesting.Backtest.run" href="#backtesting.backtesting.Backtest.run">Backtest.run()</a></code> to run a backtest
 instance, or <code><a title="backtesting.backtesting.Backtest.optimize" href="#backtesting.backtesting.Backtest.optimize">Backtest.optimize()</a></code> to
 optimize it.</p>
-<p>Initialize a backtest. Requires data and a strategy to test.</p>
 <p><code>data</code> is a <code>pd.DataFrame</code> with columns:
 <code>Open</code>, <code>High</code>, <code>Low</code>, <code>Close</code>, and (optionally) <code>Volume</code>.
 If any columns are missing, set them to what you have available,
@@ -131,7 +131,12 @@ trade/position, making at most a single trade (long or short) in effect
 at each time.</p>
 <p>If <code>finalize_trades</code> is <code>True</code>, the trades that are still
 <a href="https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Strategy.trades">active and ongoing</a> at the end of the backtest will be closed on
-the last bar and will contribute to the computed backtest statistics.</p></div>
+the last bar and will contribute to the computed backtest statistics.</p>
+<div class="admonition tip">
+<p class="admonition-title">Tip:&ensp;Fractional trading</p>
+<p>See also <code><a title="backtesting.lib.FractionalBacktest" href="lib.html#backtesting.lib.FractionalBacktest">FractionalBacktest</a></code> if you want to trade
+fractional units (of e.g. bitcoin).</p>
+</div></div>
 <h3>Subclasses</h3>
 <ul class="hlist">
 <li><a title="backtesting.lib.FractionalBacktest" href="lib.html#backtesting.lib.FractionalBacktest">FractionalBacktest</a></li>
@@ -182,13 +187,9 @@ to a fixed integer random seed.</p>
 list-like collections of possible values. For example, the following
 code finds and returns the "best" of the 7 admissible (of the
 9 possible) parameter combinations:</p>
-<pre><code>backtest.optimize(sma1=[5, 10, 15], sma2=[10, 20, 40],
-                  constraint=lambda p: p.sma1 &lt; p.sma2)
-</code></pre>
-<div class="admonition todo">
-<p class="admonition-title">TODO</p>
-<p>Improve multiprocessing/parallel execution on Windos with start method 'spawn'.</p>
-</div></div>
+<pre><code>best_stats = backtest.optimize(sma1=[5, 10, 15], sma2=[10, 20, 40],
+                               constraint=lambda p: p.sma1 &lt; p.sma2)
+</code></pre></div>
 </dd>
 <dt id="backtesting.backtesting.Backtest.plot"><code class="name flex">
 <span>def <span class="ident">plot</span></span>(<span>self,<br>*,<br>results=None,<br>filename=None,<br>plot_width=None,<br>plot_equity=True,<br>plot_return=False,<br>plot_pl=True,<br>plot_volume=True,<br>plot_drawdown=False,<br>plot_trades=True,<br>smooth_equity=False,<br>relative_equity=True,<br>superimpose=True,<br>resample=True,<br>reverse_indicators=False,<br>show_legend=True,<br>open_browser=True)</span>
@@ -272,6 +273,8 @@ CAGR [%]                             14.15984
 Sharpe Ratio                          0.58038
 Sortino Ratio                         1.08479
 Calmar Ratio                          0.44144
+Alpha [%]                           394.37391
+Beta                                  0.03803
 Max. Drawdown [%]                   -47.98013
 Avg. Drawdown [%]                    -5.92585
 Max. Drawdown Duration      584 days 00:00:00
@@ -578,8 +581,13 @@ and its properties.</p>
 <div class="admonition caution">
 <p class="admonition-title">Caution</p>
 <p>Keep in mind that <code>self.sell(size=.1)</code> doesn't close existing <code>self.buy(size=.1)</code>
-trade unless the underlying asset price hasn't changed yet.
-Use <code><a title="backtesting.backtesting.Trade.close" href="#backtesting.backtesting.Trade.close">Trade.close()</a></code> or <code><a title="backtesting.backtesting.Position.close" href="#backtesting.backtesting.Position.close">Position.close()</a></code> to exit trades.</p>
+trade unless:</p>
+<ul>
+<li>the backtest was run with <code>exclusive_orders=True</code>,</li>
+<li>the underlying asset price is equal in both cases and
+the backtest was run with <code>spread = commission = 0</code>.</li>
+</ul>
+<p>Use <code><a title="backtesting.backtesting.Trade.close" href="#backtesting.backtesting.Trade.close">Trade.close()</a></code> or <code><a title="backtesting.backtesting.Position.close" href="#backtesting.backtesting.Position.close">Position.close()</a></code> to explicitly exit trades.</p>
 </div>
 <p>See also <code><a title="backtesting.backtesting.Strategy.buy" href="#backtesting.backtesting.Strategy.buy">Strategy.buy()</a></code>.</p>
 <div class="admonition note">
@@ -782,7 +790,7 @@ data-gaCategoryParameter="backtesting.backtesting">
 </main>
 <footer id="footer">
 <p>
-<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.6.2</a>
+<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.6.3</a>
 <span style="color:#ddd">&#21328;</span>
 </p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>

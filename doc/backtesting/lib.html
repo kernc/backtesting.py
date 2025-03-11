@@ -129,11 +129,14 @@ True
 <span>def <span class="ident">plot_heatmaps</span></span>(<span>heatmap, agg='max', *, ncols=3, plot_width=1200, filename='', open_browser=True)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Plots a grid of heatmaps, one for every pair of parameters in <code>heatmap</code>.</p>
+<div class="desc"><p>Plots a grid of heatmaps, one for every pair of parameters in <code>heatmap</code>.
+See example in [the tutorial].</p>
+<p>[the tutorial]: <a href="https://kernc.github.io/backtesting.py/doc/examples/Parameter%20Heatmap%20&amp;%20Optimization.html#plot-heatmap">https://kernc.github.io/backtesting.py/doc/examples/Parameter%20Heatmap%20&amp;%20Optimization.html#plot-heatmap</a>
+# noqa: E501</p>
 <p><code>heatmap</code> is a Series as returned by
 <code><a title="backtesting.backtesting.Backtest.optimize" href="backtesting.html#backtesting.backtesting.Backtest.optimize">Backtest.optimize()</a></code> when its parameter
 <code>return_heatmap=True</code>.</p>
-<p>When projecting the n-dimensional heatmap onto 2D, the values are
+<p>When projecting the n-dimensional (n &gt; 2) heatmap onto 2D, the values are
 aggregated by 'max' function by default. This can be tweaked
 with <code>agg</code> parameter, which accepts any argument pandas knows
 how to aggregate by.</p>
@@ -247,75 +250,18 @@ but don't want to plot the resulting indicator, we can do:</p>
 <dl>
 <dt id="backtesting.lib.FractionalBacktest"><code class="flex name class">
 <span>class <span class="ident">FractionalBacktest</span></span>
-<span>(</span><span>data, *args, satoshi=100000000, **kwargs)</span>
+<span>(</span><span>data, *args, fractional_unit=1e-08, **kwargs)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>A <code>backtesting.Backtest</code> that supports fractional share trading
+<div class="desc"><p>A <code><a title="backtesting.backtesting.Backtest" href="backtesting.html#backtesting.backtesting.Backtest">Backtest</a></code> that supports fractional share trading
 by simple composition. It applies roughly the transformation:</p>
-<pre><code>df = (df / satoshi).assign(Volume=df.Volume * satoshi)
+<pre><code>data = (data * fractional_unit).assign(Volume=data.Volume / fractional_unit)
 </code></pre>
-<p>as unchallenged in <a href="https://github.com/kernc/backtesting.py/issues/134">this FAQ entry on GitHub</a>,
+<p>as left unchallenged in <a href="https://github.com/kernc/backtesting.py/issues/134">this FAQ entry on GitHub</a>,
 then passes <code>data</code>, <code>args*</code>, and <code>**kwargs</code> to its super.</p>
-<p>Parameter <code>satoshi</code> tells the amount of scaling to do. E.g. for
-μBTC trading, pass <code>satoshi=1e6</code>.</p>
-<p>Initialize a backtest. Requires data and a strategy to test.</p>
-<p><code>data</code> is a <code>pd.DataFrame</code> with columns:
-<code>Open</code>, <code>High</code>, <code>Low</code>, <code>Close</code>, and (optionally) <code>Volume</code>.
-If any columns are missing, set them to what you have available,
-e.g.</p>
-<pre><code>df['Open'] = df['High'] = df['Low'] = df['Close']
-</code></pre>
-<p>The passed data frame can contain additional columns that
-can be used by the strategy (e.g. sentiment info).
-DataFrame index can be either a datetime index (timestamps)
-or a monotonic range index (i.e. a sequence of periods).</p>
-<p><code>strategy</code> is a <code><a title="backtesting.backtesting.Strategy" href="backtesting.html#backtesting.backtesting.Strategy">Strategy</a></code>
-<em>subclass</em> (not an instance).</p>
-<p><code>cash</code> is the initial cash to start with.</p>
-<p><code>spread</code> is the the constant bid-ask spread rate (relative to the price).
-E.g. set it to <code>0.0002</code> for commission-less forex
-trading where the average spread is roughly 0.2‰ of the asking price.</p>
-<p><code>commission</code> is the commission rate. E.g. if your broker's commission
-is 1% of order value, set commission to <code>0.01</code>.
-The commission is applied twice: at trade entry and at trade exit.
-Besides one single floating value, <code>commission</code> can also be a tuple of floating
-values <code>(fixed, relative)</code>. E.g. set it to <code>(100, .01)</code>
-if your broker charges minimum $100 + 1%.
-Additionally, <code>commission</code> can be a callable
-<code>func(order_size: int, price: float) -&gt; float</code>
-(note, order size is negative for short orders),
-which can be used to model more complex commission structures.
-Negative commission values are interpreted as market-maker's rebates.</p>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>Before v0.4.0, the commission was only applied once, like <code>spread</code> is now.
-If you want to keep the old behavior, simply set <code>spread</code> instead.</p>
-</div>
-<div class="admonition note">
-<p class="admonition-title">Note</p>
-<p>With nonzero <code>commission</code>, long and short orders will be placed
-at an adjusted price that is slightly higher or lower (respectively)
-than the current price. See e.g.
-<a href="https://github.com/kernc/backtesting.py/issues/153">#153</a>,
-<a href="https://github.com/kernc/backtesting.py/issues/538">#538</a>,
-<a href="https://github.com/kernc/backtesting.py/issues/633">#633</a>.</p>
-</div>
-<p><code>margin</code> is the required margin (ratio) of a leveraged account.
-No difference is made between initial and maintenance margins.
-To run the backtest using e.g. 50:1 leverge that your broker allows,
-set margin to <code>0.02</code> (1 / leverage).</p>
-<p>If <code>trade_on_close</code> is <code>True</code>, market orders will be filled
-with respect to the current bar's closing price instead of the
-next bar's open.</p>
-<p>If <code>hedging</code> is <code>True</code>, allow trades in both directions simultaneously.
-If <code>False</code>, the opposite-facing orders first close existing trades in
-a <a href="https://www.investopedia.com/terms/n/nfa-compliance-rule-2-43b.asp">FIFO</a> manner.</p>
-<p>If <code>exclusive_orders</code> is <code>True</code>, each new order auto-closes the previous
-trade/position, making at most a single trade (long or short) in effect
-at each time.</p>
-<p>If <code>finalize_trades</code> is <code>True</code>, the trades that are still
-<a href="https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Strategy.trades">active and ongoing</a> at the end of the backtest will be closed on
-the last bar and will contribute to the computed backtest statistics.</p></div>
+<p>Parameter <code>fractional_unit</code> represents the smallest fraction of currency that can be traded
+and defaults to one <a href="https://en.wikipedia.org/wiki/Bitcoin#Units_and_divisibility">satoshi</a>. For μBTC trading, pass <code>fractional_unit=1/1e6</code>.
+Thus-transformed backtest does a whole-sized trading of <code>fractional_unit</code> units.</p></div>
 <h3>Ancestors</h3>
 <ul class="hlist">
 <li><a title="backtesting.backtesting.Backtest" href="backtesting.html#backtesting.backtesting.Backtest">Backtest</a></li>
@@ -330,6 +276,43 @@ the last bar and will contribute to the computed backtest statistics.</p></div>
 </ul>
 </li>
 </ul>
+</dd>
+<dt id="backtesting.lib.MultiBacktest"><code class="flex name class">
+<span>class <span class="ident">MultiBacktest</span></span>
+<span>(</span><span>df_list, strategy_cls, **kwargs)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Multi-dataset <code><a title="backtesting.backtesting.Backtest" href="backtesting.html#backtesting.backtesting.Backtest">Backtest</a></code> wrapper.</p>
+<p>Run supplied <code><a title="backtesting.backtesting.Strategy" href="backtesting.html#backtesting.backtesting.Strategy">Strategy</a></code> on several instruments,
+in parallel.
+Used for comparing strategy runs across many instruments
+or classes of instruments. Example:</p>
+<pre><code>from backtesting.test import EURUSD, BTCUSD, SmaCross
+btm = MultiBacktest([EURUSD, BTCUSD], SmaCross)
+stats_per_ticker: pd.DataFrame = btm.run(fast=10, slow=20)
+heatmap_per_ticker: pd.DataFrame = btm.optimize(...)
+</code></pre></div>
+<h3>Methods</h3>
+<dl>
+<dt id="backtesting.lib.MultiBacktest.optimize"><code class="name flex">
+<span>def <span class="ident">optimize</span></span>(<span>self, **kwargs)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Wraps <code><a title="backtesting.backtesting.Backtest.optimize" href="backtesting.html#backtesting.backtesting.Backtest.optimize">Backtest.optimize()</a></code>, but returns <code>pd.DataFrame</code> with
+currency indexes in columns.</p>
+<pre><code>heamap: pd.DataFrame = btm.optimize(...)
+from backtesting.plot import plot_heatmaps
+plot_heatmaps(heatmap.mean(axis=1))
+</code></pre></div>
+</dd>
+<dt id="backtesting.lib.MultiBacktest.run"><code class="name flex">
+<span>def <span class="ident">run</span></span>(<span>self, **kwargs)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Wraps <code><a title="backtesting.backtesting.Backtest.run" href="backtesting.html#backtesting.backtesting.Backtest.run">Backtest.run()</a></code>. Returns <code>pd.DataFrame</code> with
+currency indexes in columns.</p></div>
+</dd>
+</dl>
 </dd>
 <dt id="backtesting.lib.SignalStrategy"><code class="flex name class">
 <span>class <span class="ident">SignalStrategy</span></span>
@@ -412,11 +395,23 @@ overridden methods.</p></div>
 <div class="desc"><p>Set the lookback period for computing ATR. The default value
 of 100 ensures a <em>stable</em> ATR.</p></div>
 </dd>
+<dt id="backtesting.lib.TrailingStrategy.set_trailing_pct"><code class="name flex">
+<span>def <span class="ident">set_trailing_pct</span></span>(<span>self, pct=0.05)</span>
+</code></dt>
+<dd>
+<div class="desc"><p>Set the future trailing stop-loss as some percent (<code>0 &lt; pct &lt; 1</code>)
+below the current price (default 5% below).</p>
+<div class="admonition note">
+<p class="admonition-title">Note:&ensp;Stop-loss set by <code>pct</code> is inexact</p>
+<p>Stop-loss set by <code>set_trailing_pct</code> is converted to units of ATR
+with <code>mean(Close * pct / atr)</code> and set with <code>set_trailing_sl</code>.</p>
+</div></div>
+</dd>
 <dt id="backtesting.lib.TrailingStrategy.set_trailing_sl"><code class="name flex">
 <span>def <span class="ident">set_trailing_sl</span></span>(<span>self, n_atr=6)</span>
 </code></dt>
 <dd>
-<div class="desc"><p>Sets the future trailing stop-loss as some multiple (<code>n_atr</code>)
+<div class="desc"><p>Set the future trailing stop-loss as some multiple (<code>n_atr</code>)
 average true bar ranges away from the current price.</p></div>
 </dd>
 </dl>
@@ -485,6 +480,13 @@ data-gaCategoryParameter="backtesting.lib">
 <h4><code><a title="backtesting.lib.FractionalBacktest" href="#backtesting.lib.FractionalBacktest">FractionalBacktest</a></code></h4>
 </li>
 <li>
+<h4><code><a title="backtesting.lib.MultiBacktest" href="#backtesting.lib.MultiBacktest">MultiBacktest</a></code></h4>
+<ul class="">
+<li><code><a title="backtesting.lib.MultiBacktest.optimize" href="#backtesting.lib.MultiBacktest.optimize">optimize</a></code></li>
+<li><code><a title="backtesting.lib.MultiBacktest.run" href="#backtesting.lib.MultiBacktest.run">run</a></code></li>
+</ul>
+</li>
+<li>
 <h4><code><a title="backtesting.lib.SignalStrategy" href="#backtesting.lib.SignalStrategy">SignalStrategy</a></code></h4>
 <ul class="">
 <li><code><a title="backtesting.lib.SignalStrategy.set_signal" href="#backtesting.lib.SignalStrategy.set_signal">set_signal</a></code></li>
@@ -494,6 +496,7 @@ data-gaCategoryParameter="backtesting.lib">
 <h4><code><a title="backtesting.lib.TrailingStrategy" href="#backtesting.lib.TrailingStrategy">TrailingStrategy</a></code></h4>
 <ul class="">
 <li><code><a title="backtesting.lib.TrailingStrategy.set_atr_periods" href="#backtesting.lib.TrailingStrategy.set_atr_periods">set_atr_periods</a></code></li>
+<li><code><a title="backtesting.lib.TrailingStrategy.set_trailing_pct" href="#backtesting.lib.TrailingStrategy.set_trailing_pct">set_trailing_pct</a></code></li>
 <li><code><a title="backtesting.lib.TrailingStrategy.set_trailing_sl" href="#backtesting.lib.TrailingStrategy.set_trailing_sl">set_trailing_sl</a></code></li>
 </ul>
 </li>
@@ -504,7 +507,7 @@ data-gaCategoryParameter="backtesting.lib">
 </main>
 <footer id="footer">
 <p>
-<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.6.2</a>
+<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.6.3</a>
 <span style="color:#ddd">&#21328;</span>
 </p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
