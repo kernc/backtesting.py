@@ -1108,3 +1108,21 @@ class TestRegressions(TestCase):
         trades = bt.run()._trades
         self.assertEqual(EURUSD.Close[trades['ExitTime']].tolist(),
                          trades['ExitPrice'].tolist())
+
+    def test_sl_always_before_tp(self):
+        class S(Strategy):
+            def init(self): pass
+
+            def next(self):
+                i = len(self.data.index)
+                if i == 4:
+                    self.buy()
+                if i == 5:
+                    t = self.trades[0]
+                    t.sl = 105
+                    t.tp = 107.9
+
+        trades = Backtest(SHORT_DATA, S).run()._trades
+        (bt := Backtest(SHORT_DATA, S)).run()
+        bt.plot()
+        self.assertEqual(trades['ExitPrice'].iloc[0], 104.95)

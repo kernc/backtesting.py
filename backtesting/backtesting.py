@@ -801,11 +801,8 @@ class _Broker:
                     f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})")
 
         order = Order(self, size, limit, stop, sl, tp, trade, tag)
-        # Put the new order in the order queue,
-        # inserting SL/TP/trade-closing orders in-front
-        if trade:
-            self.orders.insert(0, order)
-        else:
+
+        if not trade:
             # If exclusive orders (each new order auto-closes previous orders/position),
             # cancel all non-contingent orders and close all open trades beforehand
             if self._exclusive_orders:
@@ -815,7 +812,8 @@ class _Broker:
                 for t in self.trades:
                     t.close()
 
-            self.orders.append(order)
+        # Put the new order in the order queue, Ensure SL orders are processed first
+        self.orders.insert(0 if trade and stop else len(self.orders), order)
 
         return order
 
@@ -1067,9 +1065,6 @@ class _Broker:
         # Apply broker commission at trade open
         self._cash -= self._commission(size, price)
         # Create SL/TP (bracket) orders.
-        # Make sure SL order is created first so it gets adversarially processed before TP order
-        # in case of an ambiguous tie (both hit within a single bar).
-        # Note, sl/tp orders are inserted at the front of the list, thus order reversed.
         if tp:
             trade.tp = tp
         if sl:
