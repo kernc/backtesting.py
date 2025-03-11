@@ -368,10 +368,8 @@ class Position:
     @property
     def pl_pct(self) -> float:
         """Profit (positive) or loss (negative) of the current position in percent."""
-        weights = np.abs([trade.size for trade in self.__broker.trades])
-        weights = weights / weights.sum()
-        pl_pcts = np.array([trade.pl_pct for trade in self.__broker.trades])
-        return (pl_pcts * weights).sum()
+        total_invested = sum(trade.entry_price * abs(trade.size) for trade in self.__broker.trades)
+        return (self.pl / total_invested) * 100 if total_invested else 0
 
     @property
     def is_long(self) -> bool:
