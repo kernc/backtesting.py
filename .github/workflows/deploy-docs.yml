@@ -7,6 +7,8 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
+    env:
+      TQDM_MININTERVAL: 10
 
     steps:
       - uses: actions/setup-python@v5
