@@ -24,7 +24,7 @@ from typing import Callable, Generator, Optional, Sequence, Union
 import numpy as np
 import pandas as pd
 
-from ._plotting import plot_heatmaps as _plot_heatmaps
+from ._plotting import plot_heatmaps as _plot_heatmaps, plot
 from ._stats import compute_stats as _compute_stats
 from ._util import SharedMemoryManager, _Array, _as_str, _batch, _tqdm
 from .backtesting import Backtest, Strategy
@@ -537,8 +537,60 @@ class FractionalBacktest(Backtest):
         data = data.copy()
         data[['Open', 'High', 'Low', 'Close']] *= fractional_unit
         data['Volume'] /= fractional_unit
+        self._fractional_unit = fractional_unit
         super().__init__(data, *args, **kwargs)
 
+    def run(self, **kwargs) -> pd.Series:
+        result = super().run(**kwargs)
+
+        trades: pd.DataFrame = result['_trades']
+        trades['Size'] *= self._fractional_unit
+        trades[['EntryPrice', 'ExitPrice', 'TP', 'SL']] /= self._fractional_unit
+
+        indicators = result['_strategy']._indicators
+        for indicator in indicators:
+            is_overlay = indicator._opts['overlay']
+            if np.all(is_overlay):
+                indicator /= self._fractional_unit
+
+        return result
+
+    def plot(self, *, results: pd.Series = None, filename=None, plot_width=None,
+             plot_equity=True, plot_return=False, plot_pl=True,
+             plot_volume=True, plot_drawdown=False, plot_trades=True,
+             smooth_equity=False, relative_equity=True,
+             superimpose: Union[bool, str] = True,
+             resample=True, reverse_indicators=False,
+             show_legend=True, open_browser=True):
+
+        data = self._data.copy()
+        data[['Open', 'High', 'Low', 'Close']] /= self._fractional_unit
+        data['Volume'] *= self._fractional_unit
+
+        if results is None:
+            if self._results is None:
+                raise RuntimeError('First issue `backtest.run()` to obtain results.')
+            results = self._results
+
+        return plot(
+            results=results,
+            df=data,
+            indicators=results._strategy._indicators,
+            filename=filename,
+            plot_width=plot_width,
+            plot_equity=plot_equity,
+            plot_return=plot_return,
+            plot_pl=plot_pl,
+            plot_volume=plot_volume,
+            plot_drawdown=plot_drawdown,
+            plot_trades=plot_trades,
+            smooth_equity=smooth_equity,
+            relative_equity=relative_equity,
+            superimpose=superimpose,
+            resample=resample,
+            reverse_indicators=reverse_indicators,
+            show_legend=show_legend,
+            open_browser=open_browser)
 
 # Prevent pdoc3 documenting __init__ signature of Strategy subclasses
 for cls in list(globals().values()):
