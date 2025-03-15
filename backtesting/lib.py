@@ -592,6 +592,7 @@ class FractionalBacktest(Backtest):
             show_legend=show_legend,
             open_browser=open_browser)
 
+
 # Prevent pdoc3 documenting __init__ signature of Strategy subclasses
 for cls in list(globals().values()):
     if isinstance(cls, type) and issubclass(cls, Strategy):
