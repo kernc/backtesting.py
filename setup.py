@@ -44,6 +44,7 @@ if __name__ == '__main__':
                 'jupyter_client',  # for nbconvert
             ],
             'test': [
+                'pytest',
                 'matplotlib',
                 'scikit-learn',
                 'sambo',
