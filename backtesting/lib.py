@@ -549,8 +549,7 @@ class FractionalBacktest(Backtest):
 
         indicators = result['_strategy']._indicators
         for indicator in indicators:
-            is_overlay = indicator._opts['overlay']
-            if np.all(is_overlay):
+            if indicator._opts['overlay']:
                 indicator /= self._fractional_unit
 
         return result
