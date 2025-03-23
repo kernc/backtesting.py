@@ -24,7 +24,7 @@ from typing import Callable, Generator, Optional, Sequence, Union
 import numpy as np
 import pandas as pd
 
-from ._plotting import plot_heatmaps as _plot_heatmaps, plot
+from ._plotting import plot_heatmaps as _plot_heatmaps
 from ._stats import compute_stats as _compute_stats
 from ._util import SharedMemoryManager, _Array, _as_str, _batch, _tqdm
 from .backtesting import Backtest, Strategy
@@ -554,42 +554,11 @@ class FractionalBacktest(Backtest):
 
         return result
 
-    def plot(self, *, results: pd.Series = None, filename=None, plot_width=None,
-             plot_equity=True, plot_return=False, plot_pl=True,
-             plot_volume=True, plot_drawdown=False, plot_trades=True,
-             smooth_equity=False, relative_equity=True,
-             superimpose: Union[bool, str] = True,
-             resample=True, reverse_indicators=False,
-             show_legend=True, open_browser=True):
-
-        data = self._data.copy()
-        data[['Open', 'High', 'Low', 'Close']] /= self._fractional_unit
-        data['Volume'] *= self._fractional_unit
-
-        if results is None:
-            if self._results is None:
-                raise RuntimeError('First issue `backtest.run()` to obtain results.')
-            results = self._results
-
-        return plot(
-            results=results,
-            df=data,
-            indicators=results._strategy._indicators,
-            filename=filename,
-            plot_width=plot_width,
-            plot_equity=plot_equity,
-            plot_return=plot_return,
-            plot_pl=plot_pl,
-            plot_volume=plot_volume,
-            plot_drawdown=plot_drawdown,
-            plot_trades=plot_trades,
-            smooth_equity=smooth_equity,
-            relative_equity=relative_equity,
-            superimpose=superimpose,
-            resample=resample,
-            reverse_indicators=reverse_indicators,
-            show_legend=show_legend,
-            open_browser=open_browser)
+    def _get_plot_data(self) -> pd.DataFrame:
+        plot_data = self._data.copy()
+        plot_data[['Open', 'High', 'Low', 'Close']] /= self._fractional_unit
+        plot_data['Volume'] *= self._fractional_unit
+        return plot_data
 
 
 # Prevent pdoc3 documenting __init__ signature of Strategy subclasses
