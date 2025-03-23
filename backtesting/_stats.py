@@ -154,11 +154,15 @@ def compute_stats(
     s.loc['Calmar Ratio'] = annualized_return / (-max_dd or np.nan)
     equity_log_returns = np.log(equity[1:] / equity[:-1])
     market_log_returns = np.log(c[1:] / c[:-1])
-    cov_matrix = np.cov(equity_log_returns, market_log_returns)
-    beta = cov_matrix[0, 1] / cov_matrix[1, 1]
-    # Jensen CAPM Alpha: can be strongly positive when beta is negative and B&H Return is large
-    s.loc['Alpha [%]'] = s.loc['Return [%]'] - risk_free_rate * 100 - beta * (s.loc['Buy & Hold Return [%]'] - risk_free_rate * 100)  # noqa: E501
-    s.loc['Beta'] = beta
+    if len(equity_log_returns) > 1 and len(market_log_returns) > 1:
+        cov_matrix = np.cov(equity_log_returns, market_log_returns)
+        beta = cov_matrix[0, 1] / cov_matrix[1, 1]
+        # Jensen CAPM Alpha: can be strongly positive when beta is negative and B&H Return is large
+        s.loc['Alpha [%]'] = s.loc['Return [%]'] - risk_free_rate * 100 - beta * (s.loc['Buy & Hold Return [%]'] - risk_free_rate * 100)  # noqa: E501
+        s.loc['Beta'] = beta
+    else:
+        s.loc['Alpha [%]'] = np.nan
+        s.loc['Beta'] = np.nan
     s.loc['Max. Drawdown [%]'] = max_dd * 100
     s.loc['Avg. Drawdown [%]'] = -dd_peaks.mean() * 100
     s.loc['Max. Drawdown Duration'] = _round_timedelta(dd_dur.max())
