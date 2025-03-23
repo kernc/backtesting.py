@@ -1119,3 +1119,9 @@ class TestRegressions(TestCase):
         trades = Backtest(SHORT_DATA, S).run()._trades
         self.assertEqual(trades['ExitBar'].iloc[0], 3)
         self.assertEqual(trades['ExitPrice'].iloc[0], 105)
+
+    def test_optimize_datetime_index_with_timezone(self):
+        data: pd.DataFrame = GOOG.iloc[:100]
+        data.index = data.index.tz_localize('Asia/Kolkata')
+        res = Backtest(data, SmaCross).optimize(fast=range(2, 3), slow=range(4, 5))
+        self.assertGreater(res['# Trades'], 0)
