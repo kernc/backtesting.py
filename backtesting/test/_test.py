@@ -647,6 +647,8 @@ class TestPlot(TestCase):
     def test_params(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
         bt.run()
+        fbt = FractionalBacktest(GOOG.iloc[:100], SmaCross, fractional_unit=1/1e6)
+        fbt.run()
         with _tempfile() as f:
             for p in dict(plot_volume=False,  # noqa: C408
                           plot_equity=False,
@@ -662,6 +664,7 @@ class TestPlot(TestCase):
                           show_legend=False).items():
                 with self.subTest(param=p[0]):
                     bt.plot(**dict([p]), filename=f, open_browser=False)
+                    fbt.plot(**dict([p]), filename=f, open_browser=False)
 
     def test_hide_legend(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
@@ -932,6 +935,20 @@ class TestLib(TestCase):
         ubtc_bt = FractionalBacktest(BTCUSD['2015':], SmaCross, fractional_unit=1/1e6, cash=100)
         stats = ubtc_bt.run(fast=2, slow=3)
         self.assertEqual(stats['# Trades'], 41)
+        trades = stats['_trades']
+        self.assertEqual(len(trades), 41)
+        first_trade = trades[['Size', 'EntryPrice', 'ExitPrice', 'EntryBar']].head(1)
+        self.assertEqual(first_trade['Size'][0], -0.422493)  # Fractional value -422493
+        self.assertAlmostEqual(first_trade['EntryPrice'][0], 236.69)  # Fractional value 0.000236689
+        self.assertAlmostEqual(first_trade['ExitPrice'][0], 261.7)  # Fractional value 0.000261699
+        indicators = stats['_strategy']._indicators
+        self.assertEqual(len(indicators), 2)
+        self.assertAlmostEqual(
+            indicators[0][first_trade['EntryBar'][0]], 234.14, places=2
+        )  # Fractional value 0.000234139
+        self.assertAlmostEqual(
+            indicators[1][first_trade['EntryBar'][0]], 237.07, places=2
+        )  # Fractional value 0.000237067
 
     def test_MultiBacktest(self):
         btm = MultiBacktest([GOOG, EURUSD, BTCUSD], SmaCross, cash=100_000)

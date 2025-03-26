@@ -1623,6 +1623,9 @@ class Backtest:
             for shmem in shm:
                 shmem.close()
 
+    def _get_plot_data(self) -> pd.DataFrame:
+        return self._data
+
     def plot(self, *, results: pd.Series = None, filename=None, plot_width=None,
              plot_equity=True, plot_return=False, plot_pl=True,
              plot_volume=True, plot_drawdown=False, plot_trades=True,
@@ -1716,7 +1719,7 @@ class Backtest:
 
         return plot(
             results=results,
-            df=self._data,
+            df=self._get_plot_data(),
             indicators=results._strategy._indicators,
             filename=filename,
             plot_width=plot_width,

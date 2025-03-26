@@ -537,7 +537,28 @@ class FractionalBacktest(Backtest):
         data = data.copy()
         data[['Open', 'High', 'Low', 'Close']] *= fractional_unit
         data['Volume'] /= fractional_unit
+        self._fractional_unit = fractional_unit
         super().__init__(data, *args, **kwargs)
+
+    def run(self, **kwargs) -> pd.Series:
+        result = super().run(**kwargs)
+
+        trades: pd.DataFrame = result['_trades']
+        trades['Size'] *= self._fractional_unit
+        trades[['EntryPrice', 'ExitPrice', 'TP', 'SL']] /= self._fractional_unit
+
+        indicators = result['_strategy']._indicators
+        for indicator in indicators:
+            if indicator._opts['overlay']:
+                indicator /= self._fractional_unit
+
+        return result
+
+    def _get_plot_data(self) -> pd.DataFrame:
+        plot_data = self._data.copy()
+        plot_data[['Open', 'High', 'Low', 'Close']] /= self._fractional_unit
+        plot_data['Volume'] *= self._fractional_unit
+        return plot_data
 
 
 # Prevent pdoc3 documenting __init__ signature of Strategy subclasses
