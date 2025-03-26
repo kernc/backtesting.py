@@ -154,8 +154,11 @@ def compute_stats(
     s.loc['Calmar Ratio'] = annualized_return / (-max_dd or np.nan)
     equity_log_returns = np.log(equity[1:] / equity[:-1])
     market_log_returns = np.log(c[1:] / c[:-1])
-    cov_matrix = np.cov(equity_log_returns, market_log_returns)
-    beta = cov_matrix[0, 1] / cov_matrix[1, 1]
+    beta = np.nan
+    if len(equity_log_returns) > 1 and len(market_log_returns) > 1:
+        # len == 0 on dummy call `stats_keys = compute_stats(...)` pre optimization
+        cov_matrix = np.cov(equity_log_returns, market_log_returns)
+        beta = cov_matrix[0, 1] / cov_matrix[1, 1]
     # Jensen CAPM Alpha: can be strongly positive when beta is negative and B&H Return is large
     s.loc['Alpha [%]'] = s.loc['Return [%]'] - risk_free_rate * 100 - beta * (s.loc['Buy & Hold Return [%]'] - risk_free_rate * 100)  # noqa: E501
     s.loc['Beta'] = beta
