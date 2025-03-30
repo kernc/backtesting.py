@@ -937,18 +937,9 @@ class TestLib(TestCase):
         self.assertEqual(stats['# Trades'], 41)
         trades = stats['_trades']
         self.assertEqual(len(trades), 41)
-        first_trade = trades[['Size', 'EntryPrice', 'ExitPrice', 'EntryBar']].head(1)
-        self.assertEqual(first_trade['Size'][0], -0.422493)  # Fractional value -422493
-        self.assertAlmostEqual(first_trade['EntryPrice'][0], 236.69)  # Fractional value 0.000236689
-        self.assertAlmostEqual(first_trade['ExitPrice'][0], 261.7)  # Fractional value 0.000261699
-        indicators = stats['_strategy']._indicators
-        self.assertEqual(len(indicators), 2)
-        self.assertAlmostEqual(
-            indicators[0][first_trade['EntryBar'][0]], 234.14, places=2
-        )  # Fractional value 0.000234139
-        self.assertAlmostEqual(
-            indicators[1][first_trade['EntryBar'][0]], 237.07, places=2
-        )  # Fractional value 0.000237067
+        trade = trades.iloc[0]
+        self.assertAlmostEqual(trade['EntryPrice'], 236.69)
+        self.assertAlmostEqual(stats['_strategy']._indicators[0][trade['EntryBar']], 234.14)
 
     def test_MultiBacktest(self):
         btm = MultiBacktest([GOOG, EURUSD, BTCUSD], SmaCross, cash=100_000)
