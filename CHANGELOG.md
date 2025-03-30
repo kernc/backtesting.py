@@ -5,6 +5,17 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
+### 0.6.4
+(2025-03-30)
+
+* Bug fixes:
+  * Fix optimization hanging on MS Windows under some conditions,
+    primarily missing a `if __name__ == '__main__'` guard.
+  * Restore original scale in FractionalBacktest plot (#1247)
+  * Fix "'CAGR [%]' must match a key in pd.Series result of bt.run()" error
+  * Fix grid optimization on data with timezone-aware datetime index
+
+
 ### 0.6.3
 (2025-03-11)
 
