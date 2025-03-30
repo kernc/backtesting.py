@@ -1,4 +1,5 @@
 import inspect
+import multiprocessing as mp
 import os
 import sys
 import time
@@ -934,13 +935,20 @@ class TestLib(TestCase):
         self.assertEqual(stats['# Trades'], 41)
 
     def test_MultiBacktest(self):
-        btm = MultiBacktest([GOOG, EURUSD, BTCUSD], SmaCross, cash=100_000)
-        res = btm.run(fast=2)
-        self.assertIsInstance(res, pd.DataFrame)
-        self.assertEqual(res.columns.tolist(), [0, 1, 2])
-        heatmap = btm.optimize(fast=[2, 4], slow=[10, 20])
-        self.assertIsInstance(heatmap, pd.DataFrame)
-        self.assertEqual(heatmap.columns.tolist(), [0, 1, 2])
+        import backtesting
+        assert callable(getattr(backtesting, 'Pool', None)), backtesting.__dict__
+        for start_method in mp.get_all_start_methods():
+            with self.subTest(start_method=start_method), \
+                    patch(backtesting, 'Pool', mp.get_context(start_method).Pool):
+                start_time = time.monotonic()
+                btm = MultiBacktest([GOOG, EURUSD, BTCUSD], SmaCross, cash=100_000)
+                res = btm.run(fast=2)
+                self.assertIsInstance(res, pd.DataFrame)
+                self.assertEqual(res.columns.tolist(), [0, 1, 2])
+                heatmap = btm.optimize(fast=[2, 4], slow=[10, 20])
+                self.assertIsInstance(heatmap, pd.DataFrame)
+                self.assertEqual(heatmap.columns.tolist(), [0, 1, 2])
+                print(start_method, time.monotonic() - start_time)
         plot_heatmaps(heatmap.mean(axis=1), open_browser=False)
 
 
