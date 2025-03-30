@@ -934,6 +934,11 @@ class TestLib(TestCase):
         ubtc_bt = FractionalBacktest(BTCUSD['2015':], SmaCross, fractional_unit=1 / 1e6, cash=100)
         stats = ubtc_bt.run(fast=2, slow=3)
         self.assertEqual(stats['# Trades'], 41)
+        trades = stats['_trades']
+        self.assertEqual(len(trades), 41)
+        trade = trades.iloc[0]
+        self.assertAlmostEqual(trade['EntryPrice'], 236.69)
+        self.assertAlmostEqual(stats['_strategy']._indicators[0][trade['EntryBar']], 234.14)
 
     def test_MultiBacktest(self):
         import backtesting
