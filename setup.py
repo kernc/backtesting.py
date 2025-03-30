@@ -48,6 +48,7 @@ if __name__ == '__main__':
                 'scikit-learn',
                 'sambo',
                 'tqdm',
+                'ipywidgets',  # for tqdm
             ],
             'dev': [
                 'flake8',
