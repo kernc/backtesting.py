@@ -197,3 +197,15 @@ class _Stats(pd.Series):
             # 'format.na_rep', '--',  # TODO: Enable once it works
         ):
             return super().__repr__()
+
+
+def dummy_stats():
+    from .backtesting import Trade, _Broker
+    index = pd.DatetimeIndex(['2025'])
+    data = pd.DataFrame({col: [np.nan] for col in ('Close',)}, index=index)
+    trade = Trade(_Broker(data=data, cash=10000, spread=.01, commission=.01, margin=.1,
+                          trade_on_close=True, hedging=True, exclusive_orders=False, index=index),
+                  1, 1, 0, None)
+    trade._replace(exit_price=1, exit_bar=0)
+    trade._commissions = np.nan
+    return compute_stats([trade], np.r_[[np.nan]], data, None, 0)

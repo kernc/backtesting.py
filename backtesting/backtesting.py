@@ -24,7 +24,7 @@ import pandas as pd
 from numpy.random import default_rng
 
 from ._plotting import plot  # noqa: I001
-from ._stats import compute_stats
+from ._stats import compute_stats, dummy_stats
 from ._util import (
     SharedMemoryManager, _as_str, _Indicator, _Data, _batch, _indicator_warmup_nbars,
     _strategy_indicators, patch, try_, _tqdm,
@@ -1425,9 +1425,7 @@ class Backtest:
         maximize_key = None
         if isinstance(maximize, str):
             maximize_key = str(maximize)
-            stats_keys = compute_stats(
-                [], np.r_[[np.nan]], pd.DataFrame({col: [np.nan] for col in ('Close',)}), None, 0).index
-            if maximize not in stats_keys:
+            if maximize not in dummy_stats().index:
                 raise ValueError('`maximize`, if str, must match a key in pd.Series '
                                  'result of backtest.run()')
 
