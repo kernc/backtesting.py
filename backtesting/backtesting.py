@@ -8,7 +8,6 @@ module directly, e.g.
 
 from __future__ import annotations
 
-import multiprocessing as mp
 import sys
 import warnings
 from abc import ABCMeta, abstractmethod
@@ -1501,9 +1500,9 @@ class Backtest:
                                     [p.values() for p in param_combos],
                                     names=next(iter(param_combos)).keys()))
 
-            with mp.Pool() as pool, \
+            from . import Pool
+            with Pool() as pool, \
                     SharedMemoryManager() as smm:
-
                 with patch(self, '_data', None):
                     bt = copy(self)  # bt._data will be reassigned in _mp_task worker
                 results = _tqdm(

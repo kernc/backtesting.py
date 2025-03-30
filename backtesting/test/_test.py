@@ -1001,7 +1001,6 @@ class TestUtil(TestCase):
 class TestDocs(TestCase):
     DOCS_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'doc')
 
-    @unittest.skipIf('win' in sys.platform, "Locks up with `ModuleNotFoundError: No module named '<run_path>'`")
     @unittest.skipUnless(os.path.isdir(DOCS_DIR), "docs dir doesn't exist")
     def test_examples(self):
         examples = glob(os.path.join(self.DOCS_DIR, 'examples', '*.py'))
