@@ -13,7 +13,6 @@ Please raise ideas for additions to this collection on the [issue tracker].
 
 from __future__ import annotations
 
-import multiprocessing as mp
 import warnings
 from collections import OrderedDict
 from inspect import currentframe
@@ -569,7 +568,8 @@ class MultiBacktest:
         Wraps `backtesting.backtesting.Backtest.run`. Returns `pd.DataFrame` with
         currency indexes in columns.
         """
-        with mp.Pool() as pool, \
+        from . import Pool
+        with Pool() as pool, \
                 SharedMemoryManager() as smm:
             shm = [smm.df2shm(df) for df in self._dfs]
             results = _tqdm(
