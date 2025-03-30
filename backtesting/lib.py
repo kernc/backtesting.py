@@ -577,7 +577,8 @@ class MultiBacktest:
                           ((df_batch, self._strategy, self._bt_kwargs, kwargs)
                            for df_batch in _batch(shm))),
                 total=len(shm),
-                desc=self.__class__.__name__,
+                desc=self.run.__qualname__,
+                mininterval=2
             )
             df = pd.DataFrame(list(chain(*results))).transpose()
         return df
@@ -605,7 +606,7 @@ class MultiBacktest:
         """
         heatmaps = []
         # Simple loop since bt.optimize already does its own multiprocessing
-        for df in _tqdm(self._dfs, desc=self.__class__.__name__):
+        for df in _tqdm(self._dfs, desc=self.__class__.__name__, mininterval=2):
             bt = Backtest(df, self._strategy, **self._bt_kwargs)
             _best_stats, heatmap = bt.optimize(  # type: ignore
                 return_heatmap=True, return_optimization=False, **kwargs)

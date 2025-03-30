@@ -1308,7 +1308,8 @@ class Backtest:
         # np.nan >= 3 is not invalid; it's False.
         with np.errstate(invalid='ignore'):
 
-            for i in _tqdm(range(start, len(self._data)), desc=self.run.__qualname__):
+            for i in _tqdm(range(start, len(self._data)), desc=self.run.__qualname__,
+                           unit='bar', mininterval=2, miniters=100):
                 # Prepare data and indicators for `next` call
                 data._set_length(i + 1)
                 for attr, indicator in indicator_attrs:
@@ -1564,7 +1565,8 @@ class Backtest:
                 stats = self.run(**dict(tup))
                 return -maximize(stats)
 
-            progress = iter(_tqdm(repeat(None), total=max_tries, leave=False, desc='Backtest.optimize'))
+            progress = iter(_tqdm(repeat(None), total=max_tries, leave=False,
+                                  desc=self.optimize.__qualname__, mininterval=2))
             _names = tuple(kwargs.keys())
 
             def objective_function(x):
