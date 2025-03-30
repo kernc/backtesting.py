@@ -128,11 +128,11 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
             "15min": 15,
             "30min": 30,
             "1h": 60,
-            "2h": 60*2,
-            "4h": 60*4,
-            "8h": 60*8,
-            "1D": 60*24,
-            "1W": 60*24*7,
+            "2h": 60 * 2,
+            "4h": 60 * 4,
+            "8h": 60 * 8,
+            "1D": 60 * 24,
+            "1W": 60 * 24 * 7,
             "1ME": np.inf,
         })
         timespan = df.index[-1] - df.index[0]

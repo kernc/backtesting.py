@@ -287,7 +287,7 @@ class TestBacktest(TestCase):
     def test_compute_stats(self):
         stats = Backtest(GOOG, SmaCross, finalize_trades=True).run()
         expected = pd.Series({
-                # NOTE: These values are also used on the website!
+                # NOTE: These values are also used on the website!  # noqa: E126
                 '# Trades': 66,
                 'Avg. Drawdown Duration': pd.Timedelta('41 days 00:00:00'),
                 'Avg. Drawdown [%]': -5.925851581948801,
@@ -929,7 +929,7 @@ class TestLib(TestCase):
         self.assertEqual(stats['# Trades'], 56)
 
     def test_FractionalBacktest(self):
-        ubtc_bt = FractionalBacktest(BTCUSD['2015':], SmaCross, fractional_unit=1/1e6, cash=100)
+        ubtc_bt = FractionalBacktest(BTCUSD['2015':], SmaCross, fractional_unit=1 / 1e6, cash=100)
         stats = ubtc_bt.run(fast=2, slow=3)
         self.assertEqual(stats['# Trades'], 41)
 

@@ -497,7 +497,7 @@ class TrailingStrategy(Strategy):
     def next(self):
         super().next()
         # Can't use index=-1 because self.__atr is not an Indicator type
-        index = len(self.data)-1
+        index = len(self.data) - 1
         for trade in self.trades:
             if trade.is_long:
                 trade.sl = max(trade.sl or -np.inf,
