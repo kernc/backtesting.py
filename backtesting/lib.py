@@ -534,15 +534,17 @@ class FractionalBacktest(Backtest):
                 category=DeprecationWarning, stacklevel=2)
             fractional_unit = 1 / kwargs.pop('satoshi')
         self._fractional_unit = fractional_unit
+        self.__data: pd.DataFrame = data.copy(deep=False)  # Shallow copy
+        for col in ('Open', 'High', 'Low', 'Close',):
+            self.__data[col] = self.__data[col] * self._fractional_unit
+        for col in ('Volume',):
+            self.__data[col] = self.__data[col] / self._fractional_unit
         with warnings.catch_warnings(record=True):
             warnings.filterwarnings(action='ignore', message='frac')
             super().__init__(data, *args, **kwargs)
 
     def run(self, **kwargs) -> pd.Series:
-        data = self._data.copy()
-        data[['Open', 'High', 'Low', 'Close']] *= self._fractional_unit
-        data['Volume'] /= self._fractional_unit
-        with patch(self, '_data', data):
+        with patch(self, '_data', self.__data):
             result = super().run(**kwargs)
 
         trades: pd.DataFrame = result['_trades']
