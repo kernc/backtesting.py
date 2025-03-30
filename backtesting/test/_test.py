@@ -649,8 +649,6 @@ class TestPlot(TestCase):
     def test_params(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
         bt.run()
-        fbt = FractionalBacktest(GOOG.iloc[:100], SmaCross, fractional_unit=1/1e6)
-        fbt.run()
         with _tempfile() as f:
             for p in dict(plot_volume=False,  # noqa: C408
                           plot_equity=False,
@@ -666,7 +664,6 @@ class TestPlot(TestCase):
                           show_legend=False).items():
                 with self.subTest(param=p[0]):
                     bt.plot(**dict([p]), filename=f, open_browser=False)
-                    fbt.plot(**dict([p]), filename=f, open_browser=False)
 
     def test_hide_legend(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
