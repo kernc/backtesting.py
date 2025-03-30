@@ -26,7 +26,7 @@ import pandas as pd
 
 from ._plotting import plot_heatmaps as _plot_heatmaps
 from ._stats import compute_stats as _compute_stats
-from ._util import SharedMemoryManager, _Array, _as_str, _batch, _tqdm
+from ._util import SharedMemoryManager, _Array, _as_str, _batch, _tqdm, patch
 from .backtesting import Backtest, Strategy
 
 __pdoc__ = {}
@@ -534,14 +534,17 @@ class FractionalBacktest(Backtest):
                 'Use `FractionalBacktest(..., fractional_unit=)`.',
                 category=DeprecationWarning, stacklevel=2)
             fractional_unit = 1 / kwargs.pop('satoshi')
-        data = data.copy()
-        data[['Open', 'High', 'Low', 'Close']] *= fractional_unit
-        data['Volume'] /= fractional_unit
         self._fractional_unit = fractional_unit
-        super().__init__(data, *args, **kwargs)
+        with warnings.catch_warnings(record=True):
+            warnings.filterwarnings(action='ignore', message='frac')
+            super().__init__(data, *args, **kwargs)
 
     def run(self, **kwargs) -> pd.Series:
-        result = super().run(**kwargs)
+        data = self._data.copy()
+        data[['Open', 'High', 'Low', 'Close']] *= self._fractional_unit
+        data['Volume'] /= self._fractional_unit
+        with patch(self, '_data', data):
+            result = super().run(**kwargs)
 
         trades: pd.DataFrame = result['_trades']
         trades['Size'] *= self._fractional_unit
@@ -553,12 +556,6 @@ class FractionalBacktest(Backtest):
                 indicator /= self._fractional_unit
 
         return result
-
-    def _get_plot_data(self) -> pd.DataFrame:
-        plot_data = self._data.copy()
-        plot_data[['Open', 'High', 'Low', 'Close']] /= self._fractional_unit
-        plot_data['Volume'] *= self._fractional_unit
-        return plot_data
 
 
 # Prevent pdoc3 documenting __init__ signature of Strategy subclasses
