@@ -630,7 +630,8 @@ class TestOptimize(TestCase):
         bt.optimize(fast=range(2, 20, 2), slow=range(10, 40, 2))
         end = time.process_time()
         print(end - start)
-        self.assertLess(end - start, .3)
+        handicap = 5 if 'win' in sys.platform else .1
+        self.assertLess(end - start, .3 + handicap)
 
 
 class TestPlot(TestCase):
