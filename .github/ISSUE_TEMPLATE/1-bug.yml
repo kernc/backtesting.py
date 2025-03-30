@@ -1,6 +1,5 @@
 name: Bug report
 description: File a new bug report. Please use the search
-title: "Short title loaded with keywords"
 body:
   - type: markdown
     attributes:
@@ -80,7 +79,13 @@ body:
       description: >
         Versions of the relevant software / packages.
       value: |
-        <!-- From `backtesting.__version__`. If git, use commit hash -->
-        - Backtesting version: 0.?.?
+        <!--
+            # Please paste the output of:
+            for pkg in ('backtesting', 'pandas', 'numpy', 'bokeh'):
+                print('-', pkg, getattr(__import__(pkg), '__version__', 'git'))
+        -->
+        - `backtesting.__version__`:
+        - `pandas.__version__`:
+        - `numpy.__version__`:
         - `bokeh.__version__`:
         - OS:

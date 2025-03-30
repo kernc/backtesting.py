@@ -8,7 +8,6 @@ module directly, e.g.
 
 from __future__ import annotations
 
-import multiprocessing as mp
 import sys
 import warnings
 from abc import ABCMeta, abstractmethod
@@ -24,7 +23,7 @@ import pandas as pd
 from numpy.random import default_rng
 
 from ._plotting import plot  # noqa: I001
-from ._stats import compute_stats
+from ._stats import compute_stats, dummy_stats
 from ._util import (
     SharedMemoryManager, _as_str, _Indicator, _Data, _batch, _indicator_warmup_nbars,
     _strategy_indicators, patch, try_, _tqdm,
@@ -211,7 +210,7 @@ class Strategy(metaclass=ABCMeta):
         """
 
     class __FULL_EQUITY(float):  # noqa: N801
-        def __repr__(self): return '.9999'
+        def __repr__(self): return '.9999'  # noqa: E704
     _FULL_EQUITY = __FULL_EQUITY(1 - sys.float_info.epsilon)
 
     def buy(self, *,
@@ -449,7 +448,7 @@ class Order:
                                                  ('tp', self.__tp_price),
                                                  ('contingent', self.is_contingent),
                                                  ('tag', self.__tag),
-                                             ) if value is not None))
+                                             ) if value is not None))  # noqa: E126
 
     def cancel(self):
         """Cancel the order."""
@@ -578,7 +577,7 @@ class Trade:
     def __repr__(self):
         return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
                f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}' \
-               f'{" tag="+str(self.__tag) if self.__tag is not None else ""}>'
+               f'{" tag=" + str(self.__tag) if self.__tag is not None else ""}>'
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
@@ -1309,7 +1308,8 @@ class Backtest:
         # np.nan >= 3 is not invalid; it's False.
         with np.errstate(invalid='ignore'):
 
-            for i in _tqdm(range(start, len(self._data)), desc=self.run.__qualname__):
+            for i in _tqdm(range(start, len(self._data)), desc=self.run.__qualname__,
+                           unit='bar', mininterval=2, miniters=100):
                 # Prepare data and indicators for `next` call
                 data._set_length(i + 1)
                 for attr, indicator in indicator_attrs:
@@ -1425,9 +1425,7 @@ class Backtest:
         maximize_key = None
         if isinstance(maximize, str):
             maximize_key = str(maximize)
-            stats_keys = compute_stats(
-                [], np.r_[[np.nan]], pd.DataFrame({col: [np.nan] for col in ('Close',)}), None, 0).index
-            if maximize not in stats_keys:
+            if maximize not in dummy_stats().index:
                 raise ValueError('`maximize`, if str, must match a key in pd.Series '
                                  'result of backtest.run()')
 
@@ -1503,9 +1501,9 @@ class Backtest:
                                     [p.values() for p in param_combos],
                                     names=next(iter(param_combos)).keys()))
 
-            with mp.Pool() as pool, \
+            from . import Pool
+            with Pool() as pool, \
                     SharedMemoryManager() as smm:
-
                 with patch(self, '_data', None):
                     bt = copy(self)  # bt._data will be reassigned in _mp_task worker
                 results = _tqdm(
@@ -1567,7 +1565,8 @@ class Backtest:
                 stats = self.run(**dict(tup))
                 return -maximize(stats)
 
-            progress = iter(_tqdm(repeat(None), total=max_tries, leave=False, desc='Backtest.optimize'))
+            progress = iter(_tqdm(repeat(None), total=max_tries, leave=False,
+                                  desc=self.optimize.__qualname__, mininterval=2))
             _names = tuple(kwargs.keys())
 
             def objective_function(x):

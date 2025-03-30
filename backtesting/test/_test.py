@@ -1,4 +1,5 @@
 import inspect
+import multiprocessing as mp
 import os
 import sys
 import time
@@ -287,7 +288,7 @@ class TestBacktest(TestCase):
     def test_compute_stats(self):
         stats = Backtest(GOOG, SmaCross, finalize_trades=True).run()
         expected = pd.Series({
-                # NOTE: These values are also used on the website!
+                # NOTE: These values are also used on the website!  # noqa: E126
                 '# Trades': 66,
                 'Avg. Drawdown Duration': pd.Timedelta('41 days 00:00:00'),
                 'Avg. Drawdown [%]': -5.925851581948801,
@@ -629,7 +630,8 @@ class TestOptimize(TestCase):
         bt.optimize(fast=range(2, 20, 2), slow=range(10, 40, 2))
         end = time.process_time()
         print(end - start)
-        self.assertLess(end - start, .3)
+        handicap = 5 if 'win' in sys.platform else .1
+        self.assertLess(end - start, .3 + handicap)
 
 
 class TestPlot(TestCase):
@@ -932,7 +934,7 @@ class TestLib(TestCase):
         self.assertEqual(stats['# Trades'], 56)
 
     def test_FractionalBacktest(self):
-        ubtc_bt = FractionalBacktest(BTCUSD['2015':], SmaCross, fractional_unit=1/1e6, cash=100)
+        ubtc_bt = FractionalBacktest(BTCUSD['2015':], SmaCross, fractional_unit=1 / 1e6, cash=100)
         stats = ubtc_bt.run(fast=2, slow=3)
         self.assertEqual(stats['# Trades'], 41)
         trades = stats['_trades']
@@ -942,13 +944,20 @@ class TestLib(TestCase):
         self.assertAlmostEqual(stats['_strategy']._indicators[0][trade['EntryBar']], 234.14)
 
     def test_MultiBacktest(self):
-        btm = MultiBacktest([GOOG, EURUSD, BTCUSD], SmaCross, cash=100_000)
-        res = btm.run(fast=2)
-        self.assertIsInstance(res, pd.DataFrame)
-        self.assertEqual(res.columns.tolist(), [0, 1, 2])
-        heatmap = btm.optimize(fast=[2, 4], slow=[10, 20])
-        self.assertIsInstance(heatmap, pd.DataFrame)
-        self.assertEqual(heatmap.columns.tolist(), [0, 1, 2])
+        import backtesting
+        assert callable(getattr(backtesting, 'Pool', None)), backtesting.__dict__
+        for start_method in mp.get_all_start_methods():
+            with self.subTest(start_method=start_method), \
+                    patch(backtesting, 'Pool', mp.get_context(start_method).Pool):
+                start_time = time.monotonic()
+                btm = MultiBacktest([GOOG, EURUSD, BTCUSD], SmaCross, cash=100_000)
+                res = btm.run(fast=2)
+                self.assertIsInstance(res, pd.DataFrame)
+                self.assertEqual(res.columns.tolist(), [0, 1, 2])
+                heatmap = btm.optimize(fast=[2, 4], slow=[10, 20])
+                self.assertIsInstance(heatmap, pd.DataFrame)
+                self.assertEqual(heatmap.columns.tolist(), [0, 1, 2])
+                print(start_method, time.monotonic() - start_time)
         plot_heatmaps(heatmap.mean(axis=1), open_browser=False)
 
 
@@ -1009,7 +1018,6 @@ class TestUtil(TestCase):
 class TestDocs(TestCase):
     DOCS_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'doc')
 
-    @unittest.skipIf('win' in sys.platform, "Locks up with `ModuleNotFoundError: No module named '<run_path>'`")
     @unittest.skipUnless(os.path.isdir(DOCS_DIR), "docs dir doesn't exist")
     def test_examples(self):
         examples = glob(os.path.join(self.DOCS_DIR, 'examples', '*.py'))
@@ -1127,3 +1135,9 @@ class TestRegressions(TestCase):
         trades = Backtest(SHORT_DATA, S).run()._trades
         self.assertEqual(trades['ExitBar'].iloc[0], 3)
         self.assertEqual(trades['ExitPrice'].iloc[0], 105)
+
+    def test_optimize_datetime_index_with_timezone(self):
+        data: pd.DataFrame = GOOG.iloc[:100]
+        data.index = data.index.tz_localize('Asia/Kolkata')
+        res = Backtest(data, SmaCross).optimize(fast=range(2, 3), slow=range(4, 5))
+        self.assertGreater(res['# Trades'], 0)

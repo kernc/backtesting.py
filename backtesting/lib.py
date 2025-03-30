@@ -13,7 +13,6 @@ Please raise ideas for additions to this collection on the [issue tracker].
 
 from __future__ import annotations
 
-import multiprocessing as mp
 import warnings
 from collections import OrderedDict
 from inspect import currentframe
@@ -497,7 +496,7 @@ class TrailingStrategy(Strategy):
     def next(self):
         super().next()
         # Can't use index=-1 because self.__atr is not an Indicator type
-        index = len(self.data)-1
+        index = len(self.data) - 1
         for trade in self.trades:
             if trade.is_long:
                 trade.sl = max(trade.sl or -np.inf,
@@ -587,7 +586,8 @@ class MultiBacktest:
         Wraps `backtesting.backtesting.Backtest.run`. Returns `pd.DataFrame` with
         currency indexes in columns.
         """
-        with mp.Pool() as pool, \
+        from . import Pool
+        with Pool() as pool, \
                 SharedMemoryManager() as smm:
             shm = [smm.df2shm(df) for df in self._dfs]
             results = _tqdm(
@@ -595,7 +595,8 @@ class MultiBacktest:
                           ((df_batch, self._strategy, self._bt_kwargs, kwargs)
                            for df_batch in _batch(shm))),
                 total=len(shm),
-                desc=self.__class__.__name__,
+                desc=self.run.__qualname__,
+                mininterval=2
             )
             df = pd.DataFrame(list(chain(*results))).transpose()
         return df
@@ -623,7 +624,7 @@ class MultiBacktest:
         """
         heatmaps = []
         # Simple loop since bt.optimize already does its own multiprocessing
-        for df in _tqdm(self._dfs, desc=self.__class__.__name__):
+        for df in _tqdm(self._dfs, desc=self.__class__.__name__, mininterval=2):
             bt = Backtest(df, self._strategy, **self._bt_kwargs)
             _best_stats, heatmap = bt.optimize(  # type: ignore
                 return_heatmap=True, return_optimization=False, **kwargs)

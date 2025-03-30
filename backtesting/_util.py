@@ -305,8 +305,11 @@ class SharedMemoryManager:
         """Array to shared memory. Returns (shm_name, shape, dtype) used for restore."""
         assert vals.ndim == 1, (vals.ndim, vals.shape, vals)
         shm = self.SharedMemory(size=vals.nbytes, create=True)
-        buf = np.ndarray(vals.shape, dtype=vals.dtype, buffer=shm.buf)
-        buf[:] = vals[:]  # Copy into shared memory
+        # np.array can't handle pandas' tz-aware datetimes
+        # https://github.com/numpy/numpy/issues/18279
+        buf = np.ndarray(vals.shape, dtype=vals.dtype.base, buffer=shm.buf)
+        has_tz = getattr(vals.dtype, 'tz', None)
+        buf[:] = vals.tz_localize(None) if has_tz else vals  # Copy into shared memory
         return shm.name, vals.shape, vals.dtype
 
     def df2shm(self, df):
@@ -316,10 +319,10 @@ class SharedMemoryManager:
         ))
 
     @staticmethod
-    def shm2arr(shm, shape, dtype):
-        arr = np.ndarray(shape, dtype=dtype, buffer=shm.buf)
+    def shm2s(shm, shape, dtype) -> pd.Series:
+        arr = np.ndarray(shape, dtype=dtype.base, buffer=shm.buf)
         arr.setflags(write=False)
-        return arr
+        return pd.Series(arr, dtype=dtype)
 
     _DF_INDEX_COL = '__bt_index'
 
@@ -327,7 +330,7 @@ class SharedMemoryManager:
     def shm2df(data_shm):
         shm = [SharedMemory(name=name, create=False, track=False) for _, name, _, _ in data_shm]
         df = pd.DataFrame({
-            col: SharedMemoryManager.shm2arr(shm, shape, dtype)
+            col: SharedMemoryManager.shm2s(shm, shape, dtype)
             for shm, (col, _, shape, dtype) in zip(shm, data_shm)})
         df.set_index(SharedMemoryManager._DF_INDEX_COL, drop=True, inplace=True)
         df.index.name = None

@@ -137,12 +137,12 @@ def compute_stats(
     # our risk doesn't; they use the simpler approach below.
     annualized_return = (1 + gmean_day_return)**annual_trading_days - 1
     s.loc['Return (Ann.) [%]'] = annualized_return * 100
-    s.loc['Volatility (Ann.) [%]'] = np.sqrt((day_returns.var(ddof=int(bool(day_returns.shape))) + (1 + gmean_day_return)**2)**annual_trading_days - (1 + gmean_day_return)**(2*annual_trading_days)) * 100  # noqa: E501
+    s.loc['Volatility (Ann.) [%]'] = np.sqrt((day_returns.var(ddof=int(bool(day_returns.shape))) + (1 + gmean_day_return)**2)**annual_trading_days - (1 + gmean_day_return)**(2 * annual_trading_days)) * 100  # noqa: E501
     # s.loc['Return (Ann.) [%]'] = gmean_day_return * annual_trading_days * 100
     # s.loc['Risk (Ann.) [%]'] = day_returns.std(ddof=1) * np.sqrt(annual_trading_days) * 100
     if is_datetime_index:
         time_in_years = (s.loc['Duration'].days + s.loc['Duration'].seconds / 86400) / annual_trading_days
-        s.loc['CAGR [%]'] = ((s.loc['Equity Final [$]'] / equity[0])**(1/time_in_years) - 1) * 100 if time_in_years else np.nan  # noqa: E501
+        s.loc['CAGR [%]'] = ((s.loc['Equity Final [$]'] / equity[0])**(1 / time_in_years) - 1) * 100 if time_in_years else np.nan  # noqa: E501
 
     # Our Sharpe mismatches `empyrical.sharpe_ratio()` because they use arithmetic mean return
     # and simple standard deviation
@@ -154,8 +154,11 @@ def compute_stats(
     s.loc['Calmar Ratio'] = annualized_return / (-max_dd or np.nan)
     equity_log_returns = np.log(equity[1:] / equity[:-1])
     market_log_returns = np.log(c[1:] / c[:-1])
-    cov_matrix = np.cov(equity_log_returns, market_log_returns)
-    beta = cov_matrix[0, 1] / cov_matrix[1, 1]
+    beta = np.nan
+    if len(equity_log_returns) > 1 and len(market_log_returns) > 1:
+        # len == 0 on dummy call `stats_keys = compute_stats(...)` pre optimization
+        cov_matrix = np.cov(equity_log_returns, market_log_returns)
+        beta = cov_matrix[0, 1] / cov_matrix[1, 1]
     # Jensen CAPM Alpha: can be strongly positive when beta is negative and B&H Return is large
     s.loc['Alpha [%]'] = s.loc['Return [%]'] - risk_free_rate * 100 - beta * (s.loc['Buy & Hold Return [%]'] - risk_free_rate * 100)  # noqa: E501
     s.loc['Beta'] = beta
@@ -194,3 +197,15 @@ class _Stats(pd.Series):
             # 'format.na_rep', '--',  # TODO: Enable once it works
         ):
             return super().__repr__()
+
+
+def dummy_stats():
+    from .backtesting import Trade, _Broker
+    index = pd.DatetimeIndex(['2025'])
+    data = pd.DataFrame({col: [np.nan] for col in ('Close',)}, index=index)
+    trade = Trade(_Broker(data=data, cash=10000, spread=.01, commission=.01, margin=.1,
+                          trade_on_close=True, hedging=True, exclusive_orders=False, index=index),
+                  1, 1, 0, None)
+    trade._replace(exit_price=1, exit_bar=0)
+    trade._commissions = np.nan
+    return compute_stats([trade], np.r_[[np.nan]], data, None, 0)

@@ -1,6 +1,5 @@
 name: Enhancement proposal
 description: Describe the enhancement you'd like to see
-title: "Short title loaded with keywords"
 body:
   - type: markdown
     attributes:

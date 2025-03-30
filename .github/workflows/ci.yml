@@ -4,6 +4,8 @@ on:
   pull_request: { branches: [master] }
   schedule: [ cron: '2 2 * * 6' ]  # Every Saturday, 02:02
 
+env:
+  TQDM_MININTERVAL: 10
 jobs:
   lint:
     runs-on: ubuntu-latest
