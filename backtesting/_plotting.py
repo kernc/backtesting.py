@@ -440,8 +440,10 @@ return this.labels[index] || "";
         fig.multi_line(xs='lines',
                        ys=transform('returns', CustomJSTransform(v_func='return [...xs].map(i => [0, i]);')),
                        source=trade_source, color='#999', line_width=1)
-        r1 = fig.scatter('index', 'returns', source=trade_source, fill_color=cmap,
-                         marker='circle', line_color='black', size='marker_size')
+        trade_source.add(np.take(['inverted_triangle', 'triangle'], trades['Size'] > 0), 'triangles')
+        r1 = fig.scatter(
+            'index', 'returns', source=trade_source, fill_color=cmap,
+            marker='triangles', line_color='black', size='marker_size')
         tooltips = [("Size", "@size{0,0}")]
         if 'count' in trades:
             tooltips.append(("Count", "@count{0,0}"))
