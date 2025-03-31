@@ -549,14 +549,19 @@ return this.labels[index] || "";
 
         for i, value in enumerate(indicators):
             value = np.atleast_2d(value)
+            if _too_many_dims(value):
+                continue
 
             # Use .get()! A user might have assigned a Strategy.data-evolved
             # _Array without Strategy.I()
-            if not value._opts.get('plot') or _too_many_dims(value):
+            is_overlay = value._opts.get('overlay')
+            is_scatter = value._opts.get('scatter')
+            is_muted = not value._opts.get('plot')
+
+            # is overlay => show muted, hide legend item. non-overlay => don't show at all
+            if is_muted and not is_overlay:
                 continue
 
-            is_overlay = value._opts['overlay']
-            is_scatter = value._opts['scatter']
             if is_overlay:
                 fig = fig_ohlc
             else:
@@ -581,30 +586,31 @@ return this.labels[index] || "";
                     arr = arr.astype(int)
                 source.add(arr, source_name)
                 tooltips.append(f'@{{{source_name}}}{{0,0.0[0000]}}')
+                kwargs = {}
+                if not is_muted:
+                    kwargs['legend_label'] = legend_labels[j]
                 if is_overlay:
                     ohlc_extreme_values[source_name] = arr
                     if is_scatter:
-                        fig.circle(
+                        r2 = fig.circle(
                             'index', source_name, source=source,
-                            legend_label=legend_labels[j], color=color,
-                            line_color='black', fill_alpha=.8,
-                            radius=BAR_WIDTH / 2 * .9)
+                            color=color, line_color='black', fill_alpha=.8,
+                            radius=BAR_WIDTH / 2 * .9, **kwargs)
                     else:
-                        fig.line(
+                        r2 = fig.line(
                             'index', source_name, source=source,
-                            legend_label=legend_labels[j], line_color=color,
-                            line_width=1.3)
+                            line_color=color, line_width=1.4 if is_muted else 1.5, **kwargs)
+                    # r != r2
+                    r2.muted = is_muted
                 else:
                     if is_scatter:
                         r = fig.circle(
                             'index', source_name, source=source,
-                            legend_label=legend_labels[j], color=color,
-                            radius=BAR_WIDTH / 2 * .6)
+                            color=color, radius=BAR_WIDTH / 2 * .6, **kwargs)
                     else:
                         r = fig.line(
                             'index', source_name, source=source,
-                            legend_label=legend_labels[j], line_color=color,
-                            line_width=1.3)
+                            line_color=color, line_width=1.3, **kwargs)
                     # Add dashed centerline just because
                     mean = try_(lambda: float(pd.Series(arr).mean()), default=np.nan)
                     if not np.isnan(mean) and (abs(mean) < .1 or
