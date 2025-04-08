@@ -32,6 +32,7 @@ from backtesting.lib import (
     resample_apply,
 )
 from backtesting.test import BTCUSD, EURUSD, GOOG, SMA
+import itertools
 
 SHORT_DATA = GOOG.iloc[:20]  # Short data for fast tests with no indicator lag
 
@@ -1138,3 +1139,82 @@ class TestRegressions(TestCase):
         data.index = data.index.tz_localize('Asia/Kolkata')
         res = Backtest(data, SmaCross).optimize(fast=range(2, 3), slow=range(4, 5))
         self.assertGreater(res['# Trades'], 0)
+
+
+class TestPlotting(unittest.TestCase):
+    def setUp(self):
+        self.data = GOOG.copy()
+
+    def test_marker_shapes_and_sizes(self):
+        class MarkerStrategy(Strategy):
+            shapes = []
+            invalid_checks = []
+            default_checks = []
+
+            def init(self):
+                # Test all marker shapes with different sizes
+                markers = ['circle', 'square', 'triangle', 'diamond', 'cross', 'x', 'star']
+                sizes = [6, 12, 18]  # Test different sizes
+
+                for i, (marker, size) in enumerate(itertools.product(markers, sizes)):
+                    # Copy data.Close and add a value to it so the shapes don't overlap
+                    close = self.data.Close.copy()
+                    close += i * 10 + size * 2
+                    # Clear values except when i*7 divides into it
+                    close[close % (i*3) != 0] = np.nan
+                    
+                    ind = self.I(lambda x: x, close,
+                               name=f'{marker}_{size}',
+                               scatter=True,
+                               marker=marker,
+                               marker_size=size,
+                               overlay=i % 2 == 0)  # Alternate between overlay and separate
+                    self.shapes.append(ind)
+
+                # Test invalid marker fallback
+                invalid_close = self.data.Close.copy()
+                invalid_close[invalid_close % 10 != 0] = np.nan
+                self.invalid = self.I(lambda x: x, invalid_close,
+                                    scatter=True,
+                                    marker='invalid_shape',
+                                    marker_size=10)
+                self.invalid_checks.append(self.invalid)
+
+                # Test default size
+                default_close = self.data.Close.copy()
+                default_close[default_close % 15 != 0] = np.nan
+                self.default_size = self.I(lambda x: x, default_close,
+                                         scatter=True,
+                                         marker='circle')
+                self.default_checks.append(self.default_size)
+
+            def next(self):
+                pass
+
+            def get_default_size(self):
+                return self.default_size
+
+        bt = Backtest(self.data, MarkerStrategy)
+        stats = bt.run()
+        fig = bt.plot()
+
+        # Verify all indicators were created
+        strategy = bt._strategy
+        self.assertEqual(len(strategy.shapes), 7 * 3)
+
+        # Verify each indicator has correct options
+        markers = ['circle', 'square', 'triangle', 'diamond', 'cross', 'x', 'star']
+        sizes = [6, 12, 18]
+
+        for ind, (marker, size) in zip(strategy.shapes, itertools.product(markers, sizes)):
+            self.assertTrue(ind._opts['scatter'])
+            self.assertEqual(ind._opts['marker'], marker)
+            self.assertEqual(ind._opts['marker_size'], size)
+
+        # Verify invalid marker falls back to circle
+        self.assertEqual(strategy.invalid_checks[0]._opts['marker'], 'circle')
+        self.assertEqual(strategy.invalid_checks[0]._opts['marker_size'], 10)
+
+        # Verify default size is None (will be set relative to bar width)
+        self.assertEqual(strategy.default_checks[0]._opts['marker'], 'circle')
+        self.assertIsNone(strategy.default_checks[0]._opts['marker_size'])

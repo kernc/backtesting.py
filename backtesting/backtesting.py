@@ -74,6 +74,7 @@ class Strategy(metaclass=ABCMeta):
     def I(self,  # noqa: E743
           func: Callable, *args,
           name=None, plot=True, overlay=None, color=None, scatter=False,
+          marker='circle', marker_size=None,
           **kwargs) -> np.ndarray:
         """
         Declare an indicator. An indicator is just an array of values
@@ -105,6 +106,13 @@ class Strategy(metaclass=ABCMeta):
 
         If `scatter` is `True`, the plotted indicator marker will be a
         circle instead of a connected line segment (default).
+
+        `marker` sets the marker shape for scatter plots. Available options:
+        'circle', 'square', 'triangle', 'diamond', 'cross', 'x', 'star'.
+        Default is 'circle'.
+
+        `marker_size` sets the size of scatter plot markers. If None,
+        defaults to a size relative to the bar width.
 
         Additional `*args` and `**kwargs` are passed to `func` and can
         be used for parameters.
@@ -173,6 +181,7 @@ class Strategy(metaclass=ABCMeta):
 
         value = _Indicator(value, name=name, plot=plot, overlay=overlay,
                            color=color, scatter=scatter,
+                           marker=marker, marker_size=marker_size,
                            # _Indicator.s Series accessor uses this:
                            index=self.data.index)
         self._indicators.append(value)

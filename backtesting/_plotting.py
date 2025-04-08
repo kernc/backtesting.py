@@ -522,6 +522,16 @@ return this.labels[index] || "";
                             legend_label=f'Trades ({len(trades)})',
                             line_width=8, line_alpha=1, line_dash='dotted')
 
+    MARKER_FUNCTIONS = {
+        'circle': lambda fig, **kwargs: fig.scatter(marker='circle', **kwargs),
+        'square': lambda fig, **kwargs: fig.scatter(marker='square', **kwargs),
+        'triangle': lambda fig, **kwargs: fig.scatter(marker='triangle', **kwargs),
+        'diamond': lambda fig, **kwargs: fig.scatter(marker='diamond', **kwargs),
+        'cross': lambda fig, **kwargs: fig.scatter(marker='cross', **kwargs),
+        'x': lambda fig, **kwargs: fig.scatter(marker='x', **kwargs),
+        'star': lambda fig, **kwargs: fig.scatter(marker='star', **kwargs),
+    }
+
     def _plot_indicators():
         """Strategy indicators"""
 
@@ -563,7 +573,19 @@ return this.labels[index] || "";
             tooltips = []
             colors = value._opts['color']
             colors = colors and cycle(_as_list(colors)) or (
-                cycle([next(ohlc_colors)]) if is_overlay else colorgen())
+                cycle([next(ohlc_colors)]) if is_overlay else colorgen()
+            )
+
+            marker = value._opts.get('marker', 'circle')
+            if marker not in MARKER_FUNCTIONS:
+                warnings.warn(f"Unknown marker type '{marker}', falling back to 'circle'")
+                marker = 'circle'
+                value._opts['marker'] = marker
+            marker_func = MARKER_FUNCTIONS[marker]
+
+            marker_size = value._opts.get('marker_size')
+            if marker_size is None:
+                marker_size = BAR_WIDTH / 2 * (.9 if is_overlay else .6)
 
             if isinstance(value.name, str):
                 tooltip_label = value.name
@@ -582,11 +604,12 @@ return this.labels[index] || "";
                 if is_overlay:
                     ohlc_extreme_values[source_name] = arr
                     if is_scatter:
-                        fig.circle(
-                            'index', source_name, source=source,
+                        marker_func(
+                            fig,
+                            x='index', y=source_name, source=source,
                             legend_label=legend_labels[j], color=color,
                             line_color='black', fill_alpha=.8,
-                            radius=BAR_WIDTH / 2 * .9)
+                            size=marker_size)
                     else:
                         fig.line(
                             'index', source_name, source=source,
@@ -594,10 +617,11 @@ return this.labels[index] || "";
                             line_width=1.3)
                 else:
                     if is_scatter:
-                        r = fig.circle(
-                            'index', source_name, source=source,
+                        r = marker_func(
+                            fig,
+                            x='index', y=source_name, source=source,
                             legend_label=legend_labels[j], color=color,
-                            radius=BAR_WIDTH / 2 * .6)
+                            size=marker_size)
                     else:
                         r = fig.line(
                             'index', source_name, source=source,
