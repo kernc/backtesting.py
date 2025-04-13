@@ -1218,8 +1218,9 @@ class Backtest:
                              'fill them in with `df.interpolate()` or whatever.')
         if np.any(data['Close'] > cash):
             warnings.warn('Some prices are larger than initial cash value. Note that fractional '
-                          'trading is not supported. If you want to trade Bitcoin, '
-                          'increase initial cash, or trade μBTC or satoshis instead (GH-134).',
+                          'trading is not supported by this class. If you want to trade Bitcoin, '
+                          'increase initial cash, or trade μBTC or satoshis instead (see e.g. class '
+                          '`backtesting.lib.FractionalBacktest`.',
                           stacklevel=2)
         if not data.index.is_monotonic_increasing:
             warnings.warn('Data index is not sorted in ascending order. Sorting.',
