@@ -10,6 +10,7 @@ If after reviewing the docs and examples perchance you find
 [_Backtesting.py_](https://kernc.github.io/backtesting.py) not your cup of tea,
 kindly have a look at some similar alternative Python backtesting frameworks:
 
+- [QTradeX](https://github.com/squidKid-deluxe/QTradeX-Algo-Trading-SDK) - A powerful and flexible Python framework for designing, backtesting, optimizing, and deploying algotrading bots
 -  [AutoTrader](https://github.com/kieran-mackle/AutoTrader) -
   an automated trading framework with an emphasis on cryptocurrency markets
   that includes a [robust backtesting API](https://github.com/kieran-mackle/AutoTrader/blob/main/docs/source/tutorials/backtesting.md)
