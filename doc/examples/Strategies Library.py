@@ -3,15 +3,16 @@
 #   jupytext:
 #     text_representation:
 #       extension: .py
-#       format_name: light
-#       format_version: '1.5'
-#       jupytext_version: 1.5.1
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.17.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
 #     name: python3
 # ---
 
+# %% [markdown]
 # Library of Composable Base Strategies
 # ======================
 #
@@ -25,8 +26,10 @@
 #
 # Again, we'll use our helper moving average function.
 
+# %%
 from backtesting.test import SMA
 
+# %% [markdown]
 # Part of this software distribution is
 # [`backtesting.lib`](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html)
 # module that contains various reusable utilities for strategy development.
@@ -42,7 +45,7 @@ from backtesting.test import SMA
 #   [average true range](https://en.wikipedia.org/wiki/Average_true_range)
 #   (ATR) away.
 
-# +
+# %%
 import pandas as pd
 from backtesting.lib import SignalStrategy, TrailingStrategy
 
@@ -78,13 +81,12 @@ class SmaCross(SignalStrategy,
         self.set_trailing_sl(2)
 
 
-# -
-
+# %% [markdown]
 # Note, since the strategies in `lib` may require their own intialization and next-tick logic, be sure to **always call `super().init()` and `super().next()` in your overridden methods**.
 #
 # Let's see how the example strategy fares on historical Google data.
 
-# +
+# %%
 from backtesting import Backtest
 from backtesting.test import GOOG
 
@@ -92,13 +94,14 @@ bt = Backtest(GOOG, SmaCross, commission=.002)
 
 bt.run()
 bt.plot()
-# -
 
+# %% [markdown]
 # Notice how managing risk with a trailing stop-loss secures our gains and limits our losses.
 #
 # For other strategies of the sort, and other reusable utilities in general, see
 # [**_backtesting.lib_ module reference**](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html).
 
+# %% [markdown]
 # Learn more by exploring further
 # [examples](https://kernc.github.io/backtesting.py/doc/backtesting/index.html#tutorials)
 # or find more framework options in the

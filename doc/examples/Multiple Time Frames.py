@@ -3,15 +3,16 @@
 #   jupytext:
 #     text_representation:
 #       extension: .py
-#       format_name: light
-#       format_version: '1.5'
-#       jupytext_version: 1.5.1
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.17.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
 #     name: python3
 # ---
 
+# %% [markdown]
 # Multiple Time Frames
 # ============
 #
@@ -32,7 +33,7 @@
 # [Tulipy](https://tulipindicators.org),
 # but among us, let's introduce the two indicators we'll be using.
 
-# +
+# %%
 import pandas as pd
 
 
@@ -52,8 +53,7 @@ def RSI(array, n):
     return 100 - 100 / (1 + rs)
 
 
-# -
-
+# %% [markdown]
 # The strategy roughly goes like this:
 #
 # Buy a position when:
@@ -66,7 +66,7 @@ def RSI(array, n):
 #
 # We need to provide bars data in the _lowest time frame_ (i.e. daily) and resample it to any higher time frame (i.e. weekly) that our strategy requires.
 
-# +
+# %%
 from backtesting import Strategy, Backtest
 from backtesting.lib import resample_apply
 
@@ -112,34 +112,36 @@ class System(Strategy):
         # close the position, if any.
         elif price < .98 * self.ma10[-1]:
             self.position.close()
-# -
 
+# %% [markdown]
 # Let's see how our strategy fares replayed on nine years of Google stock data.
 
-# +
+# %%
 from backtesting.test import GOOG
 
 backtest = Backtest(GOOG, System, commission=.002)
 backtest.run()
-# -
 
+# %% [markdown]
 # Meager four trades in the span of nine years and with zero return? How about if we optimize the parameters a bit?
 
-# +
+# %%
 # %%time
 
 backtest.optimize(d_rsi=range(10, 35, 5),
                   w_rsi=range(10, 35, 5),
                   level=range(30, 80, 10))
-# -
 
+# %%
 backtest.plot()
 
+# %% [markdown]
 # Better. While the strategy doesn't perform as well as simple buy & hold, it does so with significantly lower exposure (time in market).
 #
 # In conclusion, to test strategies on multiple time frames, you need to pass in OHLC data in the lowest time frame, then resample it to higher time frames, apply the indicators, then resample back to the lower time frame, filling in the in-betweens.
 # Which is what the function [`backtesting.lib.resample_apply()`](https://kernc.github.io/backtesting.py/doc/backtesting/lib.html#backtesting.lib.resample_apply) does for you.
 
+# %% [markdown]
 # Learn more by exploring further
 # [examples](https://kernc.github.io/backtesting.py/doc/backtesting/index.html#tutorials)
 # or find more framework options in the

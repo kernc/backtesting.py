@@ -3,15 +3,16 @@
 #   jupytext:
 #     text_representation:
 #       extension: .py
-#       format_name: light
-#       format_version: '1.5'
-#       jupytext_version: 1.5.1
+#       format_name: percent
+#       format_version: '1.3'
+#       jupytext_version: 1.17.1
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
 #     name: python3
 # ---
 
+# %% [markdown]
 # # Trading with Machine Learning Models
 #
 # This tutorial will show how to train and backtest a 
@@ -22,15 +23,14 @@
 #
 # For this tutorial, we'll use almost a year's worth sample of hourly EUR/USD forex data:
 
-# +
+# %%
 from backtesting.test import EURUSD, SMA
 
 data = EURUSD.copy()
 data
 
 
-# -
-
+# %% [markdown]
 # In
 # [supervised machine learning](https://en.wikipedia.org/wiki/Supervised_learning), 
 # we try to learn a function that maps input feature vectors (independent variables) into known output values (dependent variable):
@@ -41,7 +41,7 @@ data
 # In our example, we'll try to map several price-derived features and common technical indicators to the price point two days in the future.
 # We construct [model design matrix](https://en.wikipedia.org/wiki/Design_matrix) $X$ below:
 
-# +
+# %%
 def BBANDS(data, n_lookback, n_std):
     """Bollinger bands indicator"""
     hlc3 = (data.High + data.Low + data.Close) / 3
@@ -82,8 +82,8 @@ data['X_day'] = data.index.dayofweek
 data['X_hour'] = data.index.hour
 
 data = data.dropna().astype(float)
-# -
 
+# %% [markdown]
 # Since all our indicators work only with past values, we can safely precompute the design matrix in advance. Alternatively, we would reconstruct the matrix every time before training the model.
 #
 # Notice the made-up _sentiment_ feature. In real life, one would obtain similar features by parsing news sources, Twitter sentiment, Stocktwits or similar.
@@ -91,7 +91,7 @@ data = data.dropna().astype(float)
 #
 # As mentioned, our dependent variable will be the price (return) two days in the future, simplified into values $1$ when the return is positive (and significant), $-1$ when negative, or $0$ when the return after two days is roughly around zero. Let's write some functions that return our model matrix $X$ and dependent, class variable $\mathbf{y}$ as plain NumPy arrays:
 
-# +
+# %%
 import numpy as np
 
 
@@ -119,8 +119,7 @@ def get_clean_Xy(df):
     return X, y
 
 
-# -
-
+# %% [markdown]
 # Let's see how our data performs modeled using a simple
 # [k-nearest neighbors](https://en.wikipedia.org/wiki/K-nearest_neighbors_algorithm)
 # (kNN) algorithm from the state of the art
@@ -130,7 +129,7 @@ def get_clean_Xy(df):
 # [overfitting](https://scikit-learn.org/stable/auto_examples/model_selection/plot_underfitting_overfitting.html),
 # always split your data into _train_ and _test_ sets; in particular, don't validate your model performance on the same data it was built on.
 
-# +
+# %%
 import pandas as pd
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.model_selection import train_test_split
@@ -145,8 +144,8 @@ y_pred = clf.predict(X_test)
 
 _ = pd.DataFrame({'y_true': y_test, 'y_pred': y_pred}).plot(figsize=(15, 2), alpha=.7)
 print('Classification accuracy: ', np.mean(y_test == y_pred))
-# -
 
+# %% [markdown]
 # We see the forecasts are all over the place (classification accuracy 42%), but is the model of any use under real backtesting?
 #
 # Let's backtest a simple strategy that buys the asset for 20% of available equity with 20:1 leverage whenever the forecast is positive (the price in two days is predicted to go up),
@@ -154,7 +153,7 @@ print('Classification accuracy: ', np.mean(y_test == y_pred))
 # [`data.df`](https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html#backtesting.backtesting.Strategy.data)
 # accessor:
 
-# +
+# %%
 # %%time
 
 from backtesting import Backtest, Strategy
@@ -219,17 +218,18 @@ class MLTrainOnceStrategy(Strategy):
 
 bt = Backtest(data, MLTrainOnceStrategy, commission=.0002, margin=.05)
 bt.run()
-# -
 
+# %%
 bt.plot()
 
 
+# %% [markdown]
 # Despite our lousy win rate, the strategy seems profitable. Let's see how it performs under
 # [walk-forward optimization](https://en.wikipedia.org/wiki/Walk_forward_optimization),
 # akin to k-fold or leave-one-out
 # [cross-validation](https://en.wikipedia.org/wiki/Cross-validation_%28statistics%29):
 
-# +
+# %%
 # %%time
 
 class MLWalkForwardStrategy(MLTrainOnceStrategy):
@@ -256,10 +256,11 @@ class MLWalkForwardStrategy(MLTrainOnceStrategy):
 
 bt = Backtest(data, MLWalkForwardStrategy, commission=.0002, margin=.05)
 bt.run()
-# -
 
+# %%
 bt.plot()
 
+# %% [markdown]
 # Apparently, when repeatedly retrained on past `N_TRAIN` data points in a rolling manner, our basic model generalizes poorly and performs not quite as well.
 #
 # This was a simple and contrived, tongue-in-cheek example that shows one way to use machine learning forecast models with _backtesting.py_ framework.
