@@ -67,6 +67,7 @@ def compute_stats(
             'SL': [t.sl for t in trades],
             'TP': [t.tp for t in trades],
             'PnL': [t.pl for t in trades],
+            'Commissions': [t._commissions for t in trades],
             'ReturnPct': [t.pl_pct for t in trades],
             'EntryTime': [t.entry_time for t in trades],
             'ExitTime': [t.exit_time for t in trades],
