@@ -68,6 +68,7 @@ def compute_stats(
             'TP': [t.tp for t in trades],
             'PnL': [t.pl for t in trades],
             'Commissions': [t._commissions for t in trades],
+            'NetPnL': [t.net_pl for t in trades],
             'ReturnPct': [t.pl_pct for t in trades],
             'EntryTime': [t.entry_time for t in trades],
             'ExitTime': [t.exit_time for t in trades],
@@ -87,7 +88,7 @@ def compute_stats(
         commissions = sum(t._commissions for t in trades)
     del trades
 
-    pl = trades_df['PnL']
+    pl = trades_df['NetPnL']
     returns = trades_df['ReturnPct']
     durations = trades_df['Duration']
 

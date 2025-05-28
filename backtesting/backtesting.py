@@ -370,6 +370,11 @@ class Position:
         return sum(trade.pl for trade in self.__broker.trades)
 
     @property
+    def net_pl(self) -> float:
+        """Net Profit (positive) or loss (negative) of the current position in cash units."""
+        return sum(trade.net_pl for trade in self.__broker.trades)
+
+    @property
     def pl_pct(self) -> float:
         """Profit (positive) or loss (negative) of the current position in percent."""
         total_invested = sum(trade.entry_price * abs(trade.size) for trade in self.__broker.trades)
@@ -674,6 +679,11 @@ class Trade:
         """Trade profit (positive) or loss (negative) in cash units."""
         price = self.__exit_price or self.__broker.last_price
         return self.__size * (price - self.__entry_price)
+
+    @property
+    def net_pl(self):
+        """Trade profit (positive) or loss (negative) after all deductions in cash units."""
+        return self.pl - self._commissions
 
     @property
     def pl_pct(self):
