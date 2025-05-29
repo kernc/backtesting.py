@@ -671,9 +671,12 @@ class Trade:
 
     @property
     def pl(self):
-        """Trade profit (positive) or loss (negative) in cash units."""
+        """
+        Trade profit (positive) or loss (negative) in cash units.
+        Commissions are reflected only after the Trade is closed.
+        """
         price = self.__exit_price or self.__broker.last_price
-        return self.__size * (price - self.__entry_price)
+        return (self.__size * (price - self.__entry_price)) - self._commissions
 
     @property
     def pl_pct(self):
