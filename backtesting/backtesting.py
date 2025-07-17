@@ -1343,6 +1343,11 @@ class Backtest:
                     #  strategy iteration. Use the same OHLC values as in the last broker iteration.
                     if start < len(self._data):
                         try_(broker.next, exception=_OutOfMoneyError)
+                elif len(broker.trades):
+                    warnings.warn(
+                        'Some trades remain open at the end of backtest. Use '
+                        '`Backtest(..., finalize_trades=True)` to close them and '
+                        'include them in stats.', stacklevel=2)
 
             # Set data back to full length
             # for future `indicator._opts['data'].index` calls to work

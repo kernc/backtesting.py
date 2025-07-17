@@ -433,7 +433,8 @@ class TestBacktest(TestCase):
                 elif len(self.data) == len(SHORT_DATA):
                     self.position.close()
 
-        self.assertTrue(Backtest(SHORT_DATA, S, finalize_trades=False).run()._trades.empty)
+        with self.assertWarnsRegex(UserWarning, 'finalize_trades'):
+            self.assertTrue(Backtest(SHORT_DATA, S, finalize_trades=False).run()._trades.empty)
         self.assertFalse(Backtest(SHORT_DATA, S, finalize_trades=True).run()._trades.empty)
 
     def test_check_adjusted_price_when_placing_order(self):
