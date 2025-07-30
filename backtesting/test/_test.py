@@ -260,6 +260,27 @@ class TestBacktest(TestCase):
         self.assertEqual(stats['_equity_curve']['Equity'].iloc[2:4].round(2).tolist(),
                          [9781.28, 9846.04])
 
+    def test_commissions(self):
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(size=SIZE, tp=3)
+
+        FIXED_COMMISSION, COMMISSION = 10, .01
+        CASH, SIZE, PRICE_ENTRY, PRICE_EXIT = 5000, 100, 1, 4
+        arr = np.r_[1, PRICE_ENTRY, 1, 2, PRICE_EXIT, 1, 2]
+        df = pd.DataFrame({'Open': arr, 'High': arr, 'Low': arr, 'Close': arr})
+        with self.assertWarnsRegex(UserWarning, 'index is not datetime'):
+            stats = Backtest(df, S, cash=CASH, commission=(FIXED_COMMISSION, COMMISSION)).run()
+        EXPECTED_PAID_COMMISSION = (
+            FIXED_COMMISSION + COMMISSION * SIZE * PRICE_ENTRY +
+            FIXED_COMMISSION + COMMISSION * SIZE * PRICE_EXIT)
+        self.assertEqual(stats['Commissions [$]'], EXPECTED_PAID_COMMISSION)
+        self.assertEqual(stats._trades['Commission'][0], EXPECTED_PAID_COMMISSION)
+        self.assertEqual(
+            stats['Equity Final [$]'],
+            CASH + (PRICE_EXIT - PRICE_ENTRY) * SIZE - EXPECTED_PAID_COMMISSION)
+
     def test_dont_overwrite_data(self):
         df = EURUSD.copy()
         bt = Backtest(df, SmaCross)

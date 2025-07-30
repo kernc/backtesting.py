@@ -952,7 +952,8 @@ class _Broker:
             # Adjust price to include commission (or bid-ask spread).
             # In long positions, the adjusted price is a fraction higher, and vice versa.
             adjusted_price = self._adjusted_price(order.size, price)
-            adjusted_price_plus_commission = adjusted_price + self._commission(order.size, price)
+            adjusted_price_plus_commission = \
+                adjusted_price + self._commission(order.size, price) / abs(order.size)
 
             # If order size was specified proportionally,
             # precompute true size in units, accounting for margin and spread/commissions
