@@ -347,7 +347,7 @@ class TestBacktest(TestCase):
             sorted(stats['_trades'].columns),
             sorted(['Size', 'EntryBar', 'ExitBar', 'EntryPrice', 'ExitPrice',
                     'SL', 'TP', 'PnL', 'ReturnPct', 'EntryTime', 'ExitTime',
-                    'Duration', 'Tag', 'Commissions',
+                    'Duration', 'Tag', 'Commission',
                     *indicator_columns]))
 
     def test_compute_stats_bordercase(self):
