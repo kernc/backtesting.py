@@ -5,6 +5,21 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
+### 0.6.5
+(2025-07-30)
+
+* Include 'Commission' column in `stats._trades` DataFrame (#1277), thanks to Abhirath Mahipal.
+* Bugfixes:
+  * Fix computing commissions when specified with relative amount.
+  * Fix sometimes cleared SL value in `stats._trades` data frame
+  * Ensure order size is integer to avoid weird rounding errors.
+  * Account for commissions in `Trade.pl` and `Trade.pl_pct` (#1279), thanks to Abhirath Mahipal.
+  * `functools.partial` objects do not always have a __module__ attr in Python 3.9
+* Plotting:
+  * Return long/short triangles to P&L section!
+  * Do plot `plot=False, overlay=True` indicators, but muted.
+
+
 ### 0.6.4
 (2025-03-30)
 
