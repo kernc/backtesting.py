@@ -1140,3 +1140,14 @@ class TestRegressions(TestCase):
         data.index = data.index.tz_localize('Asia/Kolkata')
         res = Backtest(data, SmaCross).optimize(fast=range(2, 3), slow=range(4, 5))
         self.assertGreater(res['# Trades'], 0)
+
+    def test_sl_tp_values_in_trades_df(self):
+        class S(_S):
+            def next(self):
+                self.next = lambda: None
+                self.buy(size=1, tp=111)
+                self.buy(size=1, sl=99)
+
+        trades = Backtest(SHORT_DATA, S).run()._trades
+        self.assertEqual(trades['SL'].fillna(0).tolist(), [0, 99])
+        self.assertEqual(trades['TP'].fillna(0).tolist(), [111, 0])
