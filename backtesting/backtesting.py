@@ -70,6 +70,12 @@ class Strategy(metaclass=ABCMeta):
                     "can be optimized or run with.")
             setattr(self, k, v)
         return params
+    
+    def deposit_cash(self, amount):
+        return self._broker.deposit_cash(amount)
+    
+    def withdraw_cash(self, amount):
+        return self._broker.withdraw_cash(amount)
 
     def I(self,  # noqa: E743
           func: Callable, *args,
@@ -778,6 +784,16 @@ class _Broker:
 
     def __repr__(self):
         return f'<Broker: {self._cash:.0f}{self.position.pl:+.1f} ({len(self.trades)} trades)>'
+    
+    def deposit_cash(self, amount: float):
+        self._cash += amount
+        return self._cash
+    
+    def withdraw_cash(self, amount: float):
+        if amount > self._cash:
+            return self._cash
+        self.cash -= amount
+        return self._cash
 
     def new_order(self,
                   size: float,
