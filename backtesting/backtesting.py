@@ -1640,7 +1640,8 @@ class Backtest:
             for shmem in shm:
                 shmem.close()
 
-    def plot(self, *, results: pd.Series = None, filename=None, plot_width=None,
+    def plot(self, *, results: pd.Series = None, filename=None,
+             plot_width=None, plot_height=400,
              plot_equity=True, plot_return=False, plot_pl=True,
              plot_volume=True, plot_drawdown=False, plot_trades=True,
              smooth_equity=False, relative_equity=True,
@@ -1661,8 +1662,10 @@ class Backtest:
         current working directory.
 
         `plot_width` is the width of the plot in pixels. If None (default),
-        the plot is made to span 100% of browser width. The height is
-        currently non-adjustable.
+        the plot is made to span 100% of browser width.
+
+        `plot_height` is the height of the main OHLC chart in pixels. Other
+        sections are sized proportionally. Default is 400.
 
         If `plot_equity` is `True`, the resulting plot will contain
         an equity (initial cash plus assets) graph section. This is the same
@@ -1737,6 +1740,7 @@ class Backtest:
             indicators=results._strategy._indicators,
             filename=filename,
             plot_width=plot_width,
+            plot_height=plot_height,
             plot_equity=plot_equity,
             plot_return=plot_return,
             plot_pl=plot_pl,
