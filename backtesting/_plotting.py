@@ -190,7 +190,7 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
 def plot(*, results: pd.Series,
          df: pd.DataFrame,
          indicators: List[_Indicator],
-         filename='', plot_width=None,
+         filename='', plot_width=None, plot_height=400,
          plot_equity=True, plot_return=False, plot_pl=True,
          plot_volume=True, plot_drawdown=False, plot_trades=True,
          smooth_equity=False, relative_equity=True,
@@ -199,6 +199,15 @@ def plot(*, results: pd.Series,
          show_legend=True, open_browser=True):
     """
     Like much of GUI code everywhere, this is a mess.
+
+    Parameters:
+    -----------
+    plot_width : int, optional
+        Width of the plot in pixels. If None (default), the plot is made
+        to span 100% of browser width.
+    plot_height : int, optional
+        Height of the main OHLC chart in pixels. Other sections are sized
+        proportionally. Default is 400.
     """
     # We need to reset global Bokeh state, otherwise subsequent runs of
     # plot() contain some previous run's cruft data (was noticed when
@@ -206,6 +215,16 @@ def plot(*, results: pd.Series,
     if not filename and not IS_JUPYTER_NOTEBOOK:
         filename = _windos_safe_filename(str(results._strategy))
     _bokeh_reset(filename)
+
+    # Calculate proportional heights based on original ratios
+    # Original OHLC height was 400px, use that as base ratio
+    base_height = plot_height
+    equity_height = int(base_height * 0.25)  # was 100px
+    equity_height_with_dd = int(base_height * 0.2)  # was 80px
+    drawdown_height = int(base_height * 0.2)  # was 80px
+    pl_height = int(base_height * 0.2)  # was 80px
+    volume_height = int(base_height * 0.175)  # was 70px
+    indicator_height = int(base_height * 0.125)  # was 50px
 
     COLORS = [BEAR_COLOR, BULL_COLOR]
     BAR_WIDTH = .8
@@ -240,7 +259,7 @@ def plot(*, results: pd.Series,
         _figure,
         x_axis_type='linear',
         width=plot_width,
-        height=400,
+        height=base_height,
         # TODO: xwheel_pan on horizontal after https://github.com/bokeh/bokeh/issues/14363
         tools="xpan,xwheel_zoom,xwheel_pan,box_zoom,undo,redo,reset,save",
         active_drag='xpan',
@@ -296,7 +315,7 @@ return this.labels[index] || "";
         ('Volume', '@Volume{0,0}')]
 
     def new_indicator_figure(**kwargs):
-        kwargs.setdefault('height', _INDICATOR_HEIGHT)
+        kwargs.setdefault('height', indicator_height)
         fig = new_bokeh_figure(x_range=fig_ohlc.x_range,
                                active_scroll='xwheel_zoom',
                                active_drag='xpan',
@@ -362,7 +381,7 @@ return this.labels[index] || "";
         source.add(equity, source_key)
         fig = new_indicator_figure(
             y_axis_label=yaxis_label,
-            **(dict(height=80) if plot_drawdown else dict(height=100)))
+            **(dict(height=equity_height_with_dd) if plot_drawdown else dict(height=equity_height)))
 
         # High-watermark drawdown dents
         fig.patch('index', 'equity_dd',
@@ -413,7 +432,7 @@ return this.labels[index] || "";
 
     def _plot_drawdown_section():
         """Drawdown section"""
-        fig = new_indicator_figure(y_axis_label="Drawdown", height=80)
+        fig = new_indicator_figure(y_axis_label="Drawdown", height=drawdown_height)
         drawdown = equity_data['DrawdownPct']
         argmax = drawdown.idxmax()
         source.add(drawdown, 'drawdown')
@@ -427,7 +446,7 @@ return this.labels[index] || "";
 
     def _plot_pl_section():
         """Profit/Loss markers section"""
-        fig = new_indicator_figure(y_axis_label="Profit / Loss", height=80)
+        fig = new_indicator_figure(y_axis_label="Profit / Loss", height=pl_height)
         fig.add_layout(Span(location=0, dimension='width', line_color='#666666',
                             line_dash='dashed', level='underlay', line_width=1))
         trade_source.add(trades['ReturnPct'], 'returns')
@@ -454,7 +473,7 @@ return this.labels[index] || "";
 
     def _plot_volume_section():
         """Volume section"""
-        fig = new_indicator_figure(height=70, y_axis_label="Volume")
+        fig = new_indicator_figure(height=volume_height, y_axis_label="Volume")
         fig.yaxis.ticker.desired_num_ticks = 3
         fig.xaxis.formatter = fig_ohlc.xaxis[0].formatter
         fig.xaxis.visible = True
