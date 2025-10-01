@@ -75,6 +75,16 @@ def compute_stats(
         trades_df['Duration'] = trades_df['ExitTime'] - trades_df['EntryTime']
         trades_df['Tag'] = [t.tag for t in trades]
 
+        if strategy_instance is not None and hasattr(strategy_instance, "data1") and hasattr(strategy_instance, "data2"):
+            s1 = strategy_instance.data1.Close
+            s2 = strategy_instance.data2.Close
+            trades_df['PnL_cash'] = (
+                (trades_df['ExitPrice'] - trades_df['EntryPrice']) /
+                (s1.iloc[trades_df['EntryBar']].values + s2.iloc[trades_df['EntryBar']].values)
+            )
+        else:
+            trades_df['PnL_cash'] = np.nan   
+
         # Add indicator values
         if len(trades_df) and strategy_instance:
             for ind in strategy_instance._indicators:
