@@ -1249,9 +1249,12 @@ class Backtest:
         self._results: Optional[pd.Series] = None
         self._finalize_trades = bool(finalize_trades)
 
-    def run(self, **kwargs) -> pd.Series:
+    def run(self, show_progress: bool = True, **kwargs) -> pd.Series:
         """
         Run the backtest. Returns `pd.Series` with results and statistics.
+
+        'show_progress' : bool, default True
+            Whether to show the progress bar during backtest execution.
 
         Keyword arguments are interpreted as strategy parameters.
 
@@ -1298,6 +1301,7 @@ class Backtest:
             begin on bar 201. The actual length of delay is equal to the lookback
             period of the `Strategy.I` indicator which lags the most.
             Obviously, this can affect results.
+
         """
         data = _Data(self._data.copy(deep=False))
         broker: _Broker = self._broker(data=data)
@@ -1317,8 +1321,10 @@ class Backtest:
         # np.nan >= 3 is not invalid; it's False.
         with np.errstate(invalid='ignore'):
 
-            for i in _tqdm(range(start, len(self._data)), desc=self.run.__qualname__,
-                           unit='bar', mininterval=2, miniters=100):
+            seq = range(start, len(self._data))
+            if show_progress:
+                seq = _tqdm(seq, desc=self.run.__qualname__, unit='bar', mininterval=2, miniters=100)
+            for i in seq:
                 # Prepare data and indicators for `next` call
                 data._set_length(i + 1)
                 for attr, indicator in indicator_attrs:

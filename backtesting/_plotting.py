@@ -577,15 +577,32 @@ return this.labels[index] || "";
             )
 
             marker = value._opts.get('marker', 'circle')
-            if marker not in MARKER_FUNCTIONS:
-                warnings.warn(f"Unknown marker type '{marker}', falling back to 'circle'")
-                marker = 'circle'
-                value._opts['marker'] = marker
-            marker_func = MARKER_FUNCTIONS[marker]
+            marker_list = _as_list(marker)
+            
+            # Check for invalid markers and replace them with 'circle'
+            if any(m not in MARKER_FUNCTIONS for m in marker_list):
+                if len(marker_list) == 1:
+                    # If it's a single invalid marker, replace it
+                    warnings.warn(f"Unknown marker type '{marker}', falling back to 'circle'")
+                    marker = 'circle'
+                    value._opts['marker'] = marker
+                    marker_list = ['circle']
+                else:
+                    # If it's an array with some invalid markers, replace only the invalid ones
+                    warnings.warn(f"Unknown marker type(s) in '{marker}', replacing invalid markers with 'circle'")
+                    marker_list = [m if m in MARKER_FUNCTIONS else 'circle' for m in marker_list]
+                    value._opts['marker'] = marker_list
+            
+            markers = cycle(marker_list)
 
             marker_size = value._opts.get('marker_size')
-            if marker_size is None:
-                marker_size = BAR_WIDTH / 2 * (.9 if is_overlay else .6)
+            # Handle marker_size as either a single value or an array
+            if marker_size is not None:
+                marker_size_list = _as_list(marker_size)
+                marker_sizes = cycle(marker_size_list)
+            else:
+                default_size = BAR_WIDTH / 2 * (.9 if is_overlay else .6)
+                marker_sizes = cycle([default_size])
 
             if isinstance(value.name, str):
                 tooltip_label = value.name
@@ -596,6 +613,8 @@ return this.labels[index] || "";
 
             for j, arr in enumerate(value):
                 color = next(colors)
+                marker = next(markers)
+                marker_size = next(marker_sizes)
                 source_name = f'{legend_labels[j]}_{i}_{j}'
                 if arr.dtype == bool:
                     arr = arr.astype(int)
@@ -604,6 +623,7 @@ return this.labels[index] || "";
                 if is_overlay:
                     ohlc_extreme_values[source_name] = arr
                     if is_scatter:
+                        marker_func = MARKER_FUNCTIONS[marker]
                         marker_func(
                             fig,
                             x='index', y=source_name, source=source,
@@ -617,6 +637,7 @@ return this.labels[index] || "";
                             line_width=1.3)
                 else:
                     if is_scatter:
+                        marker_func = MARKER_FUNCTIONS[marker]
                         r = marker_func(
                             fig,
                             x='index', y=source_name, source=source,

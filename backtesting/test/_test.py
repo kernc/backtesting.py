@@ -236,7 +236,7 @@ class TestBacktest(TestCase):
                 self.done = False
 
             def next(self):
-                if not self.position:
+                if not self.done:
                     self.buy()
                 else:
                     self.position.close()
@@ -827,6 +827,214 @@ class TestPlot(TestCase):
                     plot_drawdown=False, plot_equity=False, plot_pl=False, plot_volume=False,
                     open_browser=False)
 
+    def test_marker_shapes_and_sizes(self):
+        class MarkerStrategy(Strategy):
+            shapes = []
+            invalid_checks = []
+            default_checks = []
+
+            def init(self):
+                # Test all marker shapes with different sizes
+                markers = ['circle', 'square', 'triangle', 'diamond', 'cross', 'x', 'star']
+                sizes = [6, 12, 18]  # Test different sizes
+
+                for i, (marker, size) in enumerate(itertools.product(markers, sizes)):
+                    # Copy data.Close and add a value to it so the shapes don't overlap
+                    close = self.data.Close.copy()
+                    close += i * 10 + size * 2
+                    # Clear values except when i*7 divides into it
+                    close[close % (i*3) != 0] = np.nan
+                    
+                    ind = self.I(lambda x: x, close,
+                               name=f'{marker}_{size}',
+                               scatter=True,
+                               marker=marker,
+                               marker_size=size,
+                               overlay=i % 2 == 0)  # Alternate between overlay and separate
+                    self.shapes.append(ind)
+
+                # Test invalid marker fallback
+                invalid_close = self.data.Close.copy()
+                invalid_close[invalid_close % 10 != 0] = np.nan
+                self.invalid = self.I(lambda x: x, invalid_close,
+                                    scatter=True,
+                                    marker='invalid_shape',
+                                    marker_size=10)
+                self.invalid_checks.append(self.invalid)
+
+                # Test default size
+                default_close = self.data.Close.copy()
+                default_close[default_close % 15 != 0] = np.nan
+                self.default_size = self.I(lambda x: x, default_close,
+                                         scatter=True,
+                                         marker='circle')
+                self.default_checks.append(self.default_size)
+
+                # Test array of marker sizes
+                size_array = [5, 10, 15]
+                ind4 = self.I(lambda x: x, stacked,
+                            name=['Size1', 'Size2', 'Size3'],
+                            scatter=True,
+                            marker='circle',
+                            marker_size=size_array,
+                            overlay=True)
+                self.array_markers.append(ind4)
+                
+                # Test mismatched array lengths for marker and marker_size
+                ind5 = self.I(lambda x: x, stacked,
+                            name=['Mix1', 'Mix2', 'Mix3'],
+                            scatter=True,
+                            marker=['circle', 'square'],
+                            marker_size=[8, 12, 16, 20],
+                            overlay=False)
+                self.array_markers.append(ind5)
+
+            def next(self):
+                pass
+
+            def get_default_size(self):
+                return self.default_size
+
+        bt = Backtest(self.data, MarkerStrategy)
+        stats = bt.run()
+        fig = bt.plot()
+
+        # Verify all indicators were created
+        strategy = bt._strategy
+        
+        # Verify each indicator has correct options
+        markers = ['circle', 'square', 'triangle', 'diamond', 'cross', 'x', 'star']
+        sizes = [6, 12, 18]
+
+        for ind, (marker, size) in zip(strategy.shapes, itertools.product(markers, sizes)):
+            self.assertTrue(ind._opts['scatter'])
+            self.assertEqual(ind._opts['marker'], marker)
+            self.assertEqual(ind._opts['marker_size'], size)
+
+        # Verify invalid marker falls back to 'circle'
+        self.assertEqual(strategy.invalid_checks[0]._opts['marker'], 'circle')
+        self.assertEqual(strategy.invalid_checks[0]._opts['marker_size'], 10)
+
+        # Verify default size is None (will be set relative to bar width)
+        self.assertEqual(strategy.default_checks[0]._opts['marker'], 'circle')
+        self.assertIsNone(strategy.default_checks[0]._opts['marker_size'])
+
+        # Verify marker_size array was properly set
+        self.assertEqual(strategy.array_markers[1]._opts['marker_size'], [5, 10, 15])
+        
+        # Verify mismatched arrays work correctly (each cycles independently)
+        self.assertEqual(strategy.array_markers[2]._opts['marker'], ['circle', 'square'])
+        self.assertEqual(strategy.array_markers[2]._opts['marker_size'], [8, 12, 16, 20])
+
+    def test_marker_array(self):
+        class MarkerArrayStrategy(Strategy):
+            array_markers = []
+            multi_array_markers = []
+            invalid_array_markers = []
+            size_array_markers = []
+            combined_array_markers = []
+
+            def init(self):
+                # Test array of markers for a single indicator
+                marker_array = ['circle', 'square', 'triangle']
+                
+                # Create a multi-line indicator with 3 values
+                values = []
+                for i in range(3):
+                    close = self.data.Close.copy()
+                    close += i * 10  # Offset to avoid overlap
+                    close[close % (i+2) != 0] = np.nan  # Create some gaps
+                    values.append(close)
+                
+                # Stack the values to create a multi-line indicator
+                stacked = np.vstack(values)
+                
+                # Create indicator with array of markers
+                ind = self.I(lambda x: x, stacked,
+                           name=['Line1', 'Line2', 'Line3'],
+                           scatter=True,
+                           marker=marker_array,
+                           marker_size=10,
+                           overlay=False)
+                self.array_markers.append(ind)
+                
+                # Test array of markers with different length than values
+                longer_array = ['circle', 'square', 'triangle', 'diamond', 'cross']
+                ind2 = self.I(lambda x: x, stacked,
+                            name=['LineA', 'LineB', 'LineC'],
+                            scatter=True,
+                            marker=longer_array,
+                            marker_size=10,
+                            overlay=True)
+                self.multi_array_markers.append(ind2)
+                
+                # Test array with invalid marker
+                invalid_array = ['circle', 'invalid_shape', 'triangle']
+                ind3 = self.I(lambda x: x, stacked,
+                            name=['X', 'Y', 'Z'],
+                            scatter=True,
+                            marker=invalid_array,
+                            overlay=False)
+                self.invalid_array_markers.append(ind3)
+                
+                # Test array of marker sizes
+                size_array = [5, 10, 15]
+                ind4 = self.I(lambda x: x, stacked,
+                            name=['Size1', 'Size2', 'Size3'],
+                            scatter=True,
+                            marker='circle',
+                            marker_size=size_array,
+                            overlay=True)
+                self.size_array_markers.append(ind4)
+                
+                # Test combined arrays of markers and sizes
+                ind5 = self.I(lambda x: x, stacked,
+                            name=['Combined1', 'Combined2', 'Combined3'],
+                            scatter=True,
+                            marker=['circle', 'square', 'triangle'],
+                            marker_size=[8, 12, 16],
+                            overlay=False)
+                self.combined_array_markers.append(ind5)
+                
+                # Test mismatched array lengths for marker and marker_size
+                ind6 = self.I(lambda x: x, stacked,
+                            name=['Mix1', 'Mix2', 'Mix3'],
+                            scatter=True,
+                            marker=['circle', 'square'],
+                            marker_size=[8, 12, 16, 20],
+                            overlay=False)
+                self.combined_array_markers.append(ind6)
+
+            def next(self):
+                pass
+
+        bt = Backtest(self.data, MarkerArrayStrategy)
+        stats = bt.run()
+        fig = bt.plot()
+
+        # Verify indicators were created
+        strategy = bt._strategy
+        
+        # Verify marker array was properly set
+        self.assertEqual(strategy.array_markers[0]._opts['marker'], ['circle', 'square', 'triangle'])
+        
+        # Verify longer array was properly set
+        self.assertEqual(strategy.multi_array_markers[0]._opts['marker'], 
+                         ['circle', 'square', 'triangle', 'diamond', 'cross'])
+        
+        # Verify invalid array falls back to 'circle'
+        self.assertEqual(strategy.invalid_array_markers[0]._opts['marker'], ['circle', 'circle', 'triangle'])
+        
+        # Verify marker_size array was properly set
+        self.assertEqual(strategy.size_array_markers[0]._opts['marker_size'], [5, 10, 15])
+        
+        # Verify combined arrays work correctly
+        self.assertEqual(strategy.combined_array_markers[0]._opts['marker'], ['circle', 'square', 'triangle'])
+        self.assertEqual(strategy.combined_array_markers[0]._opts['marker_size'], [8, 12, 16])
+        
+        # Verify mismatched arrays work correctly (each cycles independently)
+        self.assertEqual(strategy.combined_array_markers[1]._opts['marker'], ['circle', 'square'])
+        self.assertEqual(strategy.combined_array_markers[1]._opts['marker_size'], [8, 12, 16, 20])
 
 class TestLib(TestCase):
     def test_barssince(self):
@@ -1050,7 +1258,7 @@ class TestRegressions(TestCase):
         df = pd.DataFrame({'Open': arr, 'High': arr, 'Low': arr, 'Close': arr})
         with self.assertWarnsRegex(UserWarning, 'index is not datetime'):
             bt = Backtest(df, S, cash=100, trade_on_close=True)
-        self.assertEqual(bt.run()._trades['ExitPrice'][0], 50)
+        self.assertEqual(bt.run()._trades.iloc[0].ExitPrice, 50)
 
     def test_stats_annualized(self):
         stats = Backtest(GOOG.resample('W').agg(OHLCV_AGG), SmaCross).run()
@@ -1145,76 +1353,112 @@ class TestPlotting(unittest.TestCase):
     def setUp(self):
         self.data = GOOG.copy()
 
-    def test_marker_shapes_and_sizes(self):
-        class MarkerStrategy(Strategy):
-            shapes = []
-            invalid_checks = []
-            default_checks = []
+    def test_marker_array(self):
+        class MarkerArrayStrategy(Strategy):
+            array_markers = []
+            multi_array_markers = []
+            invalid_array_markers = []
+            size_array_markers = []
+            combined_array_markers = []
 
             def init(self):
-                # Test all marker shapes with different sizes
-                markers = ['circle', 'square', 'triangle', 'diamond', 'cross', 'x', 'star']
-                sizes = [6, 12, 18]  # Test different sizes
-
-                for i, (marker, size) in enumerate(itertools.product(markers, sizes)):
-                    # Copy data.Close and add a value to it so the shapes don't overlap
+                # Test array of markers for a single indicator
+                marker_array = ['circle', 'square', 'triangle']
+                
+                # Create a multi-line indicator with 3 values
+                values = []
+                for i in range(3):
                     close = self.data.Close.copy()
-                    close += i * 10 + size * 2
-                    # Clear values except when i*7 divides into it
-                    close[close % (i*3) != 0] = np.nan
-                    
-                    ind = self.I(lambda x: x, close,
-                               name=f'{marker}_{size}',
-                               scatter=True,
-                               marker=marker,
-                               marker_size=size,
-                               overlay=i % 2 == 0)  # Alternate between overlay and separate
-                    self.shapes.append(ind)
-
-                # Test invalid marker fallback
-                invalid_close = self.data.Close.copy()
-                invalid_close[invalid_close % 10 != 0] = np.nan
-                self.invalid = self.I(lambda x: x, invalid_close,
-                                    scatter=True,
-                                    marker='invalid_shape',
-                                    marker_size=10)
-                self.invalid_checks.append(self.invalid)
-
-                # Test default size
-                default_close = self.data.Close.copy()
-                default_close[default_close % 15 != 0] = np.nan
-                self.default_size = self.I(lambda x: x, default_close,
-                                         scatter=True,
-                                         marker='circle')
-                self.default_checks.append(self.default_size)
+                    close += i * 10  # Offset to avoid overlap
+                    close[close % (i+2) != 0] = np.nan  # Create some gaps
+                    values.append(close)
+                
+                # Stack the values to create a multi-line indicator
+                stacked = np.vstack(values)
+                
+                # Create indicator with array of markers
+                ind = self.I(lambda x: x, stacked,
+                           name=['Line1', 'Line2', 'Line3'],
+                           scatter=True,
+                           marker=marker_array,
+                           marker_size=10,
+                           overlay=False)
+                self.array_markers.append(ind)
+                
+                # Test array of markers with different length than values
+                longer_array = ['circle', 'square', 'triangle', 'diamond', 'cross']
+                ind2 = self.I(lambda x: x, stacked,
+                            name=['LineA', 'LineB', 'LineC'],
+                            scatter=True,
+                            marker=longer_array,
+                            marker_size=10,
+                            overlay=True)
+                self.multi_array_markers.append(ind2)
+                
+                # Test array with invalid marker
+                invalid_array = ['circle', 'invalid_shape', 'triangle']
+                ind3 = self.I(lambda x: x, stacked,
+                            name=['X', 'Y', 'Z'],
+                            scatter=True,
+                            marker=invalid_array,
+                            overlay=False)
+                self.invalid_array_markers.append(ind3)
+                
+                # Test array of marker sizes
+                size_array = [5, 10, 15]
+                ind4 = self.I(lambda x: x, stacked,
+                            name=['Size1', 'Size2', 'Size3'],
+                            scatter=True,
+                            marker='circle',
+                            marker_size=size_array,
+                            overlay=True)
+                self.size_array_markers.append(ind4)
+                
+                # Test combined arrays of markers and sizes
+                ind5 = self.I(lambda x: x, stacked,
+                            name=['Combined1', 'Combined2', 'Combined3'],
+                            scatter=True,
+                            marker=['circle', 'square', 'triangle'],
+                            marker_size=[8, 12, 16],
+                            overlay=False)
+                self.combined_array_markers.append(ind5)
+                
+                # Test mismatched array lengths for marker and marker_size
+                ind6 = self.I(lambda x: x, stacked,
+                            name=['Mix1', 'Mix2', 'Mix3'],
+                            scatter=True,
+                            marker=['circle', 'square'],
+                            marker_size=[8, 12, 16, 20],
+                            overlay=False)
+                self.combined_array_markers.append(ind6)
 
             def next(self):
                 pass
 
-            def get_default_size(self):
-                return self.default_size
-
-        bt = Backtest(self.data, MarkerStrategy)
+        bt = Backtest(self.data, MarkerArrayStrategy)
         stats = bt.run()
         fig = bt.plot()
 
-        # Verify all indicators were created
+        # Verify indicators were created
         strategy = bt._strategy
-        self.assertEqual(len(strategy.shapes), 7 * 3)
-
-        # Verify each indicator has correct options
-        markers = ['circle', 'square', 'triangle', 'diamond', 'cross', 'x', 'star']
-        sizes = [6, 12, 18]
-
-        for ind, (marker, size) in zip(strategy.shapes, itertools.product(markers, sizes)):
-            self.assertTrue(ind._opts['scatter'])
-            self.assertEqual(ind._opts['marker'], marker)
-            self.assertEqual(ind._opts['marker_size'], size)
-
-        # Verify invalid marker falls back to circle
-        self.assertEqual(strategy.invalid_checks[0]._opts['marker'], 'circle')
-        self.assertEqual(strategy.invalid_checks[0]._opts['marker_size'], 10)
-
-        # Verify default size is None (will be set relative to bar width)
-        self.assertEqual(strategy.default_checks[0]._opts['marker'], 'circle')
-        self.assertIsNone(strategy.default_checks[0]._opts['marker_size'])
+        
+        # Verify marker array was properly set
+        self.assertEqual(strategy.array_markers[0]._opts['marker'], ['circle', 'square', 'triangle'])
+        
+        # Verify longer array was properly set
+        self.assertEqual(strategy.multi_array_markers[0]._opts['marker'], 
+                         ['circle', 'square', 'triangle', 'diamond', 'cross'])
+        
+        # Verify invalid array falls back to 'circle'
+        self.assertEqual(strategy.invalid_array_markers[0]._opts['marker'], ['circle', 'circle', 'triangle'])
+        
+        # Verify marker_size array was properly set
+        self.assertEqual(strategy.size_array_markers[0]._opts['marker_size'], [5, 10, 15])
+        
+        # Verify combined arrays work correctly
+        self.assertEqual(strategy.combined_array_markers[0]._opts['marker'], ['circle', 'square', 'triangle'])
+        self.assertEqual(strategy.combined_array_markers[0]._opts['marker_size'], [8, 12, 16])
+        
+        # Verify mismatched arrays work correctly (each cycles independently)
+        self.assertEqual(strategy.combined_array_markers[1]._opts['marker'], ['circle', 'square'])
+        self.assertEqual(strategy.combined_array_markers[1]._opts['marker_size'], [8, 12, 16, 20])
