@@ -60,6 +60,8 @@ def compute_stats(
         # Came straight from Backtest.run()
         trades_df = pd.DataFrame({
             'Size': [t.size for t in trades],
+            'IsLong': [t.is_long for t in trades],
+            'IsShort': [t.is_short for t in trades],
             'EntryBar': [t.entry_bar for t in trades],
             'ExitBar': [t.exit_bar for t in trades],
             'EntryPrice': [t.entry_price for t in trades],
@@ -170,6 +172,15 @@ def compute_stats(
     s.loc['# Trades'] = n_trades = len(trades_df)
     win_rate = np.nan if not n_trades else (pl > 0).mean()
     s.loc['Win Rate [%]'] = win_rate * 100
+    s.loc['# Long Trades'] = n_long_trades = len(trades_df.loc[trades_df['IsLong']])
+    long_trades_df = trades_df.loc[trades_df['IsLong']]
+    win_long_rate = np.nan if not n_long_trades else (long_trades_df['PnL'] > 0).mean()
+    s.loc['Win Long Rate [%]'] = win_long_rate * 100
+    s.loc['# Short Trades'] = n_short_trades = len(trades_df.loc[trades_df['IsShort']])
+    short_trades_df = trades_df.loc[trades_df['IsShort']]
+    win_short_rate = np.nan if not n_short_trades else (short_trades_df['PnL'] > 0).mean()
+    s.loc['Win Short Rate [%]'] = win_short_rate * 100
+    s.loc['Long/Short Ratio'] = np.nan if n_long_trades == 0 or n_short_trades == 0 else (n_long_trades / n_short_trades)
     s.loc['Best Trade [%]'] = returns.max() * 100
     s.loc['Worst Trade [%]'] = returns.min() * 100
     mean_return = geometric_mean(returns)
