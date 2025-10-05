@@ -681,7 +681,7 @@ class Trade:
 
     @property
     def pl_pct(self):
-        """Trade profit (positive) or loss (negative) in percent."""
+        """Trade profit (positive) or loss (negative) in percent relative to trade entry price."""
         price = self.__exit_price or self.__broker.last_price
         gross_pl_pct = copysign(1, self.__size) * (price / self.__entry_price - 1)
 
