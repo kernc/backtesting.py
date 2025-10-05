@@ -175,11 +175,11 @@ def compute_stats(
     s.loc['# Long Trades'] = n_long_trades = len(trades_df.loc[trades_df['IsLong']])
     long_trades_df = trades_df.loc[trades_df['IsLong']]
     win_long_rate = np.nan if not n_long_trades else (long_trades_df['PnL'] > 0).mean()
-    s.loc['Win Long Rate [%]'] = win_long_rate * 100
+    s.loc['Win Rate Longs [%]'] = win_long_rate * 100
     s.loc['# Short Trades'] = n_short_trades = len(trades_df.loc[trades_df['IsShort']])
     short_trades_df = trades_df.loc[trades_df['IsShort']]
     win_short_rate = np.nan if not n_short_trades else (short_trades_df['PnL'] > 0).mean()
-    s.loc['Win Short Rate [%]'] = win_short_rate * 100
+    s.loc['Win Rate Shorts [%]'] = win_short_rate * 100
     s.loc['Long/Short Ratio'] = np.nan if n_long_trades == 0 or n_short_trades == 0 else (n_long_trades / n_short_trades)
     s.loc['Best Trade [%]'] = returns.max() * 100
     s.loc['Worst Trade [%]'] = returns.min() * 100
