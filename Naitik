@@ -1,0 +1,45 @@
+//@version=5
+indicator("SMC Liquidity + BOS Strategy", overlay=true, timeframe="5", timeframe_gaps=true)
+
+// ─── Input Parameters ───
+trend_tf = input.timeframe("60", "Trend Timeframe (1H)")
+liquidity_tf = input.timeframe("30", "Liquidity Timeframe (30m)")
+RR = input.float(2.0, "Risk-Reward (TP = RR × SL)")
+lookback = input.int(12, "Lookback bars for BOS", minval=3)
+show_labels = input.bool(true, "Show Entry/Exit Labels")
+
+// ─── Higher timeframe data ───
+[high1h, low1h, close1h] = request.security(syminfo.tickerid, trend_tf, [high, low, close])
+[high30, low30] = request.security(syminfo.tickerid, liquidity_tf, [high, low])
+
+// ─── Detect simple trend (HH/HL) ───
+var float prev_high1h = na
+var float prev_low1h  = na
+var int trend = 0  // 1 = uptrend, -1 = downtrend, 0 = neutral
+
+if barstate.isnew
+    if not na(prev_high1h)
+        if high1h > prev_high1h and low1h > prev_low1h
+            trend := 1
+        else if high1h < prev_high1h and low1h < prev_low1h
+            trend := -1
+        else
+            trend := 0
+    prev_high1h := high1h
+    prev_low1h := low1h
+
+// ─── Liquidity sweep check ───
+liq_sweep_high = high > high30[1] and close < high
+liq_sweep_low  = low < low30[1] and close > low
+
+// ─── Break of Structure (BOS) on current timeframe ───
+bos_short = close < ta.lowest(low, lookback)[1]
+bos_long  = close > ta.highest(high, lookback)[1]
+
+// ─── Entry Conditions ───
+short_entry = (trend <= 0) and liq_sweep_high and bos_short
+long_entry  = (trend >= 0) and liq_sweep_low and bos_long
+
+// ─── Plot Buy/Sell Arrows ───
+plotshape(short_entry, title="Sell Signal", style=shape.triangledown, color=color.red, size=size.large, location=location.abovebar, text="SELL")
+plotshape(long_entry,  title="Buy Signal",  style=shape.triangleup,   color=color.lime, size=size.large, location
