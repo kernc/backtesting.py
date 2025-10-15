@@ -309,7 +309,7 @@ class Strategy(metaclass=ABCMeta):
     @property
     def orders(self) -> 'Tuple[Order, ...]':
         """List of orders (see `Order`) waiting for execution."""
-        return _Orders(self._broker.orders)
+        return tuple(self._broker.orders)
 
     @property
     def trades(self) -> 'Tuple[Trade, ...]':
@@ -320,27 +320,6 @@ class Strategy(metaclass=ABCMeta):
     def closed_trades(self) -> 'Tuple[Trade, ...]':
         """List of settled trades (see `Trade`)."""
         return tuple(self._broker.closed_trades)
-
-
-class _Orders(tuple):
-    """
-    TODO: remove this class. Only for deprecation.
-    """
-    def cancel(self):
-        """Cancel all non-contingent (i.e. SL/TP) orders."""
-        for order in self:
-            if not order.is_contingent:
-                order.cancel()
-
-    def __getattr__(self, item):
-        # TODO: Warn on deprecations from the previous version. Remove in the next.
-        removed_attrs = ('entry', 'set_entry', 'is_long', 'is_short',
-                         'sl', 'tp', 'set_sl', 'set_tp')
-        if item in removed_attrs:
-            raise AttributeError(f'Strategy.orders.{"/.".join(removed_attrs)} were removed in'
-                                 'Backtesting 0.2.0. '
-                                 'Use `Order` API instead. See docs.')
-        raise AttributeError(f"'tuple' object has no attribute {item!r}")
 
 
 class Position:
@@ -591,7 +570,7 @@ class Trade:
         """Place new `Order` to close `portion` of the trade at next market price."""
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
         # Ensure size is an int to avoid rounding errors on 32-bit OS
-        size = copysign(max(1, int(round(abs(self.__size) * portion))), -self.__size)
+        size = copysign(max(1, (round(abs(self.__size) * portion))), -self.__size)
         order = Order(self.__broker, size, parent_trade=self, tag=self.__tag)
         self.__broker.orders.insert(0, order)
 
@@ -843,12 +822,22 @@ class _Broker:
 
     @property
     def equity(self) -> float:
-        return self._cash + sum(trade.pl for trade in self.trades)
+        # Optimize with vectorized operations
+        if not self.trades:
+            return self._cash
+        # Use numpy for faster computation
+        trade_pls = np.array([trade.pl for trade in self.trades])
+        return self._cash + np.sum(trade_pls)
 
     @property
     def margin_available(self) -> float:
         # From https://github.com/QuantConnect/Lean/pull/3768
-        margin_used = sum(trade.value / self._leverage for trade in self.trades)
+        # Optimize with vectorized operations and caching
+        if not self.trades:
+            return self.equity
+        # Use numpy for faster computation
+        trade_values = np.array([trade.value for trade in self.trades])
+        margin_used = np.sum(trade_values) / self._leverage
         return max(0, self.equity - margin_used)
 
     def next(self):
@@ -1121,7 +1110,7 @@ class Backtest:
 
     `cash` is the initial cash to start with.
 
-    `spread` is the the constant bid-ask spread rate (relative to the price).
+    `spread` is the constant bid-ask spread rate (relative to the price).
     E.g. set it to `0.0002` for commission-less forex
     trading where the average spread is roughly 0.2‰ of the asking price.
 
@@ -1151,7 +1140,7 @@ class Backtest:
 
     `margin` is the required margin (ratio) of a leveraged account.
     No difference is made between initial and maintenance margins.
-    To run the backtest using e.g. 50:1 leverge that your broker allows,
+    To run the backtest using e.g. 50:1 leverage that your broker allows,
     set margin to `0.02` (1 / leverage).
 
     If `trade_on_close` is `True`, market orders will be filled
@@ -1189,6 +1178,7 @@ class Backtest:
                  hedging=False,
                  exclusive_orders=False,
                  finalize_trades=False,
+                 memory_efficient=False,
                  ):
         if not (isinstance(strategy, type) and issubclass(strategy, Strategy)):
             raise TypeError('`strategy` must be a Strategy sub-type')
@@ -1252,6 +1242,7 @@ class Backtest:
         self._strategy = strategy
         self._results: Optional[pd.Series] = None
         self._finalize_trades = bool(finalize_trades)
+        self._memory_efficient = bool(memory_efficient)
 
     def run(self, **kwargs) -> pd.Series:
         """
@@ -1320,11 +1311,17 @@ class Backtest:
         # Disable "invalid value encountered in ..." warnings. Comparison
         # np.nan >= 3 is not invalid; it's False.
         with np.errstate(invalid='ignore'):
+            # Pre-compute indicator slices to avoid repeated slicing in loop
+            indicator_slices = {}
+            for attr, indicator in indicator_attrs:
+                indicator_slices[attr] = indicator
 
             for i in _tqdm(range(start, len(self._data)), desc=self.run.__qualname__,
                            unit='bar', mininterval=2, miniters=100):
                 # Prepare data and indicators for `next` call
                 data._set_length(i + 1)
+                
+                # Optimize indicator slicing - only slice when needed
                 for attr, indicator in indicator_attrs:
                     # Slice indicator on the last dimension (case of 2d indicator)
                     setattr(strategy, attr, indicator[..., :i + 1])

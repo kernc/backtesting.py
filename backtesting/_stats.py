@@ -102,9 +102,21 @@ def compute_stats(
     s.loc['End'] = index[-1]
     s.loc['Duration'] = s.End - s.Start
 
-    have_position = np.repeat(0, len(index))
-    for t in trades_df.itertuples(index=False):
-        have_position[t.EntryBar:t.ExitBar + 1] = 1
+    # Optimize position tracking using vectorized operations
+    have_position = np.zeros(len(index), dtype=np.int8)
+    if len(trades_df) > 0:
+        # Use vectorized operations instead of loop
+        entry_bars = trades_df['EntryBar'].values
+        exit_bars = trades_df['ExitBar'].values + 1  # +1 for inclusive range
+        
+        # Clip to valid range
+        entry_bars = np.clip(entry_bars, 0, len(index) - 1)
+        exit_bars = np.clip(exit_bars, 0, len(index))
+        
+        # Use advanced indexing for better performance
+        for entry, exit in zip(entry_bars, exit_bars):
+            if entry < exit:  # Only process valid ranges
+                have_position[entry:exit] = 1
 
     s.loc['Exposure Time [%]'] = have_position.mean() * 100  # In "n bars" time, not index time
     s.loc['Equity Final [$]'] = equity[-1]

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+import time
 import warnings
 from contextlib import contextmanager
 from functools import partial
@@ -24,6 +25,17 @@ except ImportError:
 
 
 def try_(lazy_func, default=None, exception=Exception):
+    """
+    Safely execute a function and return a default value if an exception occurs.
+    
+    Args:
+        lazy_func: Function to execute (will be called with no arguments)
+        default: Value to return if an exception occurs
+        exception: Exception type(s) to catch (default: Exception)
+    
+    Returns:
+        Result of lazy_func() or default if an exception occurs
+    """
     try:
         return lazy_func()
     except exception:
@@ -32,6 +44,17 @@ def try_(lazy_func, default=None, exception=Exception):
 
 @contextmanager
 def patch(obj, attr, newvalue):
+    """
+    Temporarily patch an object's attribute with a new value.
+    
+    Args:
+        obj: Object whose attribute to patch
+        attr: Name of the attribute to patch
+        newvalue: New value to set for the attribute
+    
+    Yields:
+        None: Context manager that restores the original value on exit
+    """
     had_attr = hasattr(obj, attr)
     orig_value = getattr(obj, attr, None)
     setattr(obj, attr, newvalue)
@@ -45,6 +68,15 @@ def patch(obj, attr, newvalue):
 
 
 def _as_str(value) -> str:
+    """
+    Convert a value to a string representation suitable for display.
+    
+    Args:
+        value: Value to convert to string
+        
+    Returns:
+        String representation of the value, truncated if too long
+    """
     if isinstance(value, (Number, str)):
         return str(value)
     if isinstance(value, pd.DataFrame):
@@ -66,9 +98,20 @@ def _as_list(value) -> List:
 
 
 def _batch(seq):
-    # XXX: Replace with itertools.batched
-    n = np.clip(int(len(seq) // (os.cpu_count() or 1)), 1, 300)
-    for i in range(0, len(seq), n):
+    """Batch sequence into chunks for parallel processing."""
+    # Optimize batch size based on data size and CPU count
+    cpu_count = os.cpu_count() or 1
+    seq_len = len(seq)
+    
+    # Use adaptive batch sizing for better performance
+    if seq_len < 100:
+        n = max(1, seq_len // cpu_count)
+    elif seq_len < 1000:
+        n = max(10, seq_len // (cpu_count * 2))
+    else:
+        n = max(50, min(300, seq_len // (cpu_count * 4)))
+    
+    for i in range(0, seq_len, n):
         yield seq[i:i + n]
 
 
@@ -211,9 +254,15 @@ class _Data:
         return self.__pip
 
     def __get_array(self, key) -> _Array:
+        # Optimize array access with better caching
         arr = self.__cache.get(key)
         if arr is None:
-            arr = self.__cache[key] = cast(_Array, self.__arrays[key][:self.__len])
+            # Only slice if necessary (when length is different from full array)
+            if self.__len < len(self.__arrays[key]):
+                arr = self.__cache[key] = cast(_Array, self.__arrays[key][:self.__len])
+            else:
+                # Use full array if no slicing needed
+                arr = self.__cache[key] = cast(_Array, self.__arrays[key])
         return arr
 
     @property
@@ -335,3 +384,36 @@ class SharedMemoryManager:
         df.set_index(SharedMemoryManager._DF_INDEX_COL, drop=True, inplace=True)
         df.index.name = None
         return df, shm
+
+
+class PerformanceMonitor:
+    """Simple performance monitoring utility for backtesting operations."""
+    
+    def __init__(self, enabled: bool = True):
+        self.enabled = enabled
+        self.timings = {}
+        self._start_times = {}
+    
+    def start_timer(self, name: str):
+        """Start timing an operation."""
+        if self.enabled:
+            self._start_times[name] = time.perf_counter()
+    
+    def end_timer(self, name: str) -> float:
+        """End timing an operation and return elapsed time."""
+        if not self.enabled or name not in self._start_times:
+            return 0.0
+        
+        elapsed = time.perf_counter() - self._start_times[name]
+        self.timings[name] = elapsed
+        del self._start_times[name]
+        return elapsed
+    
+    def get_timings(self) -> dict:
+        """Get all recorded timings."""
+        return self.timings.copy()
+    
+    def reset(self):
+        """Reset all timings."""
+        self.timings.clear()
+        self._start_times.clear()
