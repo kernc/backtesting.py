@@ -38,8 +38,6 @@ kindly have a look at some similar alternative Python backtesting frameworks:
   A unique new method for designing trading and investing systems_.
 - [QTPyLib](https://github.com/ranaroussi/qtpylib) -
   a versatile, event-driven algorithmic trading library.
-- [Gemini](https://github.com/anfederico/Gemini) -
-  a backtester namely focusing on cryptocurrency markets.
 - [Quantdom](https://github.com/constverum/Quantdom) -
   a Qt-based framework that lets you focus on modeling financial strategies,
   portfolio management, and analyzing backtests.
@@ -103,3 +101,5 @@ abandoned, and here for posterity reference only:
   a library to construct, backtest, analyze, and evaluate portfolios
   and their benchmarks, with comprehensive documentation illustrating
   all underlying methodologies and statistics.
+- [Gemini](https://github.com/anfederico/Gemini) -
+  a backtester namely focusing on cryptocurrency markets.
