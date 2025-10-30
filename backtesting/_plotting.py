@@ -232,7 +232,8 @@ def plot(*, results: pd.Series,
 
     df.index.name = None  # Provides source name @index
     df['datetime'] = df.index  # Save original, maybe datetime index
-    df = df.reset_index(drop=True)
+    df = df.copy()
+    df['datetime'] = df.index
     equity_data = equity_data.reset_index(drop=True)
     index = df.index
 
