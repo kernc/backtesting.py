@@ -344,17 +344,21 @@ class Position:
     @property
     def size(self) -> float:
         """Position size in units of asset. Negative if position is short."""
-        return sum(trade.size for trade in self.__broker.trades)
+        if self.__broker._trade_sums_dirty:
+            self.__broker._recalculate_trade_sums()
+        return self.__broker._open_trade_size_sum
 
     @property
     def pl(self) -> float:
         """Profit (positive) or loss (negative) of the current position in cash units."""
-        return sum(trade.pl for trade in self.__broker.trades)
+        return self.__broker.unrealized_pl
 
     @property
     def pl_pct(self) -> float:
         """Profit (positive) or loss (negative) of the current position in percent."""
-        total_invested = sum(trade.entry_price * abs(trade.size) for trade in self.__broker.trades)
+        if self.__broker._trade_sums_dirty:
+            self.__broker._recalculate_trade_sums()
+        total_invested = self.__broker._open_trade_entry_abs_value_sum
         return (self.pl / total_invested) * 100 if total_invested else 0
 
     @property
@@ -754,6 +758,10 @@ class _Broker:
         self.trades: List[Trade] = []
         self.position = Position(self)
         self.closed_trades: List[Trade] = []
+        self._trade_sums_dirty = True
+        self._open_trade_size_sum = 0
+        self._open_trade_entry_value_sum = 0.0
+        self._open_trade_entry_abs_value_sum = 0.0
 
     def _commission_func(self, order_size, price):
         return self._commission_fixed + abs(order_size) * price * self._commission_relative
@@ -811,6 +819,28 @@ class _Broker:
 
         return order
 
+    def _mark_trade_sums_dirty(self) -> None:
+        self._trade_sums_dirty = True
+
+    def _recalculate_trade_sums(self) -> None:
+        self._open_trade_size_sum = sum(int(trade.size) for trade in self.trades)
+        self._open_trade_entry_value_sum = sum(
+            trade.size * trade.entry_price for trade in self.trades
+        )
+        self._open_trade_entry_abs_value_sum = sum(
+            abs(trade.size) * trade.entry_price for trade in self.trades
+        )
+        self._trade_sums_dirty = False
+
+    @property
+    def unrealized_pl(self) -> float:
+        if self._trade_sums_dirty:
+            self._recalculate_trade_sums()
+        if not self.trades:
+            return 0.0
+        current_price = float(self._data.current_value("Close"))
+        return current_price * self._open_trade_size_sum - self._open_trade_entry_value_sum
+
     @property
     def last_price(self) -> float:
         """ Price at the last (current) close. """
@@ -825,7 +855,7 @@ class _Broker:
 
     @property
     def equity(self) -> float:
-        return self._cash + sum(trade.pl for trade in self.trades)
+        return self._cash + self.unrealized_pl
 
     @property
     def margin_available(self) -> float:
@@ -1058,6 +1088,7 @@ class _Broker:
     def _reduce_trade(self, trade: Trade, price: float, size: float, time_index: int):
         assert trade.size * size < 0
         assert abs(trade.size) >= abs(size)
+        self._mark_trade_sums_dirty()
 
         size_left = trade.size + size
         assert size_left * trade.size >= 0
@@ -1078,6 +1109,7 @@ class _Broker:
         self._close_trade(close_trade, price, time_index)
 
     def _close_trade(self, trade: Trade, price: float, time_index: int):
+        self._mark_trade_sums_dirty()
         self.trades.remove(trade)
         if trade._sl_order:
             self.orders.remove(trade._sl_order)
@@ -1101,6 +1133,7 @@ class _Broker:
         self.trades.append(trade)
         # Apply broker commission at trade open
         self._cash -= self._commission(size, price)
+        self._mark_trade_sums_dirty()
         # Create SL/TP (bracket) orders.
         if tp:
             trade.tp = tp
