@@ -171,6 +171,20 @@ Before reporting bugs or posting to the
 please read [contributing guidelines](CONTRIBUTING.md), particularly the section
 about crafting useful bug reports and ```` ``` ````-fencing your code. We thank you!
 
+### Known Issues
+
+**macOS file descriptor limit**: On macOS, running the full test suite or optimization with many parameters may hit the default file descriptor limit (256). If you encounter `OSError: [Errno 24] Too many open files`, increase the limit:
+
+```bash
+ulimit -n 10240
+```
+
+For a permanent fix, add to your shell profile (`~/.zshrc` or `~/.bash_profile`):
+
+```bash
+ulimit -n 10240
+```
+
 
 Alternatives
 ------------
