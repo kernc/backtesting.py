@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "backtesting"
 description = "Backtest trading strategies in Python"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "AGPL-3.0" }
 authors = [
     { name = "Zach Lûster" }
@@ -39,6 +39,7 @@ dependencies = [
     "numpy>=1.17.0",
     "pandas>=0.25.0,!=0.25.0",
     "bokeh>=3.0.0,!=3.0.*,!=3.2.*",
+    "polars>=1.36.1",
 ]
 dynamic = ["version"]
 
@@ -64,9 +65,31 @@ test = [
     "ipywidgets",
 ]
 dev = [
-    "flake8",
+    "ruff",
     "coverage",
-    "mypy",
+    "pyright",
+]
+examples = [
+    "jupyter",
+    "matplotlib",
+    "scikit-learn",
+    "ipykernel",
+]
+all = [
+    "pdoc3",
+    "jupytext>=1.3",
+    "nbconvert",
+    "ipykernel",
+    "jupyter_client",
+    "matplotlib",
+    "scikit-learn",
+    "sambo",
+    "tqdm",
+    "ipywidgets",
+    "ruff",
+    "coverage",
+    "pyright",
+    "jupyter",
 ]
 
 [tool.setuptools.packages.find]
@@ -85,6 +108,9 @@ exclude = [
     '__pycache__',
     'doc/examples',
 ]
+line-length = 100
+
+[tool.ruff.lint]
 ignore = [
     'UP006',
     'UP007',
@@ -96,7 +122,6 @@ ignore = [
     'B011',
     'RUF002',
 ]
-line-length = 100
 select = [
     'I',
     'E',
@@ -111,7 +136,7 @@ select = [
     'YTT',
 ]
 
-[tool.ruff.pep8-naming]
+[tool.ruff.lint.pep8-naming]
 ignore-names = [
     'l',
     'h',
@@ -148,7 +173,3 @@ exclude_lines = [
     "^\\s*warn\\(",
 ]
 
-[tool.uv.workspace]
-members = [
-    ".",
-]

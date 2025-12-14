@@ -23,6 +23,61 @@ Installation
     $ pip install backtesting
 
 
+Development
+-----------
+
+This project uses [uv](https://docs.astral.sh/uv/) for dependency management and packaging.
+
+### Setup Development Environment
+
+```bash
+# Install all dependencies (dev, test, doc, examples)
+uv sync --all-extras
+
+# Or install specific extras
+uv sync --extra dev --extra test
+```
+
+### Development Commands
+
+```bash
+# Run tests
+uv run python -m backtesting.test
+
+# Run type checking
+uv run pyright backtesting/
+
+# Run linting and formatting
+uv run ruff check backtesting/
+uv run ruff format backtesting/
+
+# Run code coverage
+uv run coverage run -m backtesting.test
+uv run coverage report
+
+# Run examples
+uv run python doc/examples/main.py
+uv run jupyter notebook doc/examples/
+
+# Run any Python script with the dev environment
+uv run python your_script.py
+```
+
+### Managing Dependencies
+
+```bash
+# Add new dependencies
+uv add <package-name>                    # Core dependency
+uv add --optional dev <package-name>     # Dev dependency
+uv add --optional test <package-name>    # Test dependency
+
+# Sync after manual pyproject.toml edits
+uv sync --all-extras
+```
+
+The library is installed in **editable mode**, so changes to the code are immediately reflected.
+
+
 Usage
 -----
 ```python
