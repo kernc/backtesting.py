@@ -291,15 +291,23 @@ class SharedMemoryManager:
         return self
 
     def __exit__(self, *args, **kwargs):
+        errors = []
         for shm in self._shms:
             try:
                 shm.close()
-                if shm._create:
+            except Exception as e:
+                errors.append(e)
+
+            if shm._create:
+                try:
                     shm.unlink()
-            except Exception:
-                warnings.warn(f'Failed to unlink shared memory {shm.name!r}',
-                              category=ResourceWarning, stacklevel=2)
-                raise
+                except Exception as e:
+                    errors.append(e)
+
+        # Report errors but don't raise to ensure all resources are cleaned up
+        if errors:
+            warnings.warn(f'Failed to cleanup {len(errors)} shared memory object(s)',
+                          category=ResourceWarning, stacklevel=2)
 
     def arr2shm(self, vals):
         """Array to shared memory. Returns (shm_name, shape, dtype) used for restore."""

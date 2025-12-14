@@ -1681,11 +1681,13 @@ class Backtest:
             with Pool() as pool, SharedMemoryManager() as smm:
                 with patch(self, "_data", None):
                     bt = copy(self)  # bt._data will be reassigned in _mp_task worker
+                # Convert data to shared memory once, reuse for all batches
+                data_shm = smm.df2shm(self._data)
                 results = _tqdm(
                     pool.imap(
                         Backtest._mp_task,
                         (
-                            (bt, smm.df2shm(self._data), params_batch)
+                            (bt, data_shm, params_batch)
                             for params_batch in _batch(param_combos)
                         ),
                     ),
