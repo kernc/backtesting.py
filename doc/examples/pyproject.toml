@@ -1,0 +1,16 @@
+[project]
+name = "examples"
+version = "0.1.0"
+description = "Backtesting.py examples and development environment"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "backtesting",
+    "matplotlib",
+    "scikit-learn",
+    "jupyter",
+    "ipykernel",
+]
+
+[tool.uv.sources]
+backtesting = { path = "../..", editable = true }
