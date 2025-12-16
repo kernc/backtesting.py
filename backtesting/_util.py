@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 import warnings
+from collections.abc import Sequence
 from contextlib import contextmanager
 from functools import partial
 from itertools import chain
@@ -10,15 +11,17 @@ from multiprocessing import resource_tracker as _mprt
 from multiprocessing import shared_memory as _mpshm
 from numbers import Number
 from threading import Lock
-from typing import Dict, List, Optional, Sequence, Union, cast
+from typing import cast
 
 import numpy as np
 import pandas as pd
 
 try:
     from tqdm.auto import tqdm as _tqdm
+
     _tqdm = partial(_tqdm, leave=False)
 except ImportError:
+
     def _tqdm(seq, **_):
         return seq
 
@@ -48,18 +51,18 @@ def _as_str(value) -> str:
     if isinstance(value, (Number, str)):
         return str(value)
     if isinstance(value, pd.DataFrame):
-        return 'df'
-    name = str(getattr(value, 'name', '') or '')
-    if name in ('Open', 'High', 'Low', 'Close', 'Volume'):
+        return "df"
+    name = str(getattr(value, "name", "") or "")
+    if name in ("Open", "High", "Low", "Close", "Volume"):
         return name[:1]
     if callable(value):
-        name = getattr(value, '__name__', value.__class__.__name__).replace('<lambda>', 'λ')
+        name = getattr(value, "__name__", value.__class__.__name__).replace("<lambda>", "λ")
     if len(name) > 10:
-        name = name[:9] + '…'
+        name = name[:9] + "…"
     return name
 
 
-def _as_list(value) -> List:
+def _as_list(value) -> list:
     if isinstance(value, Sequence) and not isinstance(value, str):
         return list(value)
     return [value]
@@ -69,27 +72,34 @@ def _batch(seq):
     # XXX: Replace with itertools.batched
     n = np.clip(int(len(seq) // (os.cpu_count() or 1)), 1, 300)
     for i in range(0, len(seq), n):
-        yield seq[i:i + n]
+        yield seq[i : i + n]
 
 
-def _data_period(index) -> Union[pd.Timedelta, Number]:
+def _data_period(index) -> pd.Timedelta | Number:
     """Return data index period as pd.Timedelta"""
     values = pd.Series(index[-100:])
     return values.diff().dropna().median()
 
 
 def _strategy_indicators(strategy):
-    return {attr: indicator
-            for attr, indicator in strategy.__dict__.items()
-            if isinstance(indicator, _Indicator)}.items()
+    return {
+        attr: indicator
+        for attr, indicator in strategy.__dict__.items()
+        if isinstance(indicator, _Indicator)
+    }.items()
 
 
 def _indicator_warmup_nbars(strategy):
     if strategy is None:
         return 0
-    nbars = max((np.isnan(indicator.astype(float)).argmin(axis=-1).max()
-                 for _, indicator in _strategy_indicators(strategy)
-                 if not indicator._opts['scatter']), default=0)
+    nbars = max(
+        (
+            np.isnan(indicator.astype(float)).argmin(axis=-1).max()
+            for _, indicator in _strategy_indicators(strategy)
+            if not indicator._opts["scatter"]
+        ),
+        default=0,
+    )
     return nbars
 
 
@@ -98,6 +108,7 @@ class _Array(np.ndarray):
     ndarray extended to supply .name and other arbitrary properties
     in ._opts dict.
     """
+
     def __new__(cls, array, *, name=None, **kwargs):
         obj = np.asarray(array).view(cls)
         obj.name = name or array.name
@@ -106,8 +117,8 @@ class _Array(np.ndarray):
 
     def __array_finalize__(self, obj):
         if obj is not None:
-            self.name = getattr(obj, 'name', '')
-            self._opts = getattr(obj, '_opts', {})
+            self.name = getattr(obj, "name", "")
+            self._opts = getattr(obj, "_opts", {})
 
     # Make sure properties name and _opts are carried over
     # when (un-)pickling.
@@ -138,13 +149,13 @@ class _Array(np.ndarray):
     @property
     def s(self) -> pd.Series:
         values = np.atleast_2d(self)
-        index = self._opts['index'][:values.shape[1]]
+        index = self._opts["index"][: values.shape[1]]
         return pd.Series(values[0], index=index, name=self.name)
 
     @property
     def df(self) -> pd.DataFrame:
         values = np.atleast_2d(np.asarray(self))
-        index = self._opts['index'][:values.shape[1]]
+        index = self._opts["index"][: values.shape[1]]
         df = pd.DataFrame(values.T, index=index, columns=[self.name] * len(values))
         return df
 
@@ -160,12 +171,13 @@ class _Data:
     and the returned "series" are _not_ `pd.Series` but `np.ndarray`
     for performance reasons.
     """
+
     def __init__(self, df: pd.DataFrame):
         self.__df = df
         self.__len = len(df)  # Current length
-        self.__pip: Optional[float] = None
-        self.__cache: Dict[str, _Array] = {}
-        self.__arrays: Dict[str, _Array] = {}
+        self.__pip: float | None = None
+        self.__cache: dict[str, _Array] = {}
+        self.__arrays: dict[str, _Array] = {}
         self._update()
 
     def __getitem__(self, item):
@@ -183,62 +195,63 @@ class _Data:
 
     def _update(self):
         index = self.__df.index.copy()
-        self.__arrays = {col: _Array(arr, index=index)
-                         for col, arr in self.__df.items()}
+        self.__arrays = {col: _Array(arr, index=index) for col, arr in self.__df.items()}
         # Leave index as Series because pd.Timestamp nicer API to work with
-        self.__arrays['__index'] = index
+        self.__arrays["__index"] = index
 
     def __repr__(self):
         i = min(self.__len, len(self.__df)) - 1
-        index = self.__arrays['__index'][i]
-        items = ', '.join(f'{k}={v}' for k, v in self.__df.iloc[i].items())
-        return f'<Data i={i} ({index}) {items}>'
+        index = self.__arrays["__index"][i]
+        items = ", ".join(f"{k}={v}" for k, v in self.__df.iloc[i].items())
+        return f"<Data i={i} ({index}) {items}>"
 
     def __len__(self):
         return self.__len
 
     @property
     def df(self) -> pd.DataFrame:
-        return (self.__df.iloc[:self.__len]
-                if self.__len < len(self.__df)
-                else self.__df)
+        return self.__df.iloc[: self.__len] if self.__len < len(self.__df) else self.__df
 
     @property
     def pip(self) -> float:
         if self.__pip is None:
-            self.__pip = float(10**-np.median([len(s.partition('.')[-1])
-                                               for s in self.__arrays['Close'].astype(str)]))
+            self.__pip = float(
+                10
+                ** -np.median(
+                    [len(s.partition(".")[-1]) for s in self.__arrays["Close"].astype(str)]
+                )
+            )
         return self.__pip
 
     def __get_array(self, key) -> _Array:
         arr = self.__cache.get(key)
         if arr is None:
-            arr = self.__cache[key] = cast(_Array, self.__arrays[key][:self.__len])
+            arr = self.__cache[key] = cast(_Array, self.__arrays[key][: self.__len])
         return arr
 
     @property
     def Open(self) -> _Array:
-        return self.__get_array('Open')
+        return self.__get_array("Open")
 
     @property
     def High(self) -> _Array:
-        return self.__get_array('High')
+        return self.__get_array("High")
 
     @property
     def Low(self) -> _Array:
-        return self.__get_array('Low')
+        return self.__get_array("Low")
 
     @property
     def Close(self) -> _Array:
-        return self.__get_array('Close')
+        return self.__get_array("Close")
 
     @property
     def Volume(self) -> _Array:
-        return self.__get_array('Volume')
+        return self.__get_array("Volume")
 
     @property
     def index(self) -> pd.DatetimeIndex:
-        return self.__get_array('__index')
+        return self.__get_array("__index")
 
     # Make pickling in Backtest.optimize() work with our catch-all __getattr__
     def __getstate__(self):
@@ -251,6 +264,7 @@ class _Data:
 if sys.version_info >= (3, 13):
     SharedMemory = _mpshm.SharedMemory
 else:
+
     class SharedMemory(_mpshm.SharedMemory):
         # From https://github.com/python/cpython/issues/82300#issuecomment-2169035092
         __lock = Lock()
@@ -260,7 +274,7 @@ else:
             if track:
                 return super().__init__(*args, **kwargs)
             with self.__lock:
-                with patch(_mprt, 'register', lambda *a, **kw: None):
+                with patch(_mprt, "register", lambda *a, **kw: None):
                     super().__init__(*args, **kwargs)
 
         def unlink(self):
@@ -275,6 +289,7 @@ class SharedMemoryManager:
     A simple shared memory contextmanager based on
     https://docs.python.org/3/library/multiprocessing.shared_memory.html#multiprocessing.shared_memory.SharedMemory
     """
+
     def __init__(self, create=False) -> None:
         self._shms: list[SharedMemory] = []
         self.__create = create
@@ -306,8 +321,11 @@ class SharedMemoryManager:
 
         # Report errors but don't raise to ensure all resources are cleaned up
         if errors:
-            warnings.warn(f'Failed to cleanup {len(errors)} shared memory object(s)',
-                          category=ResourceWarning, stacklevel=2)
+            warnings.warn(
+                f"Failed to cleanup {len(errors)} shared memory object(s)",
+                category=ResourceWarning,
+                stacklevel=2,
+            )
 
     def arr2shm(self, vals):
         """Array to shared memory. Returns (shm_name, shape, dtype) used for restore."""
@@ -316,15 +334,17 @@ class SharedMemoryManager:
         # np.array can't handle pandas' tz-aware datetimes
         # https://github.com/numpy/numpy/issues/18279
         buf = np.ndarray(vals.shape, dtype=vals.dtype.base, buffer=shm.buf)
-        has_tz = getattr(vals.dtype, 'tz', None)
+        has_tz = getattr(vals.dtype, "tz", None)
         buf[:] = vals.tz_localize(None) if has_tz else vals  # Copy into shared memory
         return shm.name, vals.shape, vals.dtype
 
     def df2shm(self, df):
-        return tuple((
-            (column, *self.arr2shm(values))
-            for column, values in chain([(self._DF_INDEX_COL, df.index)], df.items())
-        ))
+        return tuple(
+            (
+                (column, *self.arr2shm(values))
+                for column, values in chain([(self._DF_INDEX_COL, df.index)], df.items())
+            )
+        )
 
     @staticmethod
     def shm2s(shm, shape, dtype) -> pd.Series:
@@ -332,14 +352,17 @@ class SharedMemoryManager:
         arr.setflags(write=False)
         return pd.Series(arr, dtype=dtype)
 
-    _DF_INDEX_COL = '__bt_index'
+    _DF_INDEX_COL = "__bt_index"
 
     @staticmethod
     def shm2df(data_shm):
         shm = [SharedMemory(name=name, create=False, track=False) for _, name, _, _ in data_shm]
-        df = pd.DataFrame({
-            col: SharedMemoryManager.shm2s(shm, shape, dtype)
-            for shm, (col, _, shape, dtype) in zip(shm, data_shm)})
+        df = pd.DataFrame(
+            {
+                col: SharedMemoryManager.shm2s(shm, shape, dtype)
+                for shm, (col, _, shape, dtype) in zip(shm, data_shm)
+            }
+        )
         df.set_index(SharedMemoryManager._DF_INDEX_COL, drop=True, inplace=True)
         df.index.name = None
         return df, shm
