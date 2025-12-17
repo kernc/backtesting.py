@@ -56,8 +56,8 @@ def chdir(path):
 
 class SmaCross(Strategy):
     # NOTE: These values are also used on the website!
-    fast = 10
-    slow = 30
+    fast = 5
+    slow = 25
 
     def init(self):
         self.sma1 = self.I(SMA, self.data.Close, self.fast)

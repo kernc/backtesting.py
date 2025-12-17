@@ -278,7 +278,7 @@ class Strategy(metaclass=ABCMeta):
         Price data, roughly as passed into
         `backtesting.backtesting.Backtest.__init__`,
         but with two significant exceptions:
-
+ 
         * `data` is _not_ a DataFrame, but a custom structure
           that serves customized numpy arrays for reasons of performance
           and convenience. Besides OHLCV columns, `.index` and length,
@@ -1170,6 +1170,11 @@ class Backtest:
     [active and ongoing] at the end of the backtest will be closed on
     the last bar and will contribute to the computed backtest statistics.
 
+    If `random_state` is set to an integer, it will seed the random number
+    generator for consistent, reproducible simulation results. This is useful
+    when your strategy uses any randomness (e.g., random position sizing,
+    Monte Carlo simulations) and you want deterministic outcomes across runs.
+
     .. tip:: Fractional trading
         See also `backtesting.lib.FractionalBacktest` if you want to trade
         fractional units (of e.g. bitcoin).
@@ -1189,6 +1194,7 @@ class Backtest:
                  hedging=False,
                  exclusive_orders=False,
                  finalize_trades=False,
+                 random_state: Optional[int] = None,
                  ):
         if not (isinstance(strategy, type) and issubclass(strategy, Strategy)):
             raise TypeError('`strategy` must be a Strategy sub-type')
@@ -1252,6 +1258,7 @@ class Backtest:
         self._strategy = strategy
         self._results: Optional[pd.Series] = None
         self._finalize_trades = bool(finalize_trades)
+        self._random_state = random_state
 
     def run(self, **kwargs) -> pd.Series:
         """
@@ -1303,6 +1310,10 @@ class Backtest:
             period of the `Strategy.I` indicator which lags the most.
             Obviously, this can affect results.
         """
+        # Set random seed for consistent simulation results
+        if self._random_state is not None:
+            np.random.seed(self._random_state)
+
         data = _Data(self._data.copy(deep=False))
         broker: _Broker = self._broker(data=data)
         strategy: Strategy = self._strategy(broker, data, kwargs)

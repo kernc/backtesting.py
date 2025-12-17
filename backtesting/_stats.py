@@ -28,7 +28,8 @@ def compute_drawdown_duration_peaks(dd: pd.Series):
 
 
 def geometric_mean(returns: pd.Series) -> float:
-    returns = returns.fillna(0) + 1
+    # Use linear interpolation (arithmetic mean of neighbors) instead of fillna(0)
+    returns = returns.interpolate(method='linear', limit_direction='both') + 1
     if np.any(returns <= 0):
         return 0
     return np.exp(np.log(returns).sum() / (len(returns) or np.nan)) - 1

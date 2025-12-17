@@ -22,3 +22,7 @@ build/*
 *~*
 
 .venv/
+
+# Environment files with secrets
+.env
+.claude/.env
