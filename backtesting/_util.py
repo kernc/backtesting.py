@@ -217,8 +217,8 @@ class _Data:
         return arr
 
     def _current_value(self, key: str):
-        if self.__len <= 0:
-            raise IndexError("No data available")
+        # Known fast path to avoid needless __get_array reslicing
+        assert self.__len >= 0, self
         return self.__arrays[key][self.__len - 1]
 
     @property
