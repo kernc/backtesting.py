@@ -889,9 +889,7 @@ class _Broker:
             # Check if stop condition was hit
             stop_price = order.stop
             if stop_price:
-                is_stop_hit = (
-                    high >= stop_price if order.is_long else low <= stop_price
-                )
+                is_stop_hit = ((high >= stop_price) if order.is_long else (low <= stop_price))
                 if not is_stop_hit:
                     continue
 
@@ -902,9 +900,7 @@ class _Broker:
             # Determine purchase price.
             # Check if limit order can be filled.
             if order.limit:
-                is_limit_hit = (
-                    low <= order.limit if order.is_long else high >= order.limit
-                )
+                is_limit_hit = low <= order.limit if order.is_long else high >= order.limit
                 # When stop and limit are hit within the same bar, we pessimistically
                 # assume limit was hit before the stop (i.e. "before it counts")
                 is_limit_hit_before_stop = (is_limit_hit and
@@ -915,20 +911,14 @@ class _Broker:
                     continue
 
                 # stop_price, if set, was hit within this bar
-                price = (
-                    min(stop_price or open, order.limit)
-                    if order.is_long
-                    else max(stop_price or open, order.limit)
-                )
+                price = (min(stop_price or open, order.limit)
+                         if order.is_long else
+                         max(stop_price or open, order.limit))
             else:
                 # Market-if-touched / market order
                 # Contingent orders always on next open
                 prev_close = data.Close[-2]
-                price = (
-                    prev_close
-                    if self._trade_on_close and not order.is_contingent
-                    else open
-                )
+                price = prev_close if self._trade_on_close and not order.is_contingent else open
                 if stop_price:
                     price = max(price, stop_price) if order.is_long else min(price, stop_price)
 
@@ -1039,28 +1029,12 @@ class _Broker:
                         reprocess_orders = True
                     # Order.stop and TP hit within the same bar, but SL wasn't. This case
                     # is not ambiguous, because stop and TP go in the same price direction.
-                    elif (
-                        stop_price
-                        and not order.limit
-                        and order.tp
-                        and (
-                            (
-                                order.is_long
-                                and order.tp <= high
-                                and (order.sl or -np.inf) < low
-                            )
-                            or (
-                                order.is_short
-                                and order.tp >= low
-                                and (order.sl or np.inf) > high
-                            )
-                        )
-                    ):
+                    elif stop_price and not order.limit and order.tp and (
+                            (order.is_long and order.tp <= high and (order.sl or -np.inf) < low) or
+                            (order.is_short and order.tp >= low and (order.sl or np.inf) > high)):
                         reprocess_orders = True
-                    elif (
-                        low <= (order.sl or -np.inf) <= high
-                        or low <= (order.tp or -np.inf) <= high
-                    ):
+                    elif (low <= (order.sl or -np.inf) <= high or
+                          low <= (order.tp or -np.inf) <= high):
                         warnings.warn(
                             f"({data.index[-1]}) A contingent SL/TP order would execute in the "
                             "same bar its parent stop/limit order was turned into a trade. "
