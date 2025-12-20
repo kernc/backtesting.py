@@ -882,9 +882,7 @@ class _Broker:
 
     def _process_orders(self):
         data = self._data
-        open_price = data._current_value("Open")
-        high_price = data._current_value("High")
-        low_price = data._current_value("Low")
+        open, high, low = data._current_value("Open"), data._current_value("High"), data._current_value("Low")
         reprocess_orders = False
 
         # Process orders
@@ -898,7 +896,7 @@ class _Broker:
             stop_price = order.stop
             if stop_price:
                 is_stop_hit = (
-                    high_price >= stop_price if order.is_long else low_price <= stop_price
+                    high >= stop_price if order.is_long else low <= stop_price
                 )
                 if not is_stop_hit:
                     continue
@@ -911,7 +909,7 @@ class _Broker:
             # Check if limit order can be filled.
             if order.limit:
                 is_limit_hit = (
-                    low_price <= order.limit if order.is_long else high_price >= order.limit
+                    low <= order.limit if order.is_long else high >= order.limit
                 )
                 # When stop and limit are hit within the same bar, we pessimistically
                 # assume limit was hit before the stop (i.e. "before it counts")
@@ -924,9 +922,9 @@ class _Broker:
 
                 # stop_price, if set, was hit within this bar
                 price = (
-                    min(stop_price or open_price, order.limit)
+                    min(stop_price or open, order.limit)
                     if order.is_long
-                    else max(stop_price or open_price, order.limit)
+                    else max(stop_price or open, order.limit)
                 )
             else:
                 # Market-if-touched / market order
@@ -935,7 +933,7 @@ class _Broker:
                 price = (
                     prev_close
                     if self._trade_on_close and not order.is_contingent
-                    else open_price
+                    else open
                 )
                 if stop_price:
                     price = max(price, stop_price) if order.is_long else min(price, stop_price)
@@ -1054,20 +1052,20 @@ class _Broker:
                         and (
                             (
                                 order.is_long
-                                and order.tp <= high_price
-                                and (order.sl or -np.inf) < low_price
+                                and order.tp <= high
+                                and (order.sl or -np.inf) < low
                             )
                             or (
                                 order.is_short
-                                and order.tp >= low_price
-                                and (order.sl or np.inf) > high_price
+                                and order.tp >= low
+                                and (order.sl or np.inf) > high
                             )
                         )
                     ):
                         reprocess_orders = True
                     elif (
-                        low_price <= (order.sl or -np.inf) <= high_price
-                        or low_price <= (order.tp or -np.inf) <= high_price
+                        low <= (order.sl or -np.inf) <= high
+                        or low <= (order.tp or -np.inf) <= high
                     ):
                         warnings.warn(
                             f"({data.index[-1]}) A contingent SL/TP order would execute in the "
