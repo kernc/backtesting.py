@@ -838,7 +838,7 @@ class _Broker:
     @property
     def last_price(self) -> float:
         """ Price at the last (current) close. """
-        return self._data.Close[-1]
+        return self._data._current_value('Close')
 
     def _adjusted_price(self, size=None, price=None) -> float:
         """
@@ -869,7 +869,7 @@ class _Broker:
         if equity <= 0:
             assert self.margin_available <= 0
             for trade in self.trades:
-                self._close_trade(trade, self._data.Close[-1], i)
+                self._close_trade(trade, self.last_price, i)
             self._cash = 0
             self._equity[i:] = 0
             raise _OutOfMoneyError
