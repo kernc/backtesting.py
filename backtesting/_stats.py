@@ -97,34 +97,24 @@ def compute_stats(
         resolution = getattr(_period, 'resolution_string', None) or _period.resolution
         return value.ceil(resolution)
 
-    stat_items: list[tuple[str, object]] = []
-    start = index[0]
-    end = index[-1]
-    duration = end - start
-    stat_items.extend([
-        ('Start', start),
-        ('End', end),
-        ('Duration', duration),
-    ])
+    s = dict()
+    s['Start'] = index[0]
+    s['End'] = index[-1]
+    s['Duration'] = s['End'] - s['Start']
 
     have_position = np.repeat(0, len(index))
     for t in trades_df[['EntryBar', 'ExitBar']].itertuples(index=False):
         have_position[t.EntryBar:t.ExitBar + 1] = 1
 
-    exposure_time_pct = have_position.mean() * 100  # In "n bars" time, not index time
-    stat_items.append(('Exposure Time [%]', exposure_time_pct))
-    equity_final = equity[-1]
-    equity_peak = equity.max()
-    stat_items.append(('Equity Final [$]', equity_final))
-    stat_items.append(('Equity Peak [$]', equity_peak))
+    s['Exposure Time [%]'] = have_position.mean() * 100  # In "n bars" time, not index time
+    s['Equity Final [$]'] = equity[-1]
+    s['Equity Peak [$]'] = equity.max()
     if commissions:
-        stat_items.append(('Commissions [$]', commissions))
-    return_pct = (equity_final - equity[0]) / equity[0] * 100
-    stat_items.append(('Return [%]', return_pct))
+        s['Commissions [$]'] = commissions
+    s['Return [%]'] = (equity[-1] - equity[0]) / equity[0] * 100
     first_trading_bar = _indicator_warmup_nbars(strategy_instance)
     c = ohlc_data.Close.values
-    buy_hold_return_pct = (c[-1] - c[first_trading_bar]) / c[first_trading_bar] * 100
-    stat_items.append(('Buy & Hold Return [%]', buy_hold_return_pct))  # long-only return
+    s['Buy & Hold Return [%]'] = (c[-1] - c[first_trading_bar]) / c[first_trading_bar] * 100  # long-only return
 
     gmean_day_return: float = 0
     day_returns = np.array(np.nan)
@@ -147,29 +137,22 @@ def compute_stats(
     # Our annualized return matches `empyrical.annual_return(day_returns)` whereas
     # our risk doesn't; they use the simpler approach below.
     annualized_return = (1 + gmean_day_return)**annual_trading_days - 1
-    return_ann_pct = annualized_return * 100
-    volatility_ann_pct = np.sqrt((day_returns.var(ddof=int(bool(day_returns.shape))) + (1 + gmean_day_return)**2)**annual_trading_days - (1 + gmean_day_return)**(2 * annual_trading_days)) * 100  # noqa: E501
-    stat_items.append(('Return (Ann.) [%]', return_ann_pct))
-    stat_items.append(('Volatility (Ann.) [%]', volatility_ann_pct))
-    # s.loc['Return (Ann.) [%]'] = gmean_day_return * annual_trading_days * 100
-    # s.loc['Risk (Ann.) [%]'] = day_returns.std(ddof=1) * np.sqrt(annual_trading_days) * 100
+    s['Return (Ann.) [%]'] = annualized_return * 100
+    s['Volatility (Ann.) [%]'] = np.sqrt((day_returns.var(ddof=int(bool(day_returns.shape))) + (1 + gmean_day_return)**2)**annual_trading_days - (1 + gmean_day_return)**(2 * annual_trading_days)) * 100  # noqa: E501
+    # d['Return (Ann.) [%]'] = gmean_day_return * annual_trading_days * 100
+    # d['Risk (Ann.) [%]'] = day_returns.std(ddof=1) * np.sqrt(annual_trading_days) * 100
     if is_datetime_index:
-        time_in_years = (duration.days + duration.seconds / 86400) / annual_trading_days
-        cagr_pct = ((equity_final / equity[0])**(1 / time_in_years) - 1) * 100 if time_in_years else np.nan  # noqa: E501
-        stat_items.append(('CAGR [%]', cagr_pct))
+        time_in_years = (s['Duration'].days + s['Duration'].seconds / 86400) / annual_trading_days
+        s['CAGR [%]'] = ((s['Equity Final [$]'] / equity[0])**(1 / time_in_years) - 1) * 100 if time_in_years else np.nan  # noqa: E501
 
     # Our Sharpe mismatches `empyrical.sharpe_ratio()` because they use arithmetic mean return
     # and simple standard deviation
-    sharpe_denom = volatility_ann_pct or np.nan
-    sharpe_ratio = (return_ann_pct - risk_free_rate * 100) / sharpe_denom
-    stat_items.append(('Sharpe Ratio', sharpe_ratio))  # noqa: E501
+    s['Sharpe Ratio'] = (s['Return (Ann.) [%]'] - risk_free_rate * 100) / (s['Volatility (Ann.) [%]'] or np.nan)  # noqa: E501
     # Our Sortino mismatches `empyrical.sortino_ratio()` because they use arithmetic mean return
     with np.errstate(divide='ignore'):
-        sortino_ratio = (annualized_return - risk_free_rate) / (np.sqrt(np.mean(day_returns.clip(-np.inf, 0)**2)) * np.sqrt(annual_trading_days))  # noqa: E501
-    stat_items.append(('Sortino Ratio', sortino_ratio))
+        s['Sortino Ratio'] = (annualized_return - risk_free_rate) / (np.sqrt(np.mean(day_returns.clip(-np.inf, 0)**2)) * np.sqrt(annual_trading_days))  # noqa: E501
     max_dd = -np.nan_to_num(dd.max())
-    calmar_ratio = annualized_return / (-max_dd or np.nan)
-    stat_items.append(('Calmar Ratio', calmar_ratio))
+    s['Calmar Ratio'] = annualized_return / (-max_dd or np.nan)
     equity_log_returns = np.log(equity[1:] / equity[:-1])
     market_log_returns = np.log(c[1:] / c[:-1])
     beta = np.nan
@@ -178,42 +161,31 @@ def compute_stats(
         cov_matrix = np.cov(equity_log_returns, market_log_returns)
         beta = cov_matrix[0, 1] / cov_matrix[1, 1]
     # Jensen CAPM Alpha: can be strongly positive when beta is negative and B&H Return is large
-    alpha_pct = return_pct - risk_free_rate * 100 - beta * (buy_hold_return_pct - risk_free_rate * 100)  # noqa: E501
-    stat_items.append(('Alpha [%]', alpha_pct))
-    stat_items.append(('Beta', beta))
-    stat_items.append(('Max. Drawdown [%]', max_dd * 100))
-    stat_items.append(('Avg. Drawdown [%]', -dd_peaks.mean() * 100))
-    stat_items.append(('Max. Drawdown Duration', _round_timedelta(dd_dur.max())))
-    stat_items.append(('Avg. Drawdown Duration', _round_timedelta(dd_dur.mean())))
-    n_trades = len(trades_df)
-    stat_items.append(('# Trades', n_trades))
+    s['Alpha [%]'] = s['Return [%]'] - risk_free_rate * 100 - beta * (s['Buy & Hold Return [%]'] - risk_free_rate * 100)  # noqa: E501
+    s['Beta'] = beta
+    s['Max. Drawdown [%]'] = max_dd * 100
+    s['Avg. Drawdown [%]'] = -dd_peaks.mean() * 100
+    s['Max. Drawdown Duration'] = _round_timedelta(dd_dur.max())
+    s['Avg. Drawdown Duration'] = _round_timedelta(dd_dur.mean())
+    s['# Trades'] = n_trades = len(trades_df)
     win_rate = np.nan if not n_trades else (pl > 0).mean()
-    stat_items.append(('Win Rate [%]', win_rate * 100))
-    stat_items.append(('Best Trade [%]', returns.max() * 100))
-    stat_items.append(('Worst Trade [%]', returns.min() * 100))
+    s['Win Rate [%]'] = win_rate * 100
+    s['Best Trade [%]'] = returns.max() * 100
+    s['Worst Trade [%]'] = returns.min() * 100
     mean_return = geometric_mean(returns)
-    stat_items.append(('Avg. Trade [%]', mean_return * 100))
-    stat_items.append(('Max. Trade Duration', _round_timedelta(durations.max())))
-    stat_items.append(('Avg. Trade Duration', _round_timedelta(durations.mean())))
-    profit_factor = returns[returns > 0].sum() / (abs(returns[returns < 0].sum()) or np.nan)  # noqa: E501
-    stat_items.append(('Profit Factor', profit_factor))
-    expectancy = returns.mean() * 100
-    stat_items.append(('Expectancy [%]', expectancy))
-    sqn = np.sqrt(n_trades) * pl.mean() / (pl.std() or np.nan)
-    stat_items.append(('SQN', sqn))
-    kelly = win_rate - (1 - win_rate) / (pl[pl > 0].mean() / -pl[pl < 0].mean())
-    stat_items.append(('Kelly Criterion', kelly))
+    s['Avg. Trade [%]'] = mean_return * 100
+    s['Max. Trade Duration'] = _round_timedelta(durations.max())
+    s['Avg. Trade Duration'] = _round_timedelta(durations.mean())
+    s['Profit Factor'] = returns[returns > 0].sum() / (abs(returns[returns < 0].sum()) or np.nan)  # noqa: E501
+    s['Expectancy [%]'] = returns.mean() * 100
+    s['SQN'] = np.sqrt(n_trades) * pl.mean() / (pl.std() or np.nan)
+    s['Kelly Criterion'] = win_rate - (1 - win_rate) / (pl[pl > 0].mean() / -pl[pl < 0].mean())
 
-    stat_items.extend([
-        ('_strategy', strategy_instance),
-        ('_equity_curve', equity_df),
-        ('_trades', trades_df),
-    ])
+    s['_strategy'] = strategy_instance
+    s['_equity_curve'] = equity_df
+    s['_trades'] = trades_df
 
-    labels, values = zip(*stat_items)
-    s = pd.Series(values, index=labels, dtype=object)
-
-    s = _Stats(s)
+    s = _Stats(s, dtype=object)
     return s
 
 
