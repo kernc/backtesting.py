@@ -838,7 +838,7 @@ class _Broker:
             self._recalculate_trade_sums()
         if not self.trades:
             return 0.0
-        current_price = float(self._data.current_value("Close"))
+        current_price = float(self._data._current_value("Close"))
         return current_price * self._open_trade_size_sum - self._open_trade_entry_value_sum
 
     @property
@@ -882,9 +882,9 @@ class _Broker:
 
     def _process_orders(self):
         data = self._data
-        open_price = data.current_value("Open")
-        high_price = data.current_value("High")
-        low_price = data.current_value("Low")
+        open_price = data._current_value("Open")
+        high_price = data._current_value("High")
+        low_price = data._current_value("Low")
         reprocess_orders = False
 
         # Process orders

@@ -216,7 +216,7 @@ class _Data:
             arr = self.__cache[key] = cast(_Array, self.__arrays[key][:self.__len])
         return arr
 
-    def current_value(self, key: str):
+    def _current_value(self, key: str):
         if self.__len <= 0:
             raise IndexError("No data available")
         return self.__arrays[key][self.__len - 1]
