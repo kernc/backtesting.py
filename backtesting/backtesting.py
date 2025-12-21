@@ -824,7 +824,7 @@ class _Broker:
         return (self.last_price * self._position_size -
                 sum(trade.size * trade.entry_price for trade in self.trades))
 
-    def _trades_cache_clear(self) -> None:
+    def _trades_cache_clear(self):
         self.__dict__.pop(self.__class__._position_size.func.__name__, None)
         self.__dict__.pop(self.__class__._position_initial_value.func.__name__, None)
         self.__dict__.pop(self.__class__._position_unrealized_pl.func.__name__, None)
