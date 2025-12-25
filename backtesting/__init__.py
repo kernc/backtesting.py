@@ -67,12 +67,17 @@ except ImportError:
 
 from . import lib  # noqa: F401
 from ._plotting import set_bokeh_output  # noqa: F401
+from ._util import try_
 from .backtesting import Backtest, Strategy  # noqa: F401
 
 
 # Add overridable backtesting.Pool used for parallel optimization
 def Pool(processes=None, initializer=None, initargs=()):
     import multiprocessing as mp
+    import sys
+    # Revert performance related change in Python>=3.14
+    if sys.platform.startswith('linux') and mp.get_start_method(allow_none=True) != 'fork':
+        try_(lambda: mp.set_start_method('fork'))
     if mp.get_start_method() == 'spawn':
         import warnings
         warnings.warn(

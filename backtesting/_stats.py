@@ -105,7 +105,7 @@ def compute_stats(
     s.loc['Duration'] = s.End - s.Start
 
     have_position = np.repeat(0, len(index))
-    for t in trades_df.itertuples(index=False):
+    for t in trades_df[['EntryBar', 'ExitBar']].itertuples(index=False):
         have_position[t.EntryBar:t.ExitBar + 1] = 1
 
     s.loc['Exposure Time [%]'] = have_position.mean() * 100  # In "n bars" time, not index time

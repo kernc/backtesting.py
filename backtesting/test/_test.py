@@ -173,7 +173,9 @@ class TestBacktest(TestCase):
                 self.position.is_long
 
                 if crossover(self.sma, self.data.Close):
-                    self.orders.cancel()  # cancels only non-contingent
+                    for order in self.orders:
+                        if not order.is_contingent:
+                            order.cancel()
                     price = self.data.Close[-1]
                     sl, tp = 1.05 * price, .9 * price
 
@@ -1039,10 +1041,13 @@ class TestDocs(TestCase):
     DOCS_DIR = os.path.join(os.path.dirname(__file__), '..', '..', 'doc')
 
     @unittest.skipUnless(os.path.isdir(DOCS_DIR), "docs dir doesn't exist")
+    @unittest.skipUnless(sys.platform.startswith('linux'), "test_examples requires mp.start_method=fork")
     def test_examples(self):
+        import backtesting
         examples = glob(os.path.join(self.DOCS_DIR, 'examples', '*.py'))
         self.assertGreaterEqual(len(examples), 4)
-        with chdir(gettempdir()):
+        with chdir(gettempdir()), \
+                patch(backtesting, 'Pool', mp.get_context('fork').Pool):
             for file in examples:
                 with self.subTest(example=os.path.basename(file)):
                     run_path(file)
