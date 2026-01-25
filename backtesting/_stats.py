@@ -57,32 +57,31 @@ def compute_stats(
         trades_df: pd.DataFrame = trades
         commissions = None  # Not shown
     else:
-        # Came straight from Backtest.run()
-        trades_df = pd.DataFrame({
-            'Size': [t.size for t in trades],
-            'EntryBar': [t.entry_bar for t in trades],
-            'ExitBar': [t.exit_bar for t in trades],
-            'EntryPrice': [t.entry_price for t in trades],
-            'ExitPrice': [t.exit_price for t in trades],
-            'SL': [t.sl for t in trades],
-            'TP': [t.tp for t in trades],
-            'PnL': [t.pl for t in trades],
-            'Commission': [t._commissions for t in trades],
-            'ReturnPct': [t.pl_pct for t in trades],
-            'EntryTime': [t.entry_time for t in trades],
-            'ExitTime': [t.exit_time for t in trades],
-        })
+        columns = [
+        'Size', 'EntryBar', 'ExitBar', 'EntryPrice', 'ExitPrice',
+        'SL', 'TP', 'PnL', 'Commission', 'ReturnPct',
+        'EntryTime', 'ExitTime', 'Tag'
+        ]
+        trades_df = pd.DataFrame([(t.size,t.entry_bar,t.exit_bar,t.entry_price,t.exit_price,t.sl,
+                 t.tp,t.pl,t._commissions,t.pl_pct,t.entry_time,t.exit_time,t.open_sl,t.open_tp,t.tag
+                ) for t in trades], columns=columns)
         trades_df['Duration'] = trades_df['ExitTime'] - trades_df['EntryTime']
         trades_df['Tag'] = [t.tag for t in trades]
 
         # Add indicator values
         if len(trades_df) and strategy_instance:
+            entry_bars = trades_df['EntryBar'].values
+            exit_bars = trades_df['ExitBar'].values
+            
             for ind in strategy_instance._indicators:
                 ind = np.atleast_2d(ind)
-                for i, values in enumerate(ind):  # multi-d indicators
-                    suffix = f'_{i}' if len(ind) > 1 else ''
-                    trades_df[f'Entry_{ind.name}{suffix}'] = values[trades_df['EntryBar'].values]
-                    trades_df[f'Exit_{ind.name}{suffix}'] = values[trades_df['ExitBar'].values]
+                n_dims = len(ind)
+                
+                for i, values in enumerate(ind):
+                    suffix = f'_{i}' if n_dims > 1 else ''
+                    # Vectorized indexing: values[array_of_indices]
+                    trades_df[f'Entry_{ind.name}{suffix}'] = values[entry_bars]
+                    trades_df[f'Exit_{ind.name}{suffix}'] = values[exit_bars]
 
         commissions = sum(t._commissions for t in trades)
     del trades
