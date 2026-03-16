@@ -168,6 +168,8 @@ def compute_stats(
     s.loc['Max. Drawdown Duration'] = _round_timedelta(dd_dur.max())
     s.loc['Avg. Drawdown Duration'] = _round_timedelta(dd_dur.mean())
     s.loc['# Trades'] = n_trades = len(trades_df)
+    s.loc['# Long Trades'] = (trades_df['Size'] > 0).sum() if n_trades else 0
+    s.loc['# Short Trades'] = (trades_df['Size'] < 0).sum() if n_trades else 0
     win_rate = np.nan if not n_trades else (pl > 0).mean()
     s.loc['Win Rate [%]'] = win_rate * 100
     s.loc['Best Trade [%]'] = returns.max() * 100
