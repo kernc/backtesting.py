@@ -162,27 +162,35 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
     equity_data = equity_data.resample(freq, label='right').agg(_EQUITY_AGG).dropna(how='all')
     assert equity_data.index.equals(df.index)
 
-    def _weighted_returns(s, trades=trades):
-        df = trades.loc[s.index]
-        return ((df['Size'].abs() * df['ReturnPct']) / df['Size'].abs().sum()).sum()
-
-    def _group_trades(column):
-        def f(s, new_index=pd.Index(df.index.astype(np.int64)), bars=trades[column]):
-            if s.size:
-                # Via int64 because on pandas recently broken datetime
-                mean_time = int(bars.loc[s.index].astype(np.int64).mean())
-                new_bar_idx = new_index.get_indexer([mean_time], method='nearest')[0]
-                return new_bar_idx
-        return f
-
     if len(trades):  # Avoid pandas "resampling on Int64 index" error
-        trades = trades.assign(count=1).resample(freq, on='ExitTime', label='right').agg(dict(
+        abs_sizes = trades['Size'].abs()
+        trades = trades.assign(
+            count=1,
+            _abs_size=abs_sizes,
+            _weighted_ret=abs_sizes * trades['ReturnPct'],
+        )
+        trades = trades.resample(freq, on='ExitTime', label='right').agg(dict(
             TRADES_AGG,
-            ReturnPct=_weighted_returns,
             count='sum',
-            EntryBar=_group_trades('EntryTime'),
-            ExitBar=_group_trades('ExitTime'),
+            _abs_size='sum',
+            _weighted_ret='sum',
+            EntryTime='mean',
+            ExitTime='mean',
         )).dropna()
+        trades['ReturnPct'] = (
+            trades['_weighted_ret'] / trades['_abs_size']
+        )
+        trades.drop(columns=['_abs_size', '_weighted_ret'], inplace=True)
+
+        new_index = pd.Index(df.index.astype(np.int64))
+        trades['EntryBar'] = new_index.get_indexer(
+            trades['EntryTime'].astype(np.int64),
+            method='nearest',
+        )
+        trades['ExitBar'] = new_index.get_indexer(
+            trades['ExitTime'].astype(np.int64),
+            method='nearest',
+        )
 
     return df, indicators, equity_data, trades
 
