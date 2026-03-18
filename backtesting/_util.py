@@ -171,8 +171,9 @@ class _Data:
     for performance reasons.
     """
 
-    def __init__(self, df: pd.DataFrame):
+    def __init__(self, df: pd.DataFrame, *, symbol: Optional[str] = None):
         self.__df = df
+        self.__symbol = symbol
         self.__len = len(df)  # Current length
         self.__pip: Optional[float] = None
         self.__cache: Dict[str, _Array] = {}
@@ -194,7 +195,9 @@ class _Data:
 
     def _update(self):
         index = self.__df.index.copy()
-        self.__arrays = {col: _Array(arr, index=index) for col, arr in self.__df.items()}
+        self.__arrays = {
+            col: _Array(arr, index=index, symbol=self.__symbol) for col, arr in self.__df.items()
+        }
         # Leave index as Series because pd.Timestamp nicer API to work with
         self.__arrays["__index"] = index
 
@@ -318,7 +321,9 @@ class _MultiData:
     def __init__(self, data: Mapping[str, pd.DataFrame]):
         if not data:
             raise ValueError("Need at least one asset data frame")
-        self.__assets: Dict[str, _Data] = {str(symbol): _Data(df) for symbol, df in data.items()}
+        self.__assets: Dict[str, _Data] = {
+            str(symbol): _Data(df, symbol=str(symbol)) for symbol, df in data.items()
+        }
         self.__symbols = tuple(self.__assets)
         self.__primary_symbol = self.__symbols[0]
         self.__columns: Dict[str, _DataColumnView] = {

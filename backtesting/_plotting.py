@@ -256,6 +256,7 @@ def plot(
     equity_data = results["_equity_curve"].copy(deep=False)
     trades = results["_trades"]
     is_multi_asset = bool(assets and len(assets) > 1)
+    asset_symbols = tuple(assets.keys()) if assets else ()
 
     plot_volume = plot_volume and not df.Volume.isnull().all()
     plot_equity = plot_equity and not trades.empty
@@ -311,6 +312,10 @@ def plot(
 
     source = ColumnDataSource(df)
     source.add((df.Close >= df.Open).values.astype(np.uint8).astype(str), "inc")
+    primary_symbol = asset_symbols[0] if is_multi_asset else "_"
+    asset_fig_by_symbol = {primary_symbol: fig_ohlc}
+    asset_source_by_symbol = {primary_symbol: source}
+    asset_extra_figs_by_symbol = {primary_symbol: []}
 
     trade_source = ColumnDataSource(
         dict(
@@ -359,6 +364,9 @@ return this.labels[index] || "";
         ),
         ("Volume", "@Volume{0,0}"),
     ]
+    asset_ohlc_extreme_by_symbol = {primary_symbol: ohlc_extreme_values}
+    asset_ohlc_tooltips_by_symbol = {primary_symbol: list(ohlc_tooltips)}
+    asset_ohlc_bars_by_symbol = {}
 
     def new_indicator_figure(**kwargs):
         kwargs.setdefault("height", _INDICATOR_HEIGHT)
@@ -573,16 +581,22 @@ return this.labels[index] || "";
         fig.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
         return fig
 
-    def _plot_volume_section():
+    def _plot_volume_section(symbol=None):
         """Volume section"""
+        base_symbol = symbol or primary_symbol
+        base_fig_ohlc = asset_fig_by_symbol[base_symbol]
+        base_source = asset_source_by_symbol[base_symbol]
         fig = new_indicator_figure(height=70, y_axis_label="Volume")
+        fig.x_range = base_fig_ohlc.x_range
         fig.yaxis.ticker.desired_num_ticks = 3
-        fig.xaxis.formatter = fig_ohlc.xaxis[0].formatter
+        fig.xaxis.formatter = base_fig_ohlc.xaxis[0].formatter
         fig.xaxis.visible = True
-        fig_ohlc.xaxis.visible = False  # Show only Volume's xaxis
-        r = fig.vbar("index", BAR_WIDTH, "Volume", source=source, color=inc_cmap)
+        base_fig_ohlc.xaxis.visible = False  # Show only Volume's xaxis
+        r = fig.vbar("index", BAR_WIDTH, "Volume", source=base_source, color=inc_cmap)
         set_tooltips(fig, [("Volume", "@Volume{0.00 a}")], renderers=[r])
         fig.yaxis.formatter = NumeralTickFormatter(format="0 a")
+        if symbol and symbol in asset_extra_figs_by_symbol:
+            asset_extra_figs_by_symbol[symbol].append(fig)
         return fig
 
     def _plot_superimposed_ohlc():
@@ -657,67 +671,108 @@ return this.labels[index] || "";
         )
         return r
 
-    def _plot_ohlc_trades():
+    def _plot_ohlc_trades(fig, symbol=None):
         """Trade entry / exit markers on OHLC plot"""
-        if is_multi_asset:
+        local_trades = trades if symbol is None else trades[trades.get("Symbol") == symbol]
+        if local_trades.empty:
             return
-        trade_source.add(trades[["EntryBar", "ExitBar"]].values.tolist(), "position_lines_xs")
-        trade_source.add(trades[["EntryPrice", "ExitPrice"]].values.tolist(), "position_lines_ys")
-        fig_ohlc.multi_line(
+        local_trade_source = ColumnDataSource(
+            dict(
+                index=local_trades["ExitBar"],
+                datetime=local_trades["ExitTime"],
+                size=local_trades["Size"],
+                returns_positive=(local_trades["ReturnPct"] > 0).astype(int).astype(str),
+                position_lines_xs=local_trades[["EntryBar", "ExitBar"]].values.tolist(),
+                position_lines_ys=local_trades[["EntryPrice", "ExitPrice"]].values.tolist(),
+            )
+        )
+        fig.multi_line(
             xs="position_lines_xs",
             ys="position_lines_ys",
-            source=trade_source,
+            source=local_trade_source,
             line_color=trades_cmap,
-            legend_label=f"Trades ({len(trades)})",
+            legend_label=f"Trades ({len(local_trades)})",
             line_width=8,
             line_alpha=1,
             line_dash="dotted",
         )
 
-    def _plot_multi_asset_section():
+    def _plot_asset_ohlc_sections():
         if not is_multi_asset:
-            return None
-        fig = new_indicator_figure(y_axis_label="Assets", height=120)
-        colors = colorgen()
-        for symbol, asset_df in assets.items():
-            close = asset_df["Close"].reindex(results["_equity_curve"].index)
-            norm = close / close.iloc[0]
-            key = f"asset_close_{symbol}"
-            source.add(norm.reset_index(drop=True), key)
-            fig.line(
+            return []
+
+        def new_asset_figure(primary_x_range):
+            fig = new_bokeh_figure(
+                x_range=primary_x_range,
+                active_scroll="xwheel_zoom",
+                active_drag="xpan",
+                y_axis_label="Price",
+                height=220,
+            )
+            fig.xaxis.visible = False
+            fig.yaxis.minor_tick_line_color = None
+            fig.yaxis.ticker.desired_num_ticks = 3
+            return fig
+
+        asset_figs = []
+        for symbol in asset_symbols[1:]:
+            asset_df = assets[symbol][list(OHLCV_AGG.keys())].copy(deep=False)
+            if is_datetime_index:
+                asset_df = asset_df.reindex(results["_equity_curve"].index)
+            asset_df.index.name = None
+            asset_df["datetime"] = asset_df.index
+            asset_df = asset_df.reset_index(drop=True)
+
+            asset_source = ColumnDataSource(asset_df)
+            asset_source.add(
+                (asset_df.Close >= asset_df.Open).values.astype(np.uint8).astype(str), "inc"
+            )
+
+            fig = new_asset_figure(fig_ohlc.x_range)
+            asset_fig_by_symbol[symbol] = fig
+            asset_source_by_symbol[symbol] = asset_source
+            asset_extra_figs_by_symbol[symbol] = []
+            asset_ohlc_extreme_by_symbol[symbol] = asset_df[["High", "Low"]].copy(deep=False)
+            asset_ohlc_tooltips_by_symbol[symbol] = [
+                ("x, y", NBSP.join(("$index", "$y{0,0.0[0000]}"))),
+                (
+                    "OHLC",
+                    NBSP.join(
+                        (
+                            "@Open{0,0.0[0000]}",
+                            "@High{0,0.0[0000]}",
+                            "@Low{0,0.0[0000]}",
+                            "@Close{0,0.0[0000]}",
+                        )
+                    ),
+                ),
+                ("Volume", "@Volume{0,0}"),
+            ]
+            fig.segment(
                 "index",
-                key,
-                source=source,
+                "High",
+                "index",
+                "Low",
+                source=asset_source,
+                color="black",
                 legend_label=symbol,
-                line_width=1.3,
-                line_color=next(colors),
             )
-
-        if len(trades):
-            trade_source.add(
-                np.take(["inverted_triangle", "triangle"], trades["Size"] > 0), "triangles_multi"
-            )
-            trade_source.add(trades["ReturnPct"], "returns_multi")
-            fig.scatter(
+            asset_bars = fig.vbar(
                 "index",
-                np.zeros(len(trades)) + 1,
-                source=trade_source,
-                marker="triangles_multi",
-                color=trades_cmap,
-                size=7,
+                BAR_WIDTH,
+                "Open",
+                "Close",
+                source=asset_source,
+                line_color="black",
+                fill_color=factor_cmap("inc", COLORS, ["0", "1"]),
+                legend_label=symbol,
             )
-            set_tooltips(
-                fig,
-                [
-                    ("Symbol", "@symbol"),
-                    ("Size", "@size{0,0}"),
-                    ("P/L", "@returns_multi{+0.[000]%}"),
-                ],
-                vline=False,
-            )
-
-        fig.yaxis.formatter = NumeralTickFormatter(format="0.0[00]")
-        return fig
+            asset_ohlc_bars_by_symbol[symbol] = asset_bars
+            if is_datetime_index:
+                fig.xaxis.formatter = fig_ohlc.xaxis[0].formatter
+            _plot_ohlc_trades(fig, symbol=symbol)
+            asset_figs.append(fig)
+        return asset_figs
 
     def _plot_indicators():
         """Strategy indicators"""
@@ -746,6 +801,11 @@ return this.labels[index] || "";
             if _too_many_dims(value):
                 continue
 
+            indicator_symbol = value._opts.get("symbol")
+            overlay_symbol = (
+                indicator_symbol if indicator_symbol in asset_fig_by_symbol else primary_symbol
+            )
+
             # Use .get()! A user might have assigned a Strategy.data-evolved
             # _Array without Strategy.I()
             is_overlay = value._opts.get("overlay")
@@ -757,10 +817,19 @@ return this.labels[index] || "";
                 continue
 
             if is_overlay:
-                fig = fig_ohlc
+                fig = asset_fig_by_symbol[overlay_symbol]
+                indicator_source = asset_source_by_symbol[overlay_symbol]
+                indicator_ohlc_extreme = asset_ohlc_extreme_by_symbol[overlay_symbol]
+                indicator_ohlc_tooltips = asset_ohlc_tooltips_by_symbol[overlay_symbol]
             else:
                 fig = new_indicator_figure()
-                indicator_figs.append(fig)
+                if overlay_symbol in asset_extra_figs_by_symbol:
+                    asset_extra_figs_by_symbol[overlay_symbol].append(fig)
+                else:
+                    indicator_figs.append(fig)
+                indicator_source = source
+                indicator_ohlc_extreme = ohlc_extreme_values
+                indicator_ohlc_tooltips = ohlc_tooltips
             tooltips = []
             colors = value._opts["color"]
             colors = (
@@ -781,18 +850,18 @@ return this.labels[index] || "";
                 source_name = f"{legend_labels[j]}_{i}_{j}"
                 if arr.dtype == bool:
                     arr = arr.astype(int)
-                source.add(arr, source_name)
+                indicator_source.add(arr, source_name)
                 tooltips.append(f"@{{{source_name}}}{{0,0.0[0000]}}")
                 kwargs = {}
                 if not is_muted:
                     kwargs["legend_label"] = legend_labels[j]
                 if is_overlay:
-                    ohlc_extreme_values[source_name] = arr
+                    indicator_ohlc_extreme[source_name] = arr
                     if is_scatter:
                         r2 = fig.circle(
                             "index",
                             source_name,
-                            source=source,
+                            source=indicator_source,
                             color=color,
                             line_color="black",
                             fill_alpha=0.8,
@@ -803,7 +872,7 @@ return this.labels[index] || "";
                         r2 = fig.line(
                             "index",
                             source_name,
-                            source=source,
+                            source=indicator_source,
                             line_color=color,
                             line_width=1.4 if is_muted else 1.5,
                             **kwargs,
@@ -815,7 +884,7 @@ return this.labels[index] || "";
                         r = fig.circle(
                             "index",
                             source_name,
-                            source=source,
+                            source=indicator_source,
                             color=color,
                             radius=BAR_WIDTH / 2 * 0.6,
                             **kwargs,
@@ -824,7 +893,7 @@ return this.labels[index] || "";
                         r = fig.line(
                             "index",
                             source_name,
-                            source=source,
+                            source=indicator_source,
                             line_color=color,
                             line_width=1.3,
                             **kwargs,
@@ -847,7 +916,7 @@ return this.labels[index] || "";
                             )
                         )
             if is_overlay:
-                ohlc_tooltips.append((tooltip_label, NBSP.join(tooltips)))
+                indicator_ohlc_tooltips.append((tooltip_label, NBSP.join(tooltips)))
             else:
                 set_tooltips(fig, [(tooltip_label, NBSP.join(tooltips))], vline=True, renderers=[r])
                 # If the sole indicator line on this figure,
@@ -870,21 +939,23 @@ return this.labels[index] || "";
     if plot_pl:
         figs_above_ohlc.append(_plot_pl_section())
 
-    if is_multi_asset:
-        multi_assets_fig = _plot_multi_asset_section()
-        if multi_assets_fig is not None:
-            figs_above_ohlc.append(multi_assets_fig)
+    asset_ohlc_figs = _plot_asset_ohlc_sections()
+
+    for symbol in asset_symbols[1:] if is_multi_asset else ():
+        if plot_volume:
+            _plot_volume_section(symbol=symbol)
 
     if plot_volume:
-        fig_volume = _plot_volume_section()
+        fig_volume = _plot_volume_section(symbol=primary_symbol)
         figs_below_ohlc.append(fig_volume)
 
     if superimpose and is_datetime_index:
         _plot_superimposed_ohlc()
 
     ohlc_bars = _plot_ohlc()
+    asset_ohlc_bars_by_symbol[primary_symbol] = ohlc_bars
     if plot_trades:
-        _plot_ohlc_trades()
+        _plot_ohlc_trades(fig_ohlc, symbol=asset_symbols[0] if is_multi_asset else None)
     indicator_figs = _plot_indicators()
     if reverse_indicators:
         indicator_figs = indicator_figs[::-1]
@@ -892,10 +963,16 @@ return this.labels[index] || "";
 
     _watermark(fig_ohlc)
 
-    set_tooltips(fig_ohlc, ohlc_tooltips, vline=True, renderers=[ohlc_bars])
+    for symbol, asset_fig in asset_fig_by_symbol.items():
+        set_tooltips(
+            asset_fig,
+            asset_ohlc_tooltips_by_symbol[symbol],
+            vline=True,
+            renderers=[asset_ohlc_bars_by_symbol[symbol]],
+        )
 
-    source.add(ohlc_extreme_values.min(1), "ohlc_low")
-    source.add(ohlc_extreme_values.max(1), "ohlc_high")
+    source.add(asset_ohlc_extreme_by_symbol[primary_symbol].min(1), "ohlc_low")
+    source.add(asset_ohlc_extreme_by_symbol[primary_symbol].max(1), "ohlc_high")
 
     custom_js_args = dict(ohlc_range=fig_ohlc.y_range, source=source)
     if plot_volume:
@@ -903,7 +980,13 @@ return this.labels[index] || "";
 
     fig_ohlc.x_range.js_on_change("end", CustomJS(args=custom_js_args, code=_AUTOSCALE_JS_CALLBACK))
 
-    figs = figs_above_ohlc + [fig_ohlc] + figs_below_ohlc
+    per_asset_blocks = []
+    if is_multi_asset:
+        for symbol in asset_symbols[1:]:
+            per_asset_blocks.extend(asset_extra_figs_by_symbol.get(symbol, []))
+            per_asset_blocks.append(asset_fig_by_symbol[symbol])
+
+    figs = figs_above_ohlc + per_asset_blocks + [fig_ohlc] + figs_below_ohlc
     linked_crosshair = CrosshairTool(
         dimensions="both",
         line_color="lightgrey",

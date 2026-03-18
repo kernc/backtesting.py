@@ -27,9 +27,10 @@ from ._plotting import plot  # noqa: I001
 from ._stats import compute_stats, dummy_stats
 from ._util import (
     SharedMemoryManager,
+    _Array,
     _as_str,
-    _Indicator,
     _Data,
+    _Indicator,
     _MultiData,
     _batch,
     _indicator_warmup_nbars,
@@ -193,8 +194,22 @@ class Strategy(metaclass=ABCMeta):
                 f"shape: {getattr(value, 'shape', '')}, returned value: {value})"
             )
 
+        indicator_symbol = next(
+            (
+                arg._opts.get("symbol")
+                for arg in args
+                if isinstance(arg, _Array) and arg._opts.get("symbol")
+            ),
+            None,
+        )
+
         if overlay is None and np.issubdtype(value.dtype, np.number):
-            x = value / self._data.Close
+            reference_close = (
+                self._data[indicator_symbol].Close
+                if indicator_symbol and isinstance(self._data, _MultiData)
+                else self._data.Close
+            )
+            x = value / reference_close
             # By default, overlay if strong majority of indicator values
             # is within 30% of Close
             with np.errstate(invalid="ignore"):
@@ -207,6 +222,7 @@ class Strategy(metaclass=ABCMeta):
             overlay=overlay,
             color=color,
             scatter=scatter,
+            symbol=indicator_symbol,
             # _Indicator.s Series accessor uses this:
             index=self.data.index,
         )
