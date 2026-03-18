@@ -49,6 +49,19 @@ bt = Backtest(GOOG, SmaCross, commission=.002,
               exclusive_orders=True)
 stats = bt.run()
 bt.plot()
+
+# Multi-asset (same API, pass symbol->DataFrame mapping)
+assets = {
+    'GOOG': GOOG,
+    'GOOG_HALF': GOOG.assign(Open=GOOG.Open * .5,
+                             High=GOOG.High * .5,
+                             Low=GOOG.Low * .5,
+                             Close=GOOG.Close * .5)
+}
+btm = Backtest(assets, SmaCross, commission=.002,
+               exclusive_orders=True)
+stats_m = btm.run()
+btm.plot()
 ```
 
 Results in:
