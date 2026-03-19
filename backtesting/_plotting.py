@@ -199,20 +199,29 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
         return f
 
     if len(trades):  # Avoid pandas "resampling on Int64 index" error
-        trades = (
-            trades.assign(count=1)
-            .resample(freq, on="ExitTime", label="right")
-            .agg(
-                dict(
-                    TRADES_AGG,
-                    ReturnPct=_weighted_returns,
-                    count="sum",
-                    EntryBar=_group_trades("EntryTime"),
-                    ExitBar=_group_trades("ExitTime"),
-                )
-            )
-            .dropna()
+        trades_agg = dict(
+            TRADES_AGG,
+            ReturnPct=_weighted_returns,
+            count="sum",
+            EntryBar=_group_trades("EntryTime"),
+            ExitBar=_group_trades("ExitTime"),
         )
+        if "Symbol" in trades.columns:
+            trades = (
+                trades.assign(count=1)
+                .groupby("Symbol", group_keys=True)
+                .resample(freq, on="ExitTime", label="right")
+                .agg(trades_agg)
+                .dropna()
+                .reset_index(level=0)
+            )
+        else:
+            trades = (
+                trades.assign(count=1)
+                .resample(freq, on="ExitTime", label="right")
+                .agg(trades_agg)
+                .dropna()
+            )
 
     return df, indicators, equity_data, trades
 
@@ -673,7 +682,12 @@ return this.labels[index] || "";
 
     def _plot_ohlc_trades(fig, symbol=None):
         """Trade entry / exit markers on OHLC plot"""
-        local_trades = trades if symbol is None else trades[trades.get("Symbol") == symbol]
+        if symbol is None:
+            local_trades = trades
+        elif "Symbol" in trades.columns:
+            local_trades = trades.loc[trades["Symbol"] == symbol]
+        else:
+            local_trades = trades.iloc[:0]
         if local_trades.empty:
             return
         local_trade_source = ColumnDataSource(
@@ -701,6 +715,21 @@ return this.labels[index] || "";
         if not is_multi_asset:
             return []
 
+        def _align_asset_to_primary_index(asset_df: pd.DataFrame, target_index: pd.DatetimeIndex):
+            if asset_df.index.equals(target_index):
+                return asset_df
+
+            # Map each source bar to the first target timestamp at or after it
+            bucket = target_index.searchsorted(asset_df.index, side="left")
+            valid = bucket < len(target_index)
+            if not np.any(valid):
+                return asset_df.iloc[:0]
+
+            grouped = asset_df.iloc[np.flatnonzero(valid)].groupby(bucket[valid]).agg(OHLCV_AGG)
+            out = pd.DataFrame(index=target_index, columns=asset_df.columns, dtype=float)
+            out.iloc[grouped.index.to_numpy(dtype=int)] = grouped.to_numpy()
+            return out
+
         def new_asset_figure(primary_x_range):
             fig = new_bokeh_figure(
                 x_range=primary_x_range,
@@ -718,7 +747,8 @@ return this.labels[index] || "";
         for symbol in asset_symbols[1:]:
             asset_df = assets[symbol][list(OHLCV_AGG.keys())].copy(deep=False)
             if is_datetime_index:
-                asset_df = asset_df.reindex(results["_equity_curve"].index)
+                target_index = pd.DatetimeIndex(df["datetime"])
+                asset_df = _align_asset_to_primary_index(asset_df, target_index)
             asset_df.index.name = None
             asset_df["datetime"] = asset_df.index
             asset_df = asset_df.reset_index(drop=True)
@@ -770,7 +800,8 @@ return this.labels[index] || "";
             asset_ohlc_bars_by_symbol[symbol] = asset_bars
             if is_datetime_index:
                 fig.xaxis.formatter = fig_ohlc.xaxis[0].formatter
-            _plot_ohlc_trades(fig, symbol=symbol)
+            if plot_trades:
+                _plot_ohlc_trades(fig, symbol=symbol)
             asset_figs.append(fig)
         return asset_figs
 
