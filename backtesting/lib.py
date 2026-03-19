@@ -18,7 +18,7 @@ from collections import OrderedDict
 from inspect import currentframe
 from itertools import chain, compress, count
 from numbers import Number
-from typing import Callable, Generator, Optional, Sequence, Union
+from typing import Callable, Generator, Mapping, Optional, Sequence, Union
 
 import numpy as np
 import pandas as pd
@@ -577,22 +577,32 @@ class FractionalBacktest(Backtest):
             )
             fractional_unit = 1 / kwargs.pop("satoshi")
         self._fractional_unit = fractional_unit
-        self.__data: pd.DataFrame = data.copy(deep=False)  # Shallow copy
-        for col in (
-            "Open",
-            "High",
-            "Low",
-            "Close",
-        ):
-            self.__data[col] = self.__data[col] * self._fractional_unit
-        for col in ("Volume",):
-            self.__data[col] = self.__data[col] / self._fractional_unit
+
+        def _fractionalize(df: pd.DataFrame) -> pd.DataFrame:
+            transformed = df.copy(deep=False)
+            for col in ("Open", "High", "Low", "Close"):
+                transformed[col] = transformed[col] * self._fractional_unit
+            for col in ("Volume",):
+                transformed[col] = transformed[col] / self._fractional_unit
+            return transformed
+
+        if isinstance(data, pd.DataFrame):
+            self.__data = _fractionalize(data)
+        elif isinstance(data, Mapping):
+            self.__data = {str(symbol): _fractionalize(df) for symbol, df in data.items()}
+        elif isinstance(data, Sequence) and not isinstance(data, (str, bytes)):
+            self.__data = {str(i): _fractionalize(df) for i, df in enumerate(data)}
+        else:
+            self.__data = data
         with warnings.catch_warnings(record=True):
             warnings.filterwarnings(action="ignore", message="frac")
             super().__init__(data, *args, **kwargs)
 
     def run(self, **kwargs) -> pd.Series:
-        patched_asset_data = {getattr(self, "_primary_symbol", "_"): self.__data}
+        if isinstance(self.__data, dict):
+            patched_asset_data = self.__data
+        else:
+            patched_asset_data = {getattr(self, "_primary_symbol", "_"): self.__data}
         with patch(self, "_data", self.__data), patch(self, "_asset_data", patched_asset_data):
             result = super().run(**kwargs)
 
