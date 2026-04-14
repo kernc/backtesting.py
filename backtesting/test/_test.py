@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import unittest
+import warnings
 from concurrent.futures.process import ProcessPoolExecutor
 from contextlib import contextmanager
 from glob import glob
@@ -981,6 +982,50 @@ class TestLib(TestCase):
                 self.assertEqual(heatmap.columns.tolist(), [0, 1, 2])
                 print(start_method, time.monotonic() - start_time)
         plot_heatmaps(heatmap.mean(axis=1), open_browser=False)
+
+    def test_MultiBacktest_keeps_zero_trade_runs(self):
+        datasets = [GOOG[:-4], GOOG[:-3], GOOG[:-2], GOOG[:-1], GOOG]
+        cases = {
+            'all_false': ([False, False, False, False, False], [0, 0, 0, 0, 0]),
+            'first_true_rest_false': ([True, False, False, False, False], [1, 0, 0, 0, 0]),
+            'first_false_second_true': ([False, True, False, False, False], [0, 1, 0, 0, 0]),
+        }
+
+        for name, (will_buys, expected_trades) in cases.items():
+            class TestStrat(Strategy):
+                def init(self):
+                    self.will_buy = will_buys[len(self.data.index) - 2144]
+                    self.has_bought = False
+
+                def next(self):
+                    if not self.will_buy:
+                        return
+                    if self.position:
+                        self.position.close()
+                    if not self.has_bought:
+                        self.buy()
+                        self.has_bought = True
+
+            with self.subTest(case=name), warnings.catch_warnings():
+                warnings.filterwarnings(
+                    'ignore',
+                    message='If you want to use multi-process optimization',
+                    category=RuntimeWarning,
+                )
+                result = MultiBacktest(
+                    datasets,
+                    TestStrat,
+                    cash=10_000,
+                    commission=.002,
+                    exclusive_orders=True,
+                ).run()
+
+            self.assertIsInstance(result, pd.DataFrame)
+            self.assertEqual(result.columns.tolist(), [0, 1, 2, 3, 4])
+            self.assertIn('# Trades', result.index)
+            self.assertEqual(result.loc['# Trades'].astype(int).tolist(), expected_trades)
+            self.assertFalse(any(isinstance(value, pd.Series) for value in result.to_numpy().ravel()))
+            self.assertIn('Equity Final [$]', result.index)
 
 
 class TestUtil(TestCase):
