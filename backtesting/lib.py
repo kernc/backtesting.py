@@ -552,9 +552,9 @@ class FractionalBacktest(Backtest):
         trades[['EntryPrice', 'ExitPrice', 'TP', 'SL']] /= self._fractional_unit
 
         indicators = result['_strategy']._indicators
-        for indicator in indicators:
+        for i, indicator in enumerate(indicators):
             if indicator._opts['overlay']:
-                indicator /= self._fractional_unit
+                indicators[i] = indicator / self._fractional_unit
 
         return result
 
