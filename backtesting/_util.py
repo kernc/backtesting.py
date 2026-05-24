@@ -78,10 +78,76 @@ def _data_period(index) -> Union[pd.Timedelta, Number]:
     return values.diff().dropna().median()
 
 
+def _symbols_from_opts(opts):
+    symbols = opts.get('symbols')
+    if symbols is not None:
+        return frozenset(symbols)
+    symbol = opts.get('symbol')
+    return frozenset(() if symbol is None else (symbol,))
+
+
+def _merged_symbols(*values):
+    symbols = set()
+
+    def _scan(value):
+        if isinstance(value, dict):
+            for item in value.values():
+                _scan(item)
+        elif isinstance(value, (list, tuple)):
+            for item in value:
+                _scan(item)
+        else:
+            opts = getattr(value, '_opts', None)
+            if opts is not None:
+                symbols.update(_symbols_from_opts(opts))
+
+    for value in values:
+        _scan(value)
+    return frozenset(symbols)
+
+
+def _symbol_from_symbols(symbols):
+    return next(iter(symbols)) if len(symbols) == 1 else None
+
 def _strategy_indicators(strategy):
-    return {attr: indicator
-            for attr, indicator in strategy.__dict__.items()
-            if isinstance(indicator, _Indicator)}.items()
+    return ((path, indicator)
+            for path, indicator, _ in _strategy_indicator_specs(strategy))
+
+
+def _strategy_indicator_specs(strategy):
+    """
+    Return strategy indicators together with setters used to reveal them gradually.
+
+    Historically only direct strategy attributes were supported. Multi-asset
+    strategies commonly keep per-symbol indicators in dictionaries, so we also
+    scan mutable containers while skipping Strategy._indicators, which keeps the
+    full indicator registry.
+    """
+    specs = []
+
+    def _add(path, indicator, setter):
+        specs.append((path, indicator, setter))
+
+    def _scan(value, path, setter):
+        if isinstance(value, _Indicator):
+            _add(path, value, setter)
+        elif isinstance(value, dict):
+            for key, item in value.items():
+                def dict_setter(newvalue, container=value, key=key):
+                    container[key] = newvalue
+                _scan(item, f'{path}[{key!r}]', dict_setter)
+        elif isinstance(value, list):
+            for i, item in enumerate(value):
+                def list_setter(newvalue, container=value, i=i):
+                    container[i] = newvalue
+                _scan(item, f'{path}[{i}]', list_setter)
+
+    for attr, value in strategy.__dict__.items():
+        if attr == '_indicators':
+            continue
+        _scan(value, attr, lambda newvalue, attr=attr: setattr(strategy, attr, newvalue))
+
+    return tuple(specs)
 
 
 def _indicator_warmup_nbars(strategy):
@@ -100,14 +166,52 @@ class _Array(np.ndarray):
     """
     def __new__(cls, array, *, name=None, **kwargs):
         obj = np.asarray(array).view(cls)
-        obj.name = name or array.name
-        obj._opts = kwargs
+        obj.name = name or getattr(array, 'name', '')
+        opts = dict(kwargs)
+        symbols = _symbols_from_opts(opts)
+        opts['symbols'] = symbols
+        opts['symbol'] = _symbol_from_symbols(symbols)
+        obj._opts = opts
         return obj
 
     def __array_finalize__(self, obj):
         if obj is not None:
             self.name = getattr(obj, 'name', '')
             self._opts = getattr(obj, '_opts', {})
+
+    def __array_ufunc__(self, ufunc, method, *inputs, **kwargs):
+        template = next((input for input in inputs if isinstance(input, _Array)), self)
+        symbols = set(_merged_symbols(*inputs))
+        unwrapped_inputs = tuple(
+            np.asarray(input) if isinstance(input, _Array) else input
+            for input in inputs)
+
+        if 'out' in kwargs and kwargs['out'] is not None:
+            kwargs = dict(kwargs)
+            kwargs['out'] = tuple(
+                np.asarray(output) if isinstance(output, _Array) else output
+                for output in kwargs['out'])
+
+        result = getattr(ufunc, method)(*unwrapped_inputs, **kwargs)
+        if result is NotImplemented:
+            return NotImplemented
+
+        opts = dict(getattr(template, '_opts', {}))
+        symbols.update(_symbols_from_opts(opts))
+        symbols = frozenset(symbols)
+        opts['symbols'] = symbols
+        opts['symbol'] = _symbol_from_symbols(symbols)
+        name = getattr(template, 'name', '')
+        cls = type(template)
+
+        def _wrap(value):
+            if value is None or not isinstance(value, np.ndarray):
+                return value
+            return cls(value, name=name, **opts)
+
+        if isinstance(result, tuple):
+            return tuple(_wrap(value) for value in result)
+        return _wrap(result)
 
     # Make sure properties name and _opts are carried over
     # when (un-)pickling.
@@ -160,8 +264,9 @@ class _Data:
     and the returned "series" are _not_ `pd.Series` but `np.ndarray`
     for performance reasons.
     """
-    def __init__(self, df: pd.DataFrame):
+    def __init__(self, df: pd.DataFrame, *, symbol=None):
         self.__df = df
+        self.__symbol = symbol
         self.__len = len(df)  # Current length
         self.__pip: Optional[float] = None
         self.__cache: Dict[str, _Array] = {}
@@ -183,7 +288,7 @@ class _Data:
 
     def _update(self):
         index = self.__df.index.copy()
-        self.__arrays = {col: _Array(arr, index=index)
+        self.__arrays = {col: _Array(arr, index=index, symbol=self.__symbol)
                          for col, arr in self.__df.items()}
         # Leave index as Series because pd.Timestamp nicer API to work with
         self.__arrays['__index'] = index
@@ -240,12 +345,67 @@ class _Data:
     def index(self) -> pd.DatetimeIndex:
         return self.__get_array('__index')
 
+    @property
+    def symbol(self):
+        return self.__symbol
+
     # Make pickling in Backtest.optimize() work with our catch-all __getattr__
     def __getstate__(self):
         return self.__dict__
 
     def __setstate__(self, state):
         self.__dict__ = state
+
+
+class _MultiData:
+    """
+    A synchronized collection of `_Data` accessors, keyed by asset symbol.
+    """
+    def __init__(self, dfs: Dict[str, pd.DataFrame]):
+        if not dfs:
+            raise ValueError('Need at least one data frame')
+        indexes = [df.index for df in dfs.values()]
+        index = indexes[0]
+        if any(not index.equals(other) for other in indexes[1:]):
+            raise ValueError('All multi-asset data frames must share an aligned index')
+
+        self.__data = {symbol: _Data(df, symbol=symbol) for symbol, df in dfs.items()}
+        self.__symbols = tuple(dfs)
+        self.__index = index
+        self.__len = len(index)
+
+    def __getitem__(self, symbol) -> _Data:
+        try:
+            return self.__data[symbol]
+        except KeyError:
+            raise KeyError(f"Symbol {symbol!r} not in data") from None
+
+    def __iter__(self):
+        return iter(self.__symbols)
+
+    def __len__(self):
+        return self.__len
+
+    def _set_length(self, length):
+        self.__len = length
+        for data in self.__data.values():
+            data._set_length(length)
+
+    def _update(self):
+        for data in self.__data.values():
+            data._update()
+
+    @property
+    def symbols(self):
+        return self.__symbols
+
+    @property
+    def index(self) -> pd.DatetimeIndex:
+        return self.__data[self.__symbols[0]].index
+
+    @property
+    def df(self) -> pd.DataFrame:
+        return pd.concat({symbol: data.df for symbol, data in self.__data.items()}, axis=1)
 
 
 if sys.version_info >= (3, 13):

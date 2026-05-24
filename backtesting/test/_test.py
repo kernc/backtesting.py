@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal
 
-from backtesting import Backtest, Strategy
+from backtesting import Backtest, PortfolioBacktest, Strategy
 from backtesting._stats import compute_drawdown_duration_peaks
 from backtesting._util import _Array, _as_str, _Indicator, patch, try_
 from backtesting.lib import (
@@ -981,6 +981,337 @@ class TestLib(TestCase):
                 self.assertEqual(heatmap.columns.tolist(), [0, 1, 2])
                 print(start_method, time.monotonic() - start_time)
         plot_heatmaps(heatmap.mean(axis=1), open_browser=False)
+
+    def test_PortfolioBacktest(self):
+        index = pd.date_range('2020-01-01', periods=6)
+        a = pd.DataFrame({
+            'Open': [10, 10, 10, 12, 12, 12],
+            'High': [10, 10, 10, 12, 12, 12],
+            'Low': [10, 10, 10, 12, 12, 12],
+            'Close': [10, 10, 10, 12, 12, 12],
+        }, index=index)
+        b = pd.DataFrame({
+            'Open': [20, 20, 20, 20, 18, 18],
+            'High': [20, 20, 20, 20, 18, 18],
+            'Low': [20, 20, 20, 20, 18, 18],
+            'Close': [20, 20, 20, 20, 18, 18],
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A', size=10)
+                    self.buy('B', size=5)
+                elif len(self.data) == 3:
+                    self.assert_positions()
+                    self.sell('A', size=10)
+                elif len(self.data) == 4:
+                    assert not self.position['A']
+                    assert self.position['B']
+                    self.position['B'].close()
+
+            def assert_positions(self):
+                assert self.position['A'].size == 10
+                assert self.position['B'].size == 5
+                assert len(self.trades) == 2
+
+        stats = PortfolioBacktest({'A': a, 'B': b}, S, cash=10_000).run()
+        self.assertEqual(stats['# Trades'], 2)
+        self.assertEqual(stats['_trades']['Symbol'].tolist(), ['A', 'B'])
+        self.assertEqual(stats['_trades']['PnL'].tolist(), [20, -10])
+        self.assertEqual(stats['Equity Final [$]'], 10_010)
+
+    def test_PortfolioBacktest_indicator_dicts(self):
+        index = pd.date_range('2020-01-01', periods=5)
+        data = {
+            symbol: pd.DataFrame({
+                'Open': values,
+                'High': values,
+                'Low': values,
+                'Close': values,
+            }, index=index)
+            for symbol, values in {
+                'A': np.arange(10, 15),
+                'B': np.arange(20, 25),
+            }.items()
+        }
+
+        class S(Strategy):
+            def init(self):
+                self.identity = {
+                    symbol: self.I(lambda close: close, self.data[symbol].Close,
+                                   name=f'{symbol} identity')
+                    for symbol in self.data.symbols
+                }
+
+            def next(self):
+                for indicator in self.identity.values():
+                    assert len(indicator) == len(self.data)
+                if len(self.data) == 2:
+                    self.buy('A', size=1)
+                elif len(self.data) == 4:
+                    self.position['A'].close()
+
+        stats = PortfolioBacktest(data, S).run()
+        self.assertEqual(stats['_trades']['Symbol'].tolist(), ['A'])
+        self.assertIn('Entry_A identity', stats['_trades'])
+
+    def test_PortfolioBacktest_indicators_with_same_name_keep_symbol_values(self):
+        index = pd.date_range('2020-01-01', periods=5)
+        data = {
+            symbol: pd.DataFrame({
+                'Open': values,
+                'High': values,
+                'Low': values,
+                'Close': values,
+            }, index=index)
+            for symbol, values in {
+                'A': np.arange(10, 15),
+                'B': np.arange(20, 25),
+            }.items()
+        }
+
+        class S(Strategy):
+            def init(self):
+                self.identity = {
+                    symbol: self.I(lambda close: close, self.data[symbol].Close,
+                                   name='same')
+                    for symbol in self.data.symbols
+                }
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A', size=1)
+                    self.buy('B', size=1)
+                elif len(self.data) == 4:
+                    self.position['A'].close()
+                    self.position['B'].close()
+
+        stats = PortfolioBacktest(data, S).run()
+        trades = stats['_trades'].sort_values('Symbol').reset_index(drop=True)
+        self.assertEqual(trades['Symbol'].tolist(), ['A', 'B'])
+        self.assertEqual(trades['Entry_same'].tolist(), [12, 22])
+        self.assertEqual(trades['Exit_same'].tolist(), [14, 24])
+        self.assertTrue(pd.api.types.is_numeric_dtype(trades['Entry_same']))
+        self.assertTrue(pd.api.types.is_numeric_dtype(trades['Exit_same']))
+        self.assertTrue(np.isfinite(trades['Entry_same']).all())
+        self.assertTrue(np.isfinite(trades['Exit_same']).all())
+
+    def test_PortfolioBacktest_cross_symbol_indicator_is_global(self):
+        index = pd.date_range('2020-01-01', periods=5)
+        data = {
+            'A': pd.DataFrame({
+                'Open': [10, 11, 12, 13, 14],
+                'High': [10, 11, 12, 13, 14],
+                'Low': [10, 11, 12, 13, 14],
+                'Close': [10, 11, 12, 13, 14],
+            }, index=index),
+            'B': pd.DataFrame({
+                'Open': [20, 22, 24, 26, 28],
+                'High': [20, 22, 24, 26, 28],
+                'Low': [20, 22, 24, 26, 28],
+                'Close': [20, 22, 24, 26, 28],
+            }, index=index),
+        }
+
+        class S(Strategy):
+            def init(self):
+                self.spread = self.I(lambda b, a: b - a,
+                                     self.data['B'].Close,
+                                     self.data['A'].Close,
+                                     name='spread')
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('B', size=1)
+                elif len(self.data) == 4:
+                    self.position['B'].close()
+
+        stats = PortfolioBacktest(data, S).run()
+        indicator = stats['_strategy']._indicators[0]
+        self.assertIsNone(indicator._opts.get('symbol'))
+        self.assertEqual(set(indicator._opts.get('symbols', ())), {'A', 'B'})
+        self.assertEqual(stats['_trades']['Entry_spread'].tolist(), [12])
+        self.assertEqual(stats['_trades']['Exit_spread'].tolist(), [14])
+
+    def test_PortfolioBacktest_precomputed_cross_symbol_indicator_is_global(self):
+        index = pd.date_range('2020-01-01', periods=5)
+        data = {
+            symbol: pd.DataFrame({
+                'Open': values,
+                'High': values,
+                'Low': values,
+                'Close': values,
+            }, index=index)
+            for symbol, values in {
+                'A': np.arange(10, 15),
+                'B': np.arange(20, 25),
+            }.items()
+        }
+
+        class S(Strategy):
+            def init(self):
+                spread = self.data['B'].Close - self.data['A'].Close
+                self.spread = self.I(lambda x: x, spread, name='spread')
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('B', size=1)
+                elif len(self.data) == 4:
+                    self.position['B'].close()
+
+        stats = PortfolioBacktest(data, S).run()
+        indicator = stats['_strategy']._indicators[0]
+        self.assertIsNone(indicator._opts.get('symbol'))
+        self.assertEqual(set(indicator._opts.get('symbols', ())), {'A', 'B'})
+        self.assertEqual(stats['_trades']['Entry_spread'].tolist(), [10])
+        self.assertEqual(stats['_trades']['Exit_spread'].tolist(), [10])
+
+    def test_PortfolioBacktest_duplicate_indicator_aliases_are_all_sliced(self):
+        index = pd.date_range('2020-01-01', periods=5)
+        values = np.arange(10, 15)
+        data = {
+            'A': pd.DataFrame({
+                'Open': values,
+                'High': values,
+                'Low': values,
+                'Close': values,
+            }, index=index)
+        }
+
+        class S(Strategy):
+            def init(self):
+                indicator = self.I(lambda close: close, self.data['A'].Close,
+                                   name='identity')
+                self.aliases = {'a': indicator, 'b': indicator}
+
+            def next(self):
+                assert len(self.aliases['a']) == len(self.data)
+                assert len(self.aliases['b']) == len(self.data)
+                if len(self.data) == 2:
+                    self.buy('A', size=1)
+                elif len(self.data) == 4:
+                    self.position['A'].close()
+
+        PortfolioBacktest(data, S).run()
+
+    def test_PortfolioBacktest_plot_passes_global_and_symbol_trades_separately(self):
+        import backtesting.backtesting as backtesting_module
+
+        index = pd.date_range('2020-01-01', periods=5)
+        data = {
+            'A': pd.DataFrame({
+                'Open': [10, 10, 10, 12, 12],
+                'High': [10, 10, 10, 12, 12],
+                'Low': [10, 10, 10, 12, 12],
+                'Close': [10, 10, 10, 12, 12],
+            }, index=index),
+            'B': pd.DataFrame({
+                'Open': [20, 20, 20, 20, 20],
+                'High': [20, 20, 20, 20, 20],
+                'Low': [20, 20, 20, 20, 20],
+                'Close': [20, 20, 20, 20, 20],
+            }, index=index),
+        }
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A', size=1)
+                elif len(self.data) == 4:
+                    self.position['A'].close()
+
+        bt = PortfolioBacktest(data, S)
+        bt.run()
+        captured = {}
+
+        def fake_plot(**kwargs):
+            captured.update(kwargs)
+            return 'plot-result'
+
+        with patch(backtesting_module, 'plot', fake_plot):
+            result = bt.plot(symbol='B')
+
+        self.assertEqual(result, 'plot-result')
+        self.assertEqual(len(captured['results']['_trades']), 1)
+        self.assertIn('trade_markers', captured)
+        self.assertEqual(len(captured['trade_markers']), 0)
+        self.assertIn('reverse_indicators', captured)
+        self.assertFalse(captured['reverse_indicators'])
+
+        captured.clear()
+        with patch(backtesting_module, 'plot', fake_plot):
+            bt.plot(symbol='B', reverse_indicators=True)
+        self.assertTrue(captured['reverse_indicators'])
+
+        with _tempfile() as f:
+            bt.plot(symbol='B', filename=f, open_browser=False, plot_pl=False)
+
+    def test_PortfolioBacktest_indicators_with_same_name_keep_boolean_values(self):
+        index = pd.date_range('2020-01-01', periods=5)
+        data = {
+            symbol: pd.DataFrame({
+                'Open': values,
+                'High': values,
+                'Low': values,
+                'Close': values,
+            }, index=index)
+            for symbol, values in {
+                'A': np.arange(10, 15),
+                'B': np.arange(20, 25),
+            }.items()
+        }
+
+        class S(Strategy):
+            def init(self):
+                self.signals = {
+                    symbol: self.I(lambda close: close % 2 == 0,
+                                   self.data[symbol].Close,
+                                   name='same_bool')
+                    for symbol in self.data.symbols
+                }
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A', size=1)
+                    self.buy('B', size=1)
+                elif len(self.data) == 4:
+                    self.position['A'].close()
+                    self.position['B'].close()
+
+        stats = PortfolioBacktest(data, S).run()
+        trades = stats['_trades'].sort_values('Symbol').reset_index(drop=True)
+        self.assertEqual(trades['Symbol'].tolist(), ['A', 'B'])
+        self.assertEqual(trades['Entry_same_bool'].tolist(), [True, True])
+        self.assertEqual(trades['Exit_same_bool'].tolist(), [True, True])
+
+    def test_PortfolioBacktest_restores_data_length_after_running_out_of_money(self):
+        index = pd.date_range('2020-01-01', periods=6)
+        data = pd.DataFrame({
+            'Open': [100, 100, 100, 1, 1, 1],
+            'High': [100, 100, 100, 1, 1, 1],
+            'Low': [100, 100, 100, 1, 1, 1],
+            'Close': [100, 100, 100, 1, 1, 1],
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A', size=100)
+
+        with np.errstate(divide='ignore'):
+            stats = PortfolioBacktest({'A': data}, S, cash=1_000, margin=.01).run()
+        self.assertEqual(stats['Equity Final [$]'], 0)
+        self.assertEqual(len(stats['_strategy'].data), len(data))
 
 
 class TestUtil(TestCase):

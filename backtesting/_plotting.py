@@ -114,12 +114,40 @@ _MAX_CANDLES = 10_000
 _INDICATOR_HEIGHT = 50
 
 
-def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
+def _resample_trades(freq, trades, df_index):
+    from .lib import TRADES_AGG
+
+    def _weighted_returns(s, trades=trades):
+        df = trades.loc[s.index]
+        return ((df['Size'].abs() * df['ReturnPct']) / df['Size'].abs().sum()).sum()
+
+    def _group_trades(column):
+        def f(s, new_index=pd.Index(df_index.astype(np.int64)), bars=trades[column]):
+            if s.size:
+                # Via int64 because on pandas recently broken datetime
+                mean_time = int(bars.loc[s.index].astype(np.int64).mean())
+                new_bar_idx = new_index.get_indexer([mean_time], method='nearest')[0]
+                return new_bar_idx
+        return f
+
+    if len(trades):  # Avoid pandas "resampling on Int64 index" error
+        trades = trades.assign(count=1).resample(freq, on='ExitTime', label='right').agg(dict(
+            TRADES_AGG,
+            ReturnPct=_weighted_returns,
+            count='sum',
+            EntryBar=_group_trades('EntryTime'),
+            ExitBar=_group_trades('ExitTime'),
+        )).dropna()
+
+    return trades
+
+
+def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades, trade_markers):
     if isinstance(resample_rule, str):
         freq = resample_rule
     else:
         if resample_rule is False or len(df) <= _MAX_CANDLES:
-            return df, indicators, equity_data, trades
+            return df, indicators, equity_data, trades, trade_markers
 
         freq_minutes = pd.Series({
             "1min": 1,
@@ -141,7 +169,7 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
         warnings.warn(f"Data contains too many candlesticks to plot; downsampling to {freq!r}. "
                       "See `Backtest.plot(resample=...)`")
 
-    from .lib import OHLCV_AGG, TRADES_AGG, _EQUITY_AGG
+    from .lib import OHLCV_AGG, _EQUITY_AGG
     df = df.resample(freq, label='right').agg(OHLCV_AGG).dropna()
 
     def try_mean_first(indicator):
@@ -162,29 +190,10 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
     equity_data = equity_data.resample(freq, label='right').agg(_EQUITY_AGG).dropna(how='all')
     assert equity_data.index.equals(df.index)
 
-    def _weighted_returns(s, trades=trades):
-        df = trades.loc[s.index]
-        return ((df['Size'].abs() * df['ReturnPct']) / df['Size'].abs().sum()).sum()
+    trades = _resample_trades(freq, trades, df.index)
+    trade_markers = _resample_trades(freq, trade_markers, df.index)
 
-    def _group_trades(column):
-        def f(s, new_index=pd.Index(df.index.astype(np.int64)), bars=trades[column]):
-            if s.size:
-                # Via int64 because on pandas recently broken datetime
-                mean_time = int(bars.loc[s.index].astype(np.int64).mean())
-                new_bar_idx = new_index.get_indexer([mean_time], method='nearest')[0]
-                return new_bar_idx
-        return f
-
-    if len(trades):  # Avoid pandas "resampling on Int64 index" error
-        trades = trades.assign(count=1).resample(freq, on='ExitTime', label='right').agg(dict(
-            TRADES_AGG,
-            ReturnPct=_weighted_returns,
-            count='sum',
-            EntryBar=_group_trades('EntryTime'),
-            ExitBar=_group_trades('ExitTime'),
-        )).dropna()
-
-    return df, indicators, equity_data, trades
+    return df, indicators, equity_data, trades, trade_markers
 
 
 def plot(*, results: pd.Series,
@@ -196,7 +205,8 @@ def plot(*, results: pd.Series,
          smooth_equity=False, relative_equity=True,
          superimpose=True, resample=True,
          reverse_indicators=True,
-         show_legend=True, open_browser=True):
+         show_legend=True, open_browser=True,
+         trade_markers=None):
     """
     Like much of GUI code everywhere, this is a mess.
     """
@@ -213,12 +223,15 @@ def plot(*, results: pd.Series,
     assert df.index.equals(results['_equity_curve'].index)
     equity_data = results['_equity_curve'].copy(deep=False)
     trades = results['_trades']
+    trade_markers = trades if trade_markers is None else trade_markers
+    portfolio_has_trades = not trades.empty
+    marker_has_trades = not trade_markers.empty
 
     plot_volume = plot_volume and not df.Volume.isnull().all()
-    plot_equity = plot_equity and not trades.empty
-    plot_return = plot_return and not trades.empty
-    plot_pl = plot_pl and not trades.empty
-    plot_trades = plot_trades and not trades.empty
+    plot_equity = plot_equity and portfolio_has_trades
+    plot_return = plot_return and portfolio_has_trades
+    plot_pl = plot_pl and portfolio_has_trades
+    plot_trades = plot_trades and marker_has_trades
     is_datetime_index = isinstance(df.index, pd.DatetimeIndex)
 
     from .lib import OHLCV_AGG
@@ -227,8 +240,8 @@ def plot(*, results: pd.Series,
 
     # Limit data to max_candles
     if is_datetime_index:
-        df, indicators, equity_data, trades = _maybe_resample_data(
-            resample, df, indicators, equity_data, trades)
+        df, indicators, equity_data, trades, trade_markers = _maybe_resample_data(
+            resample, df, indicators, equity_data, trades, trade_markers)
 
     df.index.name = None  # Provides source name @index
     df['datetime'] = df.index  # Save original, maybe datetime index
@@ -263,6 +276,12 @@ def plot(*, results: pd.Series,
         datetime=trades['ExitTime'],
         size=trades['Size'],
         returns_positive=(trades['ReturnPct'] > 0).astype(int).astype(str),
+    ))
+    ohlc_trade_source = ColumnDataSource(dict(
+        index=trade_markers['ExitBar'],
+        datetime=trade_markers['ExitTime'],
+        size=trade_markers['Size'],
+        returns_positive=(trade_markers['ReturnPct'] > 0).astype(int).astype(str),
     ))
 
     inc_cmap = factor_cmap('inc', COLORS, ['0', '1'])
@@ -325,7 +344,8 @@ return this.labels[index] || "";
         """Equity section"""
         # Max DD Dur. line
         equity = equity_data['Equity'].copy()
-        dd_end = equity_data['DrawdownDuration'].idxmax()
+        dd_duration = equity_data['DrawdownDuration']
+        dd_end = np.nan if dd_duration.isna().all() else dd_duration.idxmax()
         if np.isnan(dd_end):
             dd_start = dd_end = equity.index[0]
         else:
@@ -517,11 +537,13 @@ return this.labels[index] || "";
 
     def _plot_ohlc_trades():
         """Trade entry / exit markers on OHLC plot"""
-        trade_source.add(trades[['EntryBar', 'ExitBar']].values.tolist(), 'position_lines_xs')
-        trade_source.add(trades[['EntryPrice', 'ExitPrice']].values.tolist(), 'position_lines_ys')
+        ohlc_trade_source.add(
+            trade_markers[['EntryBar', 'ExitBar']].values.tolist(), 'position_lines_xs')
+        ohlc_trade_source.add(
+            trade_markers[['EntryPrice', 'ExitPrice']].values.tolist(), 'position_lines_ys')
         fig_ohlc.multi_line(xs='position_lines_xs', ys='position_lines_ys',
-                            source=trade_source, line_color=trades_cmap,
-                            legend_label=f'Trades ({len(trades)})',
+                            source=ohlc_trade_source, line_color=trades_cmap,
+                            legend_label=f'Trades ({len(trade_markers)})',
                             line_width=8, line_alpha=1, line_dash='dotted')
 
     def _plot_indicators():

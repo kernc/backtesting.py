@@ -72,17 +72,46 @@ def compute_stats(
             'EntryTime': [t.entry_time for t in trades],
             'ExitTime': [t.exit_time for t in trades],
         })
+        symbols = [t.symbol for t in trades]
+        if any(symbol is not None for symbol in symbols):
+            trades_df.insert(0, 'Symbol', symbols)
         trades_df['Duration'] = trades_df['ExitTime'] - trades_df['EntryTime']
         trades_df['Tag'] = [t.tag for t in trades]
 
         # Add indicator values
         if len(trades_df) and strategy_instance:
+            def _empty_indicator_column(values, index):
+                dtype = values.dtype
+                if (np.issubdtype(dtype, np.floating) or
+                        np.issubdtype(dtype, np.complexfloating)):
+                    return pd.Series(np.nan, index=index, dtype=dtype)
+                if (np.issubdtype(dtype, np.integer) or
+                        np.issubdtype(dtype, np.unsignedinteger)):
+                    return pd.Series(np.nan, index=index, dtype=float)
+                return pd.Series(np.nan, index=index, dtype=object)
+
             for ind in strategy_instance._indicators:
+                ind_symbol = ind._opts.get('symbol')
                 ind = np.atleast_2d(ind)
                 for i, values in enumerate(ind):  # multi-d indicators
                     suffix = f'_{i}' if len(ind) > 1 else ''
-                    trades_df[f'Entry_{ind.name}{suffix}'] = values[trades_df['EntryBar'].values]
-                    trades_df[f'Exit_{ind.name}{suffix}'] = values[trades_df['ExitBar'].values]
+                    entry_col = f'Entry_{ind.name}{suffix}'
+                    exit_col = f'Exit_{ind.name}{suffix}'
+                    if ind_symbol is not None and 'Symbol' in trades_df:
+                        if entry_col not in trades_df:
+                            trades_df[entry_col] = _empty_indicator_column(
+                                values, trades_df.index)
+                        if exit_col not in trades_df:
+                            trades_df[exit_col] = _empty_indicator_column(
+                                values, trades_df.index)
+                        mask = trades_df['Symbol'] == ind_symbol
+                        entry_bars = trades_df.loc[mask, 'EntryBar'].values
+                        exit_bars = trades_df.loc[mask, 'ExitBar'].values
+                        trades_df.loc[mask, entry_col] = values[entry_bars]
+                        trades_df.loc[mask, exit_col] = values[exit_bars]
+                    else:
+                        trades_df[entry_col] = values[trades_df['EntryBar'].values]
+                        trades_df[exit_col] = values[trades_df['ExitBar'].values]
 
         commissions = sum(t._commissions for t in trades)
     del trades

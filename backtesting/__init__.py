@@ -13,6 +13,7 @@ and advisable to go through all of them. They are short.
 
 * [Library of Utilities and Composable Base Strategies](../examples/Strategies Library.html)
 * [Multiple Time Frames](../examples/Multiple Time Frames.html)
+* [Multi-Asset Portfolio](../examples/Multi Asset Trading/Bollinger Band Portfolio.html)
 * [**Parameter Heatmap & Optimization**](../examples/Parameter Heatmap &amp; Optimization.html)
 * [Trading with Machine Learning](../examples/Trading with Machine Learning.html)
 
@@ -68,7 +69,7 @@ except ImportError:
 from . import lib  # noqa: F401
 from ._plotting import set_bokeh_output  # noqa: F401
 from ._util import try_
-from .backtesting import Backtest, Strategy  # noqa: F401
+from .backtesting import Backtest, PortfolioBacktest, Strategy  # noqa: F401
 
 
 # Add overridable backtesting.Pool used for parallel optimization

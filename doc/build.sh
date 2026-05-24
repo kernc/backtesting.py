@@ -32,7 +32,10 @@ echo
 echo 'Ensuring example notebooks match their py counterparts'
 echo
 strip_yaml () { awk -f "$DOCROOT/scripts/strip_yaml.awk" "$@"; }
-for ipynb in "$DOCROOT"/examples/*.ipynb; do
+example_py_files () { find "$DOCROOT/examples" -name '*.py' -print0 | sort -z; }
+example_ipynb_files () { find "$DOCROOT/examples" -name '*.ipynb' -print0 | sort -z; }
+mapfile -d '' EXAMPLE_IPYNB < <(example_ipynb_files)
+for ipynb in "${EXAMPLE_IPYNB[@]}"; do
     echo "Checking: '$ipynb'"
     diff <(strip_yaml "${ipynb%.ipynb}.py") <(jupytext --to py --output - "$ipynb" | strip_yaml) ||
         die "Notebook and its matching .py file differ. Maybe run: \`jupytext --to py '$ipynb'\` ?"
@@ -42,14 +45,25 @@ done
 echo
 echo 'Converting example notebooks → py → HTML'
 echo
-jupytext --test --update --to ipynb "$DOCROOT/examples"/*.py
+mapfile -d '' EXAMPLE_PY < <(example_py_files)
+jupytext --test --update --to ipynb "${EXAMPLE_PY[@]}"
+mapfile -d '' EXAMPLE_IPYNB < <(example_ipynb_files)
 { mkdir -p ~/.ipython/profile_default/startup
   cp -f "$DOCROOT/scripts/ipython_config.py" ~/.ipython/profile_default/startup/99-backtesting-docs.py
   trap 'rm -f ~/.ipython/profile_default/startup/99-backtesting-docs.py' EXIT; }
-PYTHONWARNINGS='ignore::UserWarning,ignore::RuntimeWarning' \
-    time jupyter-nbconvert --execute --to=html \
+for ipynb in "${EXAMPLE_IPYNB[@]}"; do
+    relpath="${ipynb#"$DOCROOT/examples/"}"
+    rel_dir="$(dirname "$relpath")"
+    output_dir="$BUILDROOT/examples"
+    if [ "$rel_dir" != "." ]; then
+        output_dir="$output_dir/$rel_dir"
+    fi
+    mkdir -p "$output_dir"
+    PYTHONWARNINGS='ignore::UserWarning,ignore::RuntimeWarning' \
+        time jupyter-nbconvert --execute --to=html \
         --ExecutePreprocessor.timeout=300 \
-        --output-dir="$BUILDROOT/examples" "$DOCROOT/examples"/*.ipynb
+        --output-dir="$output_dir" "$ipynb"
+done
 
 
 if [ "$IS_RELEASE" ]; then

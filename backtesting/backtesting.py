@@ -11,13 +11,14 @@ from __future__ import annotations
 import sys
 import warnings
 from abc import ABCMeta, abstractmethod
+from collections.abc import Callable, Mapping, Sequence
 from copy import copy
 from difflib import get_close_matches
 from functools import lru_cache, partial
 from itertools import chain, product, repeat
 from math import copysign
 from numbers import Number
-from typing import Callable, List, Optional, Sequence, Tuple, Type, Union
+from typing import Optional, Union
 
 import numpy as np
 import pandas as pd
@@ -26,8 +27,9 @@ from numpy.random import default_rng
 from ._plotting import plot  # noqa: I001
 from ._stats import compute_stats, dummy_stats
 from ._util import (
-    SharedMemoryManager, _as_str, _Indicator, _Data, _batch, _indicator_warmup_nbars,
-    _strategy_indicators, patch, try_, _tqdm,
+    SharedMemoryManager, _as_str, _Indicator, _Data, _MultiData, _batch,
+    _indicator_warmup_nbars, _merged_symbols, _strategy_indicator_specs,
+    _symbol_from_symbols, patch, try_, _tqdm,
 )
 
 __pdoc__ = {
@@ -144,12 +146,15 @@ class Strategy(metaclass=ABCMeta):
             value = func(*args, **kwargs)
         except Exception as e:
             raise RuntimeError(f'Indicator "{name}" error. See traceback above.') from e
+        raw_value = value
 
         if isinstance(value, pd.DataFrame):
             value = value.values.T
 
         if value is not None:
             value = try_(lambda: np.asarray(value, order='C'), None)
+            if value is not None and not value.flags.writeable:
+                value = value.copy()
         is_arraylike = bool(value is not None and value.shape)
 
         # Optionally flip the array if the user returned e.g. `df.values`
@@ -161,23 +166,37 @@ class Strategy(metaclass=ABCMeta):
                 f'Length of `name=` ({len(name)}) must agree with the number '
                 f'of arrays the indicator returns ({value.shape[0]}).')
 
-        if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data.Close):
+        data_len = len(self._data)
+        if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != data_len:
             raise ValueError(
                 'Indicators must return (optionally a tuple of) numpy.arrays of same '
-                f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}" '
+                f'length as `data` (data length: {data_len}; indicator "{name}" '
                 f'shape: {getattr(value, "shape", "")}, returned value: {value})')
 
+        symbols = _merged_symbols(raw_value, *chain(args, kwargs.values()))
+        symbol = _symbol_from_symbols(symbols)
         if overlay is None and np.issubdtype(value.dtype, np.number):
-            x = value / self._data.Close
-            # By default, overlay if strong majority of indicator values
-            # is within 30% of Close
-            with np.errstate(invalid='ignore'):
-                overlay = ((x < 1.4) & (x > .6)).mean() > .6
+            if len(symbols) > 1:
+                overlay = False
+            else:
+                def _indicator_close():
+                    return self._data[symbol].Close if symbol is not None else self._data.Close
+                close = try_(_indicator_close)
+                if close is not None:
+                    x = value / close
+                    # By default, overlay if strong majority of indicator values
+                    # is within 30% of Close
+                    with np.errstate(invalid='ignore'):
+                        overlay = ((x < 1.4) & (x > .6)).mean() > .6
+                else:
+                    overlay = False
 
         value = _Indicator(value, name=name, plot=plot, overlay=overlay,
                            color=color, scatter=scatter,
                            # _Indicator.s Series accessor uses this:
-                           index=self.data.index)
+                           index=self.data.index,
+                           symbol=symbol,
+                           symbols=symbols)
         self._indicators.append(value)
         return value
 
@@ -216,7 +235,7 @@ class Strategy(metaclass=ABCMeta):
         def __repr__(self): return '.9999'  # noqa: E704
     _FULL_EQUITY = __FULL_EQUITY(1 - sys.float_info.epsilon)
 
-    def buy(self, *,
+    def buy(self, symbol=None, *,
             size: float = _FULL_EQUITY,
             limit: Optional[float] = None,
             stop: Optional[float] = None,
@@ -237,9 +256,9 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size >= 1, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(size, limit, stop, sl, tp, tag)
+        return self._broker.new_order(size, limit, stop, sl, tp, tag, symbol=symbol)
 
-    def sell(self, *,
+    def sell(self, symbol=None, *,
              size: float = _FULL_EQUITY,
              limit: Optional[float] = None,
              stop: Optional[float] = None,
@@ -268,7 +287,7 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size >= 1, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(-size, limit, stop, sl, tp, tag)
+        return self._broker.new_order(-size, limit, stop, sl, tp, tag, symbol=symbol)
 
     @property
     def equity(self) -> float:
@@ -310,17 +329,17 @@ class Strategy(metaclass=ABCMeta):
         return self._broker.position
 
     @property
-    def orders(self) -> 'Tuple[Order, ...]':
+    def orders(self) -> tuple[Order, ...]:
         """List of orders (see `Order`) waiting for execution."""
         return tuple(self._broker.orders)
 
     @property
-    def trades(self) -> 'Tuple[Trade, ...]':
+    def trades(self) -> tuple[Trade, ...]:
         """List of active trades (see `Trade`)."""
         return tuple(self._broker.trades)
 
     @property
-    def closed_trades(self) -> 'Tuple[Trade, ...]':
+    def closed_trades(self) -> tuple[Trade, ...]:
         """List of settled trades (see `Trade`)."""
         return tuple(self._broker.closed_trades)
 
@@ -335,8 +354,13 @@ class Position:
         if self.position:
             ...  # we have a position, either long or short
     """
-    def __init__(self, broker: '_Broker'):
+    def __init__(self, broker: _Broker, symbol=None):
         self.__broker = broker
+        self.__symbol = symbol
+
+    def __trades(self):
+        return [trade for trade in self.__broker.trades
+                if self.__symbol is None or trade.symbol == self.__symbol]
 
     def __bool__(self):
         return self.size != 0
@@ -344,17 +368,17 @@ class Position:
     @property
     def size(self) -> float:
         """Position size in units of asset. Negative if position is short."""
-        return sum(trade.size for trade in self.__broker.trades)
+        return sum(trade.size for trade in self.__trades())
 
     @property
     def pl(self) -> float:
         """Profit (positive) or loss (negative) of the current position in cash units."""
-        return sum(trade.pl for trade in self.__broker.trades)
+        return sum(trade.pl for trade in self.__trades())
 
     @property
     def pl_pct(self) -> float:
         """Profit (positive) or loss (negative) of the current position in percent."""
-        total_invested = sum(trade.entry_price * abs(trade.size) for trade in self.__broker.trades)
+        total_invested = sum(trade.entry_price * abs(trade.size) for trade in self.__trades())
         return (self.pl / total_invested) * 100 if total_invested else 0
 
     @property
@@ -371,11 +395,54 @@ class Position:
         """
         Close portion of position by closing `portion` of each active trade. See `Trade.close`.
         """
-        for trade in self.__broker.trades:
+        for trade in self.__trades():
             trade.close(portion)
 
     def __repr__(self):
-        return f'<Position: {self.size} ({len(self.__broker.trades)} trades)>'
+        symbol = '' if self.__symbol is None else f' {self.__symbol}'
+        return f'<Position{symbol}: {self.size} ({len(self.__trades())} trades)>'
+
+
+class _Positions:
+    """
+    Mapping-like portfolio position accessor, keyed by symbol.
+    """
+    def __init__(self, broker: _Broker, symbols):
+        self.__broker = broker
+        self.__positions = {symbol: Position(broker, symbol) for symbol in symbols}
+
+    def __getitem__(self, symbol) -> Position:
+        try:
+            return self.__positions[symbol]
+        except KeyError:
+            raise KeyError(f"Symbol {symbol!r} not in data") from None
+
+    def __iter__(self):
+        return iter(self.__positions)
+
+    def __bool__(self):
+        return any(self.__positions.values())
+
+    def keys(self):
+        return self.__positions.keys()
+
+    def values(self):
+        return self.__positions.values()
+
+    def items(self):
+        return self.__positions.items()
+
+    def close(self, portion: float = 1.):
+        for position in self.__positions.values():
+            position.close(portion)
+
+    @property
+    def pl(self) -> float:
+        return sum(trade.pl for trade in self.__broker.trades)
+
+    def __repr__(self):
+        positions = {symbol: position.size for symbol, position in self.items()}
+        return f'<Positions: {positions}>'
 
 
 class _OutOfMoneyError(Exception):
@@ -397,16 +464,18 @@ class Order:
     [filled]: https://www.investopedia.com/terms/f/fill.asp
     [Good 'Til Canceled]: https://www.investopedia.com/terms/g/gtc.asp
     """
-    def __init__(self, broker: '_Broker',
+    def __init__(self, broker: _Broker,
                  size: float,
                  limit_price: Optional[float] = None,
                  stop_price: Optional[float] = None,
                  sl_price: Optional[float] = None,
                  tp_price: Optional[float] = None,
                  parent_trade: Optional['Trade'] = None,
-                 tag: object = None):
+                 tag: object = None,
+                 symbol=None):
         self.__broker = broker
         assert size != 0
+        self.__symbol = symbol
         self.__size = size
         self.__limit_price = limit_price
         self.__stop_price = stop_price
@@ -423,6 +492,7 @@ class Order:
     def __repr__(self):
         return '<Order {}>'.format(', '.join(f'{param}={try_(lambda: round(value, 5), value)!r}'
                                              for param, value in (
+                                                 ('symbol', self.__symbol),
                                                  ('size', self.__size),
                                                  ('limit', self.__limit_price),
                                                  ('stop', self.__stop_price),
@@ -456,6 +526,11 @@ class Order:
         A value greater than or equal to 1 indicates an absolute number of units.
         """
         return self.__size
+
+    @property
+    def symbol(self):
+        """Order asset symbol, or None for single-asset backtests."""
+        return self.__symbol
 
     @property
     def limit(self) -> Optional[float]:
@@ -544,8 +619,10 @@ class Trade:
     When an `Order` is filled, it results in an active `Trade`.
     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
     """
-    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar, tag):
+    def __init__(self, broker: _Broker, size: int, entry_price: float,
+                 entry_bar, tag, symbol=None):
         self.__broker = broker
+        self.__symbol = symbol
         self.__size = size
         self.__entry_price = entry_price
         self.__exit_price: Optional[float] = None
@@ -557,9 +634,14 @@ class Trade:
         self._commissions = 0
 
     def __repr__(self):
-        return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
-               f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}' \
-               f'{" tag=" + str(self.__tag) if self.__tag is not None else ""}>'
+        symbol = '' if self.__symbol is None else f' symbol={self.__symbol}'
+        return (
+            f'<Trade{symbol} size={self.__size} '
+            f'time={self.__entry_bar}-{self.__exit_bar or ""} '
+            f'price={self.__entry_price}-{self.__exit_price or ""} '
+            f'pl={self.pl:.0f}'
+            f'{" tag=" + str(self.__tag) if self.__tag is not None else ""}>'
+        )
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
@@ -574,7 +656,7 @@ class Trade:
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
         # Ensure size is an int to avoid rounding errors on 32-bit OS
         size = copysign(max(1, int(round(abs(self.__size) * portion))), -self.__size)
-        order = Order(self.__broker, size, parent_trade=self, tag=self.__tag)
+        order = Order(self.__broker, size, parent_trade=self, tag=self.__tag, symbol=self.__symbol)
         self.__broker.orders.insert(0, order)
 
     # Fields getters
@@ -583,6 +665,11 @@ class Trade:
     def size(self):
         """Trade size (volume; negative for short trades)."""
         return self.__size
+
+    @property
+    def symbol(self):
+        """Trade asset symbol, or None for single-asset backtests."""
+        return self.__symbol
 
     @property
     def entry_price(self) -> float:
@@ -633,14 +720,14 @@ class Trade:
     @property
     def entry_time(self) -> Union[pd.Timestamp, int]:
         """Datetime of when the trade was entered."""
-        return self.__broker._data.index[self.__entry_bar]
+        return self.__broker._data_for_symbol(self.__symbol).index[self.__entry_bar]
 
     @property
     def exit_time(self) -> Optional[Union[pd.Timestamp, int]]:
         """Datetime of when the trade was exited."""
         if self.__exit_bar is None:
             return None
-        return self.__broker._data.index[self.__exit_bar]
+        return self.__broker._data_for_symbol(self.__symbol).index[self.__exit_bar]
 
     @property
     def is_long(self):
@@ -658,13 +745,13 @@ class Trade:
         Trade profit (positive) or loss (negative) in cash units.
         Commissions are reflected only after the Trade is closed.
         """
-        price = self.__exit_price or self.__broker.last_price
+        price = self.__exit_price or self.__broker.last_price_for(self.__symbol)
         return (self.__size * (price - self.__entry_price)) - self._commissions
 
     @property
     def pl_pct(self):
         """Trade profit (positive) or loss (negative) in percent relative to trade entry price."""
-        price = self.__exit_price or self.__broker.last_price
+        price = self.__exit_price or self.__broker.last_price_for(self.__symbol)
         gross_pl_pct = copysign(1, self.__size) * (price / self.__entry_price - 1)
 
         # Total commission across the entire trade size to individual units
@@ -674,7 +761,7 @@ class Trade:
     @property
     def value(self):
         """Trade total value in cash (volume × price)."""
-        price = self.__exit_price or self.__broker.last_price
+        price = self.__exit_price or self.__broker.last_price_for(self.__symbol)
         return abs(self.__size) * price
 
     # SL/TP management API
@@ -730,18 +817,8 @@ class _Broker:
         self._data: _Data = data
         self._cash = cash
 
-        if callable(commission):
-            self._commission = commission
-        else:
-            try:
-                self._commission_fixed, self._commission_relative = commission
-            except TypeError:
-                self._commission_fixed, self._commission_relative = 0, commission
-            assert self._commission_fixed >= 0, 'Need fixed cash commission in $ >= 0'
-            assert -.1 <= self._commission_relative < .1, \
-                ("commission should be between -10% "
-                 f"(e.g. market-maker's rebates) and 10% (fees), is {self._commission_relative}")
-            self._commission = self._commission_func
+        self._commission_spec = self._normalize_commission(commission)
+        self._commission = self._commission_func
 
         self._spread = spread
         self._leverage = 1 / margin
@@ -750,16 +827,76 @@ class _Broker:
         self._exclusive_orders = exclusive_orders
 
         self._equity = np.tile(np.nan, len(index))
-        self.orders: List[Order] = []
-        self.trades: List[Trade] = []
-        self.position = Position(self)
-        self.closed_trades: List[Trade] = []
+        self.orders: list[Order] = []
+        self.trades: list[Trade] = []
+        self.position = (_Positions(self, data.symbols)
+                         if self._is_multi_data
+                         else Position(self))
+        self.closed_trades: list[Trade] = []
 
-    def _commission_func(self, order_size, price):
-        return self._commission_fixed + abs(order_size) * price * self._commission_relative
+    @property
+    def _is_multi_data(self):
+        return hasattr(self._data, 'symbols')
+
+    @staticmethod
+    def _validate_commission(commission):
+        if callable(commission):
+            return commission
+        try:
+            commission_fixed, commission_relative = commission
+        except TypeError:
+            commission_fixed, commission_relative = 0, commission
+        assert commission_fixed >= 0, 'Need fixed cash commission in $ >= 0'
+        assert -.1 <= commission_relative < .1, \
+            ("commission should be between -10% "
+             f"(e.g. market-maker's rebates) and 10% (fees), is {commission_relative}")
+        return commission_fixed, commission_relative
+
+    def _normalize_commission(self, commission):
+        if isinstance(commission, Mapping):
+            return {symbol: self._validate_commission(spec)
+                    for symbol, spec in commission.items()}
+        return self._validate_commission(commission)
+
+    def _commission_func(self, order_size, price, symbol=None):
+        spec = self._commission_spec
+        if isinstance(spec, Mapping):
+            try:
+                spec = spec[symbol]
+            except KeyError:
+                raise KeyError(f"No commission configured for symbol {symbol!r}") from None
+
+        if callable(spec):
+            return spec(order_size, price)
+
+        commission_fixed, commission_relative = spec
+        return commission_fixed + abs(order_size) * price * commission_relative
 
     def __repr__(self):
         return f'<Broker: {self._cash:.0f}{self.position.pl:+.1f} ({len(self.trades)} trades)>'
+
+    def _normalize_symbol(self, symbol):
+        if not self._is_multi_data:
+            if symbol is not None:
+                raise ValueError('Single-asset Backtest orders do not take a symbol')
+            return None
+        if symbol is None:
+            raise ValueError('Multi-asset orders require a symbol, e.g. self.buy("AAPL")')
+        if symbol not in self._data.symbols:
+            raise KeyError(f"Symbol {symbol!r} not in data")
+        return symbol
+
+    def _data_for_symbol(self, symbol=None):
+        symbol = self._normalize_symbol(symbol) if self._is_multi_data else symbol
+        return self._data[symbol] if self._is_multi_data else self._data
+
+    def _spread_for(self, symbol=None):
+        if isinstance(self._spread, Mapping):
+            try:
+                return self._spread[symbol]
+            except KeyError:
+                raise KeyError(f"No spread configured for symbol {symbol!r}") from None
+        return self._spread
 
     def new_order(self,
                   size: float,
@@ -769,10 +906,12 @@ class _Broker:
                   tp: Optional[float] = None,
                   tag: object = None,
                   *,
-                  trade: Optional[Trade] = None) -> Order:
+                  trade: Trade | None = None,
+                  symbol=None) -> Order:
         """
         Argument size indicates whether the order is long or short
         """
+        symbol = trade.symbol if trade and symbol is None else self._normalize_symbol(symbol)
         size = float(size)
         stop = stop and float(stop)
         limit = limit and float(limit)
@@ -781,7 +920,7 @@ class _Broker:
 
         is_long = size > 0
         assert size != 0, size
-        adjusted_price = self._adjusted_price(size)
+        adjusted_price = self._adjusted_price(size, symbol=symbol)
 
         if is_long:
             if not (sl or -np.inf) < (limit or stop or adjusted_price) < (tp or np.inf):
@@ -794,17 +933,18 @@ class _Broker:
                     "Short orders require: "
                     f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})")
 
-        order = Order(self, size, limit, stop, sl, tp, trade, tag)
+        order = Order(self, size, limit, stop, sl, tp, trade, tag, symbol=symbol)
 
         if not trade:
             # If exclusive orders (each new order auto-closes previous orders/position),
             # cancel all non-contingent orders and close all open trades beforehand
             if self._exclusive_orders:
                 for o in self.orders:
-                    if not o.is_contingent:
+                    if not o.is_contingent and o.symbol == symbol:
                         o.cancel()
                 for t in self.trades:
-                    t.close()
+                    if t.symbol == symbol:
+                        t.close()
 
         # Put the new order in the order queue, Ensure SL orders are processed first
         self.orders.insert(0 if trade and stop else len(self.orders), order)
@@ -814,14 +954,19 @@ class _Broker:
     @property
     def last_price(self) -> float:
         """ Price at the last (current) close. """
-        return self._data.Close[-1]
+        return self.last_price_for(None)
 
-    def _adjusted_price(self, size=None, price=None) -> float:
+    def last_price_for(self, symbol=None) -> float:
+        """Price at the last (current) close for `symbol`."""
+        return self._data_for_symbol(symbol).Close[-1]
+
+    def _adjusted_price(self, size=None, price=None, symbol=None) -> float:
         """
         Long/short `price`, adjusted for spread.
         In long positions, the adjusted price is a fraction higher, and vice versa.
         """
-        return (price or self.last_price) * (1 + copysign(self._spread, size))
+        price = self.last_price_for(symbol) if price is None else price
+        return price * (1 + copysign(self._spread_for(symbol), size))
 
     @property
     def equity(self) -> float:
@@ -844,19 +989,19 @@ class _Broker:
         # If equity is negative, set all to 0 and stop the simulation
         if equity <= 0:
             assert self.margin_available <= 0
-            for trade in self.trades:
-                self._close_trade(trade, self._data.Close[-1], i)
+            for trade in list(self.trades):
+                self._close_trade(trade, self._data_for_symbol(trade.symbol).Close[-1], i)
             self._cash = 0
             self._equity[i:] = 0
             raise _OutOfMoneyError
 
     def _process_orders(self):
-        data = self._data
-        open, high, low = data.Open[-1], data.High[-1], data.Low[-1]
         reprocess_orders = False
 
         # Process orders
         for order in list(self.orders):  # type: Order
+            data = self._data_for_symbol(order.symbol)
+            open, high, low = data.Open[-1], data.High[-1], data.Low[-1]
 
             # Related SL/TP order was already removed
             if order not in self.orders:
@@ -933,9 +1078,9 @@ class _Broker:
 
             # Adjust price to include commission (or bid-ask spread).
             # In long positions, the adjusted price is a fraction higher, and vice versa.
-            adjusted_price = self._adjusted_price(order.size, price)
+            adjusted_price = self._adjusted_price(order.size, price, symbol=order.symbol)
             adjusted_price_plus_commission = \
-                adjusted_price + self._commission(order.size, price) / abs(order.size)
+                adjusted_price + self._commission(order.size, price, order.symbol) / abs(order.size)
 
             # If order size was specified proportionally,
             # precompute true size in units, accounting for margin and spread/commissions
@@ -960,6 +1105,8 @@ class _Broker:
                 # Existing trades are closed at unadjusted price, because the adjustment
                 # was already made when buying.
                 for trade in list(self.trades):
+                    if trade.symbol != order.symbol:
+                        continue
                     if trade.is_long == order.is_long:
                         continue
                     assert trade.size * order.size < 0
@@ -995,7 +1142,8 @@ class _Broker:
                                  order.sl,
                                  order.tp,
                                  time_index,
-                                 order.tag)
+                                 order.tag,
+                                 order.symbol)
 
                 # We need to reprocess the SL/TP orders newly added to the queue.
                 # This allows e.g. SL hitting in the same bar the order was open.
@@ -1059,20 +1207,21 @@ class _Broker:
         closed_trade = trade._replace(exit_price=price, exit_bar=time_index)
         self.closed_trades.append(closed_trade)
         # Apply commission one more time at trade exit
-        commission = self._commission(trade.size, price)
+        commission = self._commission(trade.size, price, trade.symbol)
         self._cash += trade.pl - commission
         # Save commissions on Trade instance for stats
-        trade_open_commission = self._commission(closed_trade.size, closed_trade.entry_price)
+        trade_open_commission = self._commission(
+            closed_trade.size, closed_trade.entry_price, trade.symbol)
         # applied here instead of on Trade open because size could have changed
         # by way of _reduce_trade()
         closed_trade._commissions = commission + trade_open_commission
 
     def _open_trade(self, price: float, size: int,
-                    sl: Optional[float], tp: Optional[float], time_index: int, tag):
-        trade = Trade(self, size, price, time_index, tag)
+                    sl: float | None, tp: float | None, time_index: int, tag, symbol=None):
+        trade = Trade(self, size, price, time_index, tag, symbol=symbol)
         self.trades.append(trade)
         # Apply broker commission at trade open
-        self._cash -= self._commission(size, price)
+        self._cash -= self._commission(size, price, symbol)
         # Create SL/TP (bracket) orders.
         if tp:
             trade.tp = tp
@@ -1166,11 +1315,11 @@ class Backtest:
     """  # noqa: E501
     def __init__(self,
                  data: pd.DataFrame,
-                 strategy: Type[Strategy],
+                 strategy: type[Strategy],
                  *,
                  cash: float = 10_000,
                  spread: float = .0,
-                 commission: Union[float, Tuple[float, float]] = .0,
+                 commission: Union[float, tuple[float, float]] = .0,
                  margin: float = 1.,
                  trade_on_close=False,
                  hedging=False,
@@ -1237,7 +1386,7 @@ class Backtest:
             exclusive_orders=exclusive_orders, index=data.index,
         )
         self._strategy = strategy
-        self._results: Optional[pd.Series] = None
+        self._results: pd.Series | None = None
         self._finalize_trades = bool(finalize_trades)
 
     def run(self, **kwargs) -> pd.Series:
@@ -1298,7 +1447,7 @@ class Backtest:
         data._update()  # Strategy.init might have changed/added to data.df
 
         # Indicators used in Strategy.next()
-        indicator_attrs = _strategy_indicators(strategy)
+        indicator_attrs = _strategy_indicator_specs(strategy)
 
         # Skip first few candles where indicators are still "warming up"
         # +1 to have at least two entries available
@@ -1312,9 +1461,9 @@ class Backtest:
                            unit='bar', mininterval=2, miniters=100):
                 # Prepare data and indicators for `next` call
                 data._set_length(i + 1)
-                for attr, indicator in indicator_attrs:
+                for _attr, indicator, set_indicator in indicator_attrs:
                     # Slice indicator on the last dimension (case of 2d indicator)
-                    setattr(strategy, attr, indicator[..., :i + 1])
+                    set_indicator(indicator[..., :i + 1])
 
                 # Handle orders processing and broker stuff
                 try:
@@ -1364,8 +1513,8 @@ class Backtest:
                  return_optimization: bool = False,
                  random_state: Optional[int] = None,
                  **kwargs) -> Union[pd.Series,
-                                    Tuple[pd.Series, pd.Series],
-                                    Tuple[pd.Series, pd.Series, dict]]:
+                                    tuple[pd.Series, pd.Series],
+                                    tuple[pd.Series, pd.Series, dict]]:
         """
         Optimize strategy parameters to an optimal combination.
         Returns result `pd.Series` of the best run.
@@ -1482,7 +1631,7 @@ class Backtest:
                            if constraint(AttrDict(p)))
             return size
 
-        def _optimize_grid() -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
+        def _optimize_grid() -> Union[pd.Series, tuple[pd.Series, pd.Series]]:
             rand = default_rng(random_state).random
             grid_frac = (1 if max_tries is None else
                          max_tries if 0 < max_tries <= 1 else
@@ -1536,8 +1685,8 @@ class Backtest:
             return stats
 
         def _optimize_sambo() -> Union[pd.Series,
-                                       Tuple[pd.Series, pd.Series],
-                                       Tuple[pd.Series, pd.Series, dict]]:
+                                       tuple[pd.Series, pd.Series],
+                                       tuple[pd.Series, pd.Series, dict]]:
             try:
                 import sambo
             except ImportError:
@@ -1737,6 +1886,206 @@ class Backtest:
             reverse_indicators=reverse_indicators,
             show_legend=show_legend,
             open_browser=open_browser)
+
+
+class PortfolioBacktest:
+    """
+    Backtest one strategy across multiple assets with shared cash and margin.
+
+    `data` is a mapping of symbol to OHLCV data frame. All assets are aligned
+    to a common index using an inner join by default. Within a strategy, access
+    per-symbol data with `self.data["AAPL"].Close`, place orders with
+    `self.buy("AAPL", size=...)`, and inspect positions with
+    `self.position["AAPL"]`.
+    """
+    def __init__(self,
+                 data: Mapping[str, pd.DataFrame],
+                 strategy: type[Strategy],
+                 *,
+                 cash: float = 10_000,
+                 spread: Union[float, Mapping[str, float]] = .0,
+                 commission: Union[float, tuple[float, float], Mapping[str, object]] = .0,
+                 margin: float = 1.,
+                 trade_on_close=False,
+                 hedging=False,
+                 exclusive_orders=False,
+                 finalize_trades=False,
+                 align: str = 'inner',
+                 ):
+        if not (isinstance(strategy, type) and issubclass(strategy, Strategy)):
+            raise TypeError('`strategy` must be a Strategy sub-type')
+        if not isinstance(data, Mapping):
+            raise TypeError('`data` must be a mapping of symbol to pandas.DataFrame')
+        if not data:
+            raise ValueError('`data` must contain at least one symbol')
+        if align != 'inner':
+            raise NotImplementedError("PortfolioBacktest currently supports align='inner' only")
+        if not isinstance(spread, Number) and not isinstance(spread, Mapping):
+            raise TypeError('`spread` must be a float value or a mapping by symbol')
+        if not isinstance(commission, (Number, tuple, Mapping)) and not callable(commission):
+            raise TypeError('`commission` must be a float, tuple, callable, or mapping by symbol')
+
+        prepared: dict[str, pd.DataFrame] = {}
+        for symbol, df in data.items():
+            if not isinstance(symbol, str) or not symbol:
+                raise TypeError('`data` keys must be non-empty symbol strings')
+            prepared[symbol] = self._prepare_data(symbol, df)
+
+        indexes = [df.index for df in prepared.values()]
+        common_index = indexes[0]
+        for index in indexes[1:]:
+            common_index = common_index.intersection(index, sort=False)
+        if common_index.empty:
+            raise ValueError('Multi-asset data frames have no overlapping index values')
+
+        self._data: dict[str, pd.DataFrame] = {
+            symbol: df.loc[common_index].copy(deep=False)
+            for symbol, df in prepared.items()
+        }
+        self._benchmark_data = self._make_benchmark_data(self._data)
+        self._broker = partial(
+            _Broker, cash=cash, spread=spread, commission=commission, margin=margin,
+            trade_on_close=trade_on_close, hedging=hedging,
+            exclusive_orders=exclusive_orders, index=common_index,
+        )
+        self._strategy = strategy
+        self._results: pd.Series | None = None
+        self._finalize_trades = bool(finalize_trades)
+
+    @staticmethod
+    def _prepare_data(symbol: str, data: pd.DataFrame) -> pd.DataFrame:
+        if not isinstance(data, pd.DataFrame):
+            raise TypeError(f"`data[{symbol!r}]` must be a pandas.DataFrame with columns")
+
+        data = data.copy(deep=False)
+
+        if (not isinstance(data.index, pd.DatetimeIndex) and
+            not isinstance(data.index, pd.RangeIndex) and
+            (data.index.is_numeric() and
+             (data.index > pd.Timestamp('1975').timestamp()).mean() > .8)):
+            try:
+                data.index = pd.to_datetime(data.index, infer_datetime_format=True)
+            except ValueError:
+                pass
+
+        if 'Volume' not in data:
+            data['Volume'] = np.nan
+
+        if len(data) == 0:
+            raise ValueError(f'OHLC `data[{symbol!r}]` is empty')
+        if len(data.columns.intersection({'Open', 'High', 'Low', 'Close', 'Volume'})) != 5:
+            raise ValueError(f"`data[{symbol!r}]` must be a pandas.DataFrame with columns "
+                             "'Open', 'High', 'Low', 'Close', and (optionally) 'Volume'")
+        if data[['Open', 'High', 'Low', 'Close']].isnull().values.any():
+            raise ValueError(f'Some OHLC values are missing (NaN) in `data[{symbol!r}]`.')
+        if not data.index.is_monotonic_increasing:
+            warnings.warn(f'Data index for {symbol!r} is not sorted in ascending order. Sorting.',
+                          stacklevel=3)
+            data = data.sort_index()
+        if not isinstance(data.index, pd.DatetimeIndex):
+            warnings.warn(f'Data index for {symbol!r} is not datetime. Assuming simple periods, '
+                          'but `pd.DateTimeIndex` is advised.',
+                          stacklevel=3)
+        return data
+
+    @staticmethod
+    def _make_benchmark_data(data: Mapping[str, pd.DataFrame]) -> pd.DataFrame:
+        closes = pd.DataFrame({symbol: df['Close'] for symbol, df in data.items()})
+        benchmark_close = (closes / closes.iloc[0]).mean(axis=1)
+        return pd.DataFrame({
+            'Open': benchmark_close,
+            'High': benchmark_close,
+            'Low': benchmark_close,
+            'Close': benchmark_close,
+            'Volume': np.nan,
+        }, index=benchmark_close.index)
+
+    def run(self, **kwargs) -> pd.Series:
+        """
+        Run the portfolio backtest. Returns the same statistics series shape as
+        `Backtest.run()`, with `_trades.Symbol` identifying each traded asset.
+        """
+        data = _MultiData({symbol: df.copy(deep=False)
+                           for symbol, df in self._data.items()})
+        full_len = len(data)
+        broker: _Broker = self._broker(data=data)
+        strategy: Strategy = self._strategy(broker, data, kwargs)
+
+        strategy.init()
+        data._update()
+
+        indicator_attrs = _strategy_indicator_specs(strategy)
+        start = 1 + _indicator_warmup_nbars(strategy)
+
+        with np.errstate(invalid='ignore'):
+            for i in _tqdm(range(start, len(data)), desc=self.run.__qualname__,
+                           unit='bar', mininterval=2, miniters=100):
+                data._set_length(i + 1)
+                for _attr, indicator, set_indicator in indicator_attrs:
+                    set_indicator(indicator[..., :i + 1])
+
+                try:
+                    broker.next()
+                except _OutOfMoneyError:
+                    break
+
+                strategy.next()
+            else:
+                if self._finalize_trades is True:
+                    for trade in reversed(broker.trades):
+                        trade.close()
+
+                    if start < len(data):
+                        try_(broker.next, exception=_OutOfMoneyError)
+                elif len(broker.trades):
+                    warnings.warn(
+                        'Some trades remain open at the end of backtest. Use '
+                        '`PortfolioBacktest(..., finalize_trades=True)` to close them and '
+                        'include them in stats.', stacklevel=2)
+
+            data._set_length(full_len)
+
+            equity = pd.Series(broker._equity).bfill().fillna(broker._cash).values
+            self._results = compute_stats(
+                trades=broker.closed_trades,
+                equity=equity,
+                ohlc_data=self._benchmark_data,
+                risk_free_rate=0.0,
+                strategy_instance=strategy,
+            )
+
+        return self._results
+
+    def plot(self, *, symbol: str | None = None,
+             results: pd.Series | None = None,
+             reverse_indicators=False,
+             **kwargs):
+        """
+        Plot one asset's candles and trades alongside the global portfolio equity curve.
+        """
+        if results is None:
+            if self._results is None:
+                raise RuntimeError('First issue `backtest.run()` to obtain results.')
+            results = self._results
+        if symbol is None:
+            if len(self._data) != 1:
+                raise ValueError('`symbol` is required when plotting a multi-asset portfolio')
+            symbol = next(iter(self._data))
+        if symbol not in self._data:
+            raise KeyError(f"Symbol {symbol!r} not in data")
+
+        plot_results = results.copy()
+        trades = plot_results['_trades']
+        trade_markers = trades
+        if 'Symbol' in trades:
+            trade_markers = trades[trades['Symbol'] == symbol]
+        indicators = [
+            indicator for indicator in plot_results['_strategy']._indicators
+            if indicator._opts.get('symbol') in (None, symbol)
+        ]
+        return plot(results=plot_results, df=self._data[symbol],
+                    indicators=indicators, trade_markers=trade_markers,
+                    reverse_indicators=reverse_indicators, **kwargs)
 
 
 # NOTE: Don't put anything public below this __all__ list
