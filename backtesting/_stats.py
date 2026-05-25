@@ -40,10 +40,16 @@ def compute_stats(
         ohlc_data: pd.DataFrame,
         strategy_instance: Strategy | None,
         risk_free_rate: float = 0,
+        stats_start: int | None = None,
 ) -> pd.Series:
     assert -1 < risk_free_rate < 1
 
-    index = ohlc_data.index
+    full_index = ohlc_data.index
+    full_equity = equity
+    calc_start = 0 if stats_start is None else int(stats_start)
+    calc_start = min(max(0, calc_start), len(full_index) - 1)
+    index = full_index[calc_start:]
+    equity = full_equity[calc_start:]
     dd = 1 - equity / np.maximum.accumulate(equity)
     dd_dur, dd_peaks = compute_drawdown_duration_peaks(pd.Series(dd, index=index))
 
@@ -133,7 +139,10 @@ def compute_stats(
 
     have_position = np.repeat(0, len(index))
     for t in trades_df[['EntryBar', 'ExitBar']].itertuples(index=False):
-        have_position[t.EntryBar:t.ExitBar + 1] = 1
+        entry_bar = max(0, t.EntryBar - calc_start)
+        exit_bar = t.ExitBar - calc_start
+        if exit_bar >= 0 and entry_bar < len(have_position):
+            have_position[entry_bar:exit_bar + 1] = 1
 
     s.loc['Exposure Time [%]'] = have_position.mean() * 100  # In "n bars" time, not index time
     s.loc['Equity Final [$]'] = equity[-1]
@@ -141,9 +150,10 @@ def compute_stats(
     if commissions:
         s.loc['Commissions [$]'] = commissions
     s.loc['Return [%]'] = (equity[-1] - equity[0]) / equity[0] * 100
-    first_trading_bar = _indicator_warmup_nbars(strategy_instance)
-    c = ohlc_data.Close.values
-    s.loc['Buy & Hold Return [%]'] = (c[-1] - c[first_trading_bar]) / c[first_trading_bar] * 100  # long-only return
+    first_trading_bar = max(0, _indicator_warmup_nbars(strategy_instance) - calc_start)
+    c = ohlc_data.Close.values[calc_start:]
+    s.loc['Buy & Hold Return [%]'] = (
+        (c[-1] - c[first_trading_bar]) / c[first_trading_bar] * 100)
 
     gmean_day_return: float = 0
     day_returns = np.array(np.nan)

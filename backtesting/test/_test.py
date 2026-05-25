@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import unittest
+import warnings
 from concurrent.futures.process import ProcessPoolExecutor
 from contextlib import contextmanager
 from glob import glob
@@ -255,7 +256,7 @@ class TestBacktest(TestCase):
 
         stats = Backtest(SHORT_DATA, S, cash=CASH, commission=(100, COMMISSION)).run()
         self.assertEqual(stats['_equity_curve']['Equity'].iloc[2:4].round(2).tolist(),
-                         [9784.50, 9718.69])
+                         [9683.74, 9647.77])
 
         commission_func = lambda size, price: size * price * COMMISSION  # noqa: E731
         stats = Backtest(SHORT_DATA, S, cash=CASH, commission=commission_func).run()
@@ -316,33 +317,33 @@ class TestBacktest(TestCase):
                 'Avg. Drawdown Duration': pd.Timedelta('41 days 00:00:00'),
                 'Avg. Drawdown [%]': -5.925851581948801,
                 'Avg. Trade Duration': pd.Timedelta('46 days 00:00:00'),
-                'Avg. Trade [%]': 2.531715975158555,
+                'Avg. Trade [%]': 2.5479693282886906,
                 'Best Trade [%]': 53.59595229490424,
                 'Buy & Hold Return [%]': 522.0601851851852,
-                'Calmar Ratio': 0.4414380935608377,
+                'Calmar Ratio': 0.4445179349739874,
                 'Duration': pd.Timedelta('3116 days 00:00:00'),
                 'End': pd.Timestamp('2013-03-01 00:00:00'),
-                'Equity Final [$]': 51422.98999999996,
+                'Equity Final [$]': 51959.94999999997,
                 'Equity Peak [$]': 75787.44,
-                'Expectancy [%]': 3.2748078066748834,
+                'Expectancy [%]': 3.2930986285628268,
                 'Exposure Time [%]': 96.74115456238361,
                 'Max. Drawdown Duration': pd.Timedelta('584 days 00:00:00'),
                 'Max. Drawdown [%]': -47.98012705007589,
                 'Max. Trade Duration': pd.Timedelta('183 days 00:00:00'),
-                'Profit Factor': 2.167945974262033,
-                'Return (Ann.) [%]': 21.180255813792282,
-                'Return [%]': 414.2298999999996,
-                'Volatility (Ann.) [%]': 36.49390889140787,
-                'CAGR [%]': 14.159843619607383,
-                'SQN': 1.0766187356697705,
-                'Kelly Criterion': 0.1518705127029717,
-                'Sharpe Ratio': 0.5803778344714113,
-                'Sortino Ratio': 1.0847880675854096,
+                'Profit Factor': 2.174469316409448,
+                'Return (Ann.) [%]': 21.32802699608929,
+                'Return [%]': 419.59949999999964,
+                'Volatility (Ann.) [%]': 36.53825234483751,
+                'CAGR [%]': 14.255789393913654,
+                'SQN': 1.0880865497975716,
+                'Kelly Criterion': 0.15319708142323157,
+                'Sharpe Ratio': 0.5837177650097084,
+                'Sortino Ratio': 1.0923863161583598,
                 'Start': pd.Timestamp('2004-08-19 00:00:00'),
                 'Win Rate [%]': 46.96969696969697,
                 'Worst Trade [%]': -18.39887353835481,
-                'Alpha [%]': 394.37391142027462,
-                'Beta': 0.03803390709192,
+                'Alpha [%]': 399.7149324245838,
+                'Beta': 0.0380886498141251,
         })
 
         def almost_equal(a, b):
@@ -1312,6 +1313,469 @@ class TestLib(TestCase):
             stats = PortfolioBacktest({'A': data}, S, cash=1_000, margin=.01).run()
         self.assertEqual(stats['Equity Final [$]'], 0)
         self.assertEqual(len(stats['_strategy'].data), len(data))
+
+    def test_PortfolioBacktest_inner_alignment_warns_on_dropped_rows(self):
+        index_a = pd.date_range('2020-01-01', periods=4)
+        index_b = pd.date_range('2020-01-03', periods=2)
+
+        def ohlc(index):
+            return pd.DataFrame({
+                'Open': [100] * len(index),
+                'High': [101] * len(index),
+                'Low': [99] * len(index),
+                'Close': [100] * len(index),
+                'Volume': [1000] * len(index),
+            }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                pass
+
+        with self.assertWarnsRegex(UserWarning, "dropped.*A.*2"):
+            PortfolioBacktest({'A': ohlc(index_a), 'B': ohlc(index_b)}, S)
+
+    def test_PortfolioBacktest_same_bar_fractional_orders_are_not_symbol_order_dependent(self):
+        index = pd.date_range('2020-01-01', periods=5)
+
+        def ohlc():
+            return pd.DataFrame({
+                'Open': [100] * len(index),
+                'High': [100] * len(index),
+                'Low': [100] * len(index),
+                'Close': [100] * len(index),
+                'Volume': [1000] * len(index),
+            }, index=index)
+
+        class BuyAB(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A', size=.5)
+                    self.buy('B', size=.5)
+
+        class BuyBA(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('B', size=.5)
+                    self.buy('A', size=.5)
+
+        stats_ab = PortfolioBacktest({'A': ohlc(), 'B': ohlc()}, BuyAB,
+                                     cash=10_000, finalize_trades=True).run()
+        stats_ba = PortfolioBacktest({'A': ohlc(), 'B': ohlc()}, BuyBA,
+                                     cash=10_000, finalize_trades=True).run()
+        trades_ab = stats_ab['_trades'].sort_values('Symbol').reset_index(drop=True)
+        trades_ba = stats_ba['_trades'].sort_values('Symbol').reset_index(drop=True)
+
+        self.assertEqual(trades_ab['Symbol'].tolist(), ['A', 'B'])
+        self.assertEqual(trades_ab['Size'].tolist(), [50, 50])
+        assert_frame_equal(trades_ab[['Symbol', 'Size']], trades_ba[['Symbol', 'Size']])
+
+    def test_PortfolioBacktest_tuple_held_indicators_are_sliced(self):
+        index = pd.date_range('2020-01-01', periods=5)
+        data = pd.DataFrame({
+            'Open': [1, 2, 3, 4, 5],
+            'High': [1, 2, 3, 4, 5],
+            'Low': [1, 2, 3, 4, 5],
+            'Close': [1, 2, 3, 4, 5],
+            'Volume': [100] * 5,
+        }, index=index)
+        seen = []
+
+        class S(Strategy):
+            def init(self):
+                self.holder = (
+                    self.I(lambda close: pd.Series(close).rolling(3).mean(),
+                           self.data['A'].Close,
+                           name='sma'),
+                )
+
+            def next(self):
+                indicator = self.holder[0]
+                seen.append((len(self.data), len(indicator)))
+                assert len(indicator) == len(self.data)
+
+        PortfolioBacktest({'A': data}, S).run()
+        self.assertGreater(len(seen), 0)
+        self.assertEqual(seen[0][0], 4)
+
+    def test_PortfolioBacktest_finalize_trades_exits_on_final_close(self):
+        index = pd.date_range('2020-01-01', periods=4)
+        data = pd.DataFrame({
+            'Open': [10, 10, 20, 25],
+            'High': [10, 10, 20, 30],
+            'Low': [10, 10, 20, 25],
+            'Close': [10, 10, 20, 30],
+            'Volume': [1000] * 4,
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if not self.position['A']:
+                    self.buy('A', size=1)
+
+        stats = PortfolioBacktest({'A': data}, S, cash=10_000, finalize_trades=True).run()
+        trade = stats['_trades'].iloc[0]
+        self.assertEqual(trade.ExitBar, 3)
+        self.assertEqual(trade.ExitPrice, 30)
+        self.assertEqual(trade.PnL, 10)
+
+    def test_PortfolioBacktest_benchmark_return_rebases_at_strategy_start(self):
+        index = pd.date_range('2020-01-01', periods=3)
+        a = pd.DataFrame({
+            'Open': [100, 100, 200],
+            'High': [100, 100, 200],
+            'Low': [100, 100, 200],
+            'Close': [100, 100, 200],
+            'Volume': [1000] * 3,
+        }, index=index)
+        b = pd.DataFrame({
+            'Open': [100, 200, 200],
+            'High': [100, 200, 200],
+            'Low': [100, 200, 200],
+            'Close': [100, 200, 200],
+            'Volume': [1000] * 3,
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                self.warmup = self.I(lambda close: pd.Series(close).rolling(2).mean(),
+                                     self.data['A'].Close,
+                                     name='warmup')
+
+            def next(self):
+                pass
+
+        stats = PortfolioBacktest({'A': a, 'B': b}, S).run()
+        self.assertAlmostEqual(stats['Buy & Hold Return [%]'], 50.0)
+
+    def test_PortfolioBacktest_benchmark_beta_ignores_pre_warmup_returns(self):
+        index = pd.date_range('2020-01-01', periods=4)
+        prices = [100, 1000, 1000, 2000]
+        data = pd.DataFrame({
+            'Open': prices,
+            'High': prices,
+            'Low': prices,
+            'Close': prices,
+            'Volume': [1000] * len(index),
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                self.warmup = self.I(lambda close: pd.Series(close).rolling(2).mean(),
+                                     self.data['A'].Close,
+                                     name='warmup')
+
+            def next(self):
+                if len(self.data) == 3:
+                    self.buy('A')
+
+        stats = PortfolioBacktest({'A': data}, S, cash=10_000,
+                                  trade_on_close=True,
+                                  finalize_trades=True).run()
+        self.assertAlmostEqual(stats['Buy & Hold Return [%]'], 100.0)
+        self.assertAlmostEqual(stats['Return [%]'], 100.0)
+        self.assertAlmostEqual(stats['Beta'], 1.0)
+        self.assertAlmostEqual(stats['Alpha [%]'], 0.0)
+
+    def test_Backtest_fractional_order_fixed_commission_sizing(self):
+        data = pd.DataFrame({
+            'Open': [100, 100, 100, 100],
+            'High': [100, 100, 100, 100],
+            'Low': [100, 100, 100, 100],
+            'Close': [100, 100, 100, 100],
+            'Volume': [1000] * 4,
+        })
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if not self.position:
+                    self.buy()
+
+        stats = Backtest(data, S, cash=10_000, commission=(100, 0),
+                         finalize_trades=True).run()
+        self.assertEqual(stats['_trades'].iloc[0].Size, 99)
+
+    def test_Backtest_fractional_order_spread_relative_commission_sizing(self):
+        data = pd.DataFrame({
+            'Open': [100, 100, 100, 100],
+            'High': [100, 100, 100, 100],
+            'Low': [100, 100, 100, 100],
+            'Close': [100, 100, 100, 100],
+            'Volume': [1000] * 4,
+        })
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if not self.position:
+                    self.buy()
+
+        stats = Backtest(data, S, cash=10_200, spread=.01,
+                         commission=.01, finalize_trades=True).run()
+        self.assertEqual(stats['_trades'].iloc[0].Size, 99)
+
+    def test_Backtest_fractional_order_rebate_sizing(self):
+        data = pd.DataFrame({
+            'Open': [100, 100, 100, 100],
+            'High': [100, 100, 100, 100],
+            'Low': [100, 100, 100, 100],
+            'Close': [100, 100, 100, 100],
+            'Volume': [1000] * 4,
+        })
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if not self.position:
+                    self.buy()
+
+        stats = Backtest(data, S, cash=10_000, commission=(0, -.01),
+                         finalize_trades=True).run()
+        self.assertEqual(stats['_trades'].iloc[0].Size, 101)
+
+    def test_PortfolioBacktest_fractional_sizing_uses_fill_open_not_current_close(self):
+        index = pd.date_range('2020-01-01', periods=4)
+        data = pd.DataFrame({
+            'Open': [100, 100, 100, 100],
+            'High': [100, 100, 100, 1000],
+            'Low': [100, 100, 100, 100],
+            'Close': [100, 100, 100, 1000],
+            'Volume': [1000] * len(index),
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A', size=100)
+                elif len(self.data) == 3:
+                    self.buy('A')
+
+        stats = PortfolioBacktest({'A': data}, S, cash=10_000,
+                                  margin=.5, finalize_trades=True).run()
+        trades = stats['_trades'].sort_values('EntryBar')
+        self.assertEqual(list(trades['Size']), [100, 100])
+
+    def test_PortfolioBacktest_fractional_order_leveraged_fixed_commission_sizing(self):
+        index = pd.date_range('2020-01-01', periods=4)
+        data = pd.DataFrame({
+            'Open': [100, 100, 100, 100],
+            'High': [100, 100, 100, 100],
+            'Low': [100, 100, 100, 100],
+            'Close': [100, 100, 100, 100],
+            'Volume': [1000] * len(index),
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if not self.position['A']:
+                    self.buy('A')
+
+        stats = PortfolioBacktest({'A': data}, S, cash=10_000,
+                                  margin=.5, commission=(1000, 0),
+                                  finalize_trades=True).run()
+        self.assertEqual(stats['_trades'].iloc[0].Size, 180)
+
+    def test_PortfolioBacktest_close_then_buy_uses_freed_margin(self):
+        index = pd.date_range('2020-01-01', periods=5)
+        data = pd.DataFrame({
+            'Open': [100] * len(index),
+            'High': [100] * len(index),
+            'Low': [100] * len(index),
+            'Close': [100] * len(index),
+            'Volume': [1000] * len(index),
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A')
+                elif len(self.data) == 4:
+                    self.position['A'].close()
+                    self.buy('B')
+
+        stats = PortfolioBacktest({'A': data, 'B': data}, S, cash=10_000,
+                                  finalize_trades=True).run()
+        trades = stats['_trades']
+        self.assertEqual(list(trades['Symbol']), ['A', 'B'])
+        self.assertEqual(list(trades['Size']), [100, 100])
+
+    def test_PortfolioBacktest_opposite_relative_order_nets_before_margin_check(self):
+        index = pd.date_range('2020-01-01', periods=5)
+        data = pd.DataFrame({
+            'Open': [100] * len(index),
+            'High': [100] * len(index),
+            'Low': [100] * len(index),
+            'Close': [100] * len(index),
+            'Volume': [1000] * len(index),
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A')
+                elif len(self.data) == 3:
+                    self.sell('A')
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            stats = PortfolioBacktest({'A': data}, S, cash=10_000,
+                                      finalize_trades=True).run()
+        messages = [str(w.message) for w in caught]
+        self.assertFalse(any('relative-sized order due to insufficient margin' in m
+                             for m in messages))
+        self.assertGreaterEqual(len(stats['_trades']), 1)
+        self.assertEqual(stats['_trades'].iloc[0].ExitBar, 3)
+
+    def test_PortfolioBacktest_pandas_series_indicator_preserves_symbol(self):
+        index = pd.date_range('2020-01-01', periods=5)
+
+        def ohlc(values):
+            return pd.DataFrame({
+                'Open': values,
+                'High': values,
+                'Low': values,
+                'Close': values,
+                'Volume': [1000] * len(values),
+            }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                self.a_sma = self.I(
+                    lambda: self.data['A'].Close.s.rolling(2).mean(),
+                    name='A_sma')
+
+            def next(self):
+                if len(self.data) == 3:
+                    self.buy('B', size=1)
+                elif len(self.data) == 4:
+                    self.position['B'].close()
+
+        stats = PortfolioBacktest({
+            'A': ohlc([10, 11, 12, 13, 14]),
+            'B': ohlc([100, 100, 100, 100, 100]),
+        }, S).run()
+        trades = stats['_trades']
+        self.assertIn('Entry_A_sma', trades)
+        self.assertTrue(pd.isna(trades['Entry_A_sma'].iloc[0]))
+        self.assertTrue(pd.isna(trades['Exit_A_sma'].iloc[0]))
+
+    def test_PortfolioBacktest_pandas_series_indicator_merges_cross_symbol_metadata(self):
+        index = pd.date_range('2020-01-01', periods=4)
+
+        def ohlc(values):
+            return pd.DataFrame({
+                'Open': values,
+                'High': values,
+                'Low': values,
+                'Close': values,
+                'Volume': [1000] * len(values),
+            }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                self.sum_ab = self.I(
+                    lambda: self.data['A'].Close.s + self.data['B'].Close.s,
+                    name='sum_ab')
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('B', size=1)
+
+        stats = PortfolioBacktest({
+            'A': ohlc([10, 11, 12, 13]),
+            'B': ohlc([100, 101, 102, 103]),
+        }, S, cash=10_000, finalize_trades=True).run()
+        strategy = stats['_strategy']
+        self.assertEqual(strategy.sum_ab._opts['symbols'], frozenset({'A', 'B'}))
+        self.assertIsNone(strategy.sum_ab._opts['symbol'])
+        trade = stats['_trades'].iloc[0]
+        self.assertEqual(trade.Entry_sum_ab, 114)
+        self.assertEqual(trade.Exit_sum_ab, 116)
+
+    def test_PortfolioBacktest_rejects_invalid_ohlc(self):
+        data = pd.DataFrame({
+            'Open': [100, 100],
+            'High': [100, 101],
+            'Low': [98, 99],
+            'Close': [100, 100],
+            'Volume': [1000, 1000],
+        }, index=pd.date_range('2020-01-01', periods=2))
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                pass
+
+        high_bad = data.copy()
+        high_bad.loc[high_bad.index[0], 'High'] = 99
+        with self.assertRaisesRegex(ValueError, 'High'):
+            PortfolioBacktest({'A': high_bad}, S)
+
+        bad_type = data.copy()
+        bad_type['Open'] = bad_type['Open'].astype(object)
+        bad_type.loc[bad_type.index[0], 'Open'] = 'bad'
+        with self.assertRaisesRegex(ValueError, 'numeric'):
+            PortfolioBacktest({'A': bad_type}, S)
+
+        bad_volume = data.copy()
+        bad_volume['Volume'] = bad_volume['Volume'].astype(object)
+        bad_volume.loc[bad_volume.index[0], 'Volume'] = 'bad'
+        with self.assertRaisesRegex(ValueError, 'Volume values must be numeric'):
+            PortfolioBacktest({'A': bad_volume}, S)
+
+    def test_PortfolioBacktest_validates_symbol_mapped_costs_early(self):
+        index = pd.date_range('2020-01-01', periods=2)
+        data = pd.DataFrame({
+            'Open': [100, 100],
+            'High': [100, 100],
+            'Low': [100, 100],
+            'Close': [100, 100],
+            'Volume': [1000, 1000],
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                pass
+
+        with self.assertRaisesRegex(KeyError, 'B'):
+            PortfolioBacktest({'A': data}, S, commission={'B': 0})
+        with self.assertRaisesRegex(KeyError, 'B'):
+            PortfolioBacktest({'A': data}, S, spread={'B': 0})
 
 
 class TestUtil(TestCase):

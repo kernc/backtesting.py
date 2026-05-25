@@ -101,6 +101,18 @@ def _merged_symbols(*values):
             if opts is not None:
                 symbols.update(_symbols_from_opts(opts))
 
+            name = getattr(value, 'name', None)
+            opts = getattr(name, '_opts', None)
+            if opts is not None:
+                symbols.update(_symbols_from_opts(opts))
+
+            attrs = getattr(value, 'attrs', None)
+            if attrs:
+                symbols.update(_symbols_from_opts({
+                    'symbol': attrs.get('backtesting.symbol'),
+                    'symbols': attrs.get('backtesting.symbols'),
+                }))
+
     for value in values:
         _scan(value)
     return frozenset(symbols)
@@ -119,33 +131,83 @@ def _strategy_indicator_specs(strategy):
     Return strategy indicators together with setters used to reveal them gradually.
 
     Historically only direct strategy attributes were supported. Multi-asset
-    strategies commonly keep per-symbol indicators in dictionaries, so we also
-    scan mutable containers while skipping Strategy._indicators, which keeps the
-    full indicator registry.
+    strategies commonly keep per-symbol indicators in containers, so we scan
+    nested dict/list/tuple containers while skipping Strategy._indicators, which
+    keeps the full indicator registry.
     """
     specs = []
+    container_ids = set()
 
     def _add(path, indicator, setter):
         specs.append((path, indicator, setter))
 
-    def _scan(value, path, setter):
+    def _scan(getter, setter, path):
+        value = getter()
         if isinstance(value, _Indicator):
             _add(path, value, setter)
-        elif isinstance(value, dict):
-            for key, item in value.items():
-                def dict_setter(newvalue, container=value, key=key):
-                    container[key] = newvalue
-                _scan(item, f'{path}[{key!r}]', dict_setter)
-        elif isinstance(value, list):
-            for i, item in enumerate(value):
-                def list_setter(newvalue, container=value, i=i):
-                    container[i] = newvalue
-                _scan(item, f'{path}[{i}]', list_setter)
+            return
 
-    for attr, value in strategy.__dict__.items():
+        if isinstance(value, dict):
+            container_id = id(value)
+            if container_id in container_ids:
+                return
+            container_ids.add(container_id)
+            for key in list(value):
+                def dict_getter(parent_getter=getter, key=key):
+                    return parent_getter()[key]
+
+                def dict_setter(newvalue, parent_getter=getter, key=key):
+                    parent_getter()[key] = newvalue
+
+                _scan(dict_getter, dict_setter, f'{path}[{key!r}]')
+            return
+
+        if isinstance(value, list):
+            container_id = id(value)
+            if container_id in container_ids:
+                return
+            container_ids.add(container_id)
+            for i in range(len(value)):
+                def list_getter(parent_getter=getter, i=i):
+                    return parent_getter()[i]
+
+                def list_setter(newvalue, parent_getter=getter, i=i):
+                    parent_getter()[i] = newvalue
+
+                _scan(list_getter, list_setter, f'{path}[{i}]')
+            return
+
+        if isinstance(value, tuple):
+            container_id = id(value)
+            if container_id in container_ids:
+                return
+            container_ids.add(container_id)
+            for i in range(len(value)):
+                def tuple_getter(parent_getter=getter, i=i):
+                    return parent_getter()[i]
+
+                def tuple_setter(newvalue, parent_getter=getter, parent_setter=setter, i=i):
+                    parent = parent_getter()
+                    items = list(parent)
+                    items[i] = newvalue
+                    if hasattr(parent, '_fields'):
+                        parent_setter(type(parent)(*items))
+                    else:
+                        parent_setter(tuple(items))
+
+                _scan(tuple_getter, tuple_setter, f'{path}[{i}]')
+
+    for attr in strategy.__dict__:
         if attr == '_indicators':
             continue
-        _scan(value, attr, lambda newvalue, attr=attr: setattr(strategy, attr, newvalue))
+
+        def attr_getter(attr=attr):
+            return getattr(strategy, attr)
+
+        def attr_setter(newvalue, attr=attr):
+            setattr(strategy, attr, newvalue)
+
+        _scan(attr_getter, attr_setter, attr)
 
     return tuple(specs)
 
@@ -157,6 +219,16 @@ def _indicator_warmup_nbars(strategy):
                  for _, indicator in _strategy_indicators(strategy)
                  if not indicator._opts['scatter']), default=0)
     return nbars
+
+
+class _SeriesName(str):
+    """A string-like pandas Series name carrying backtesting metadata."""
+    __slots__ = ('_opts',)
+
+    def __new__(cls, value, opts=None):
+        obj = str.__new__(cls, value)
+        obj._opts = dict(opts or {})
+        return obj
 
 
 class _Array(np.ndarray):
@@ -243,7 +315,12 @@ class _Array(np.ndarray):
     def s(self) -> pd.Series:
         values = np.atleast_2d(self)
         index = self._opts['index'][:values.shape[1]]
-        return pd.Series(values[0], index=index, name=self.name)
+        name = (_SeriesName(self.name, self._opts)
+                if isinstance(self.name, str) else self.name)
+        series = pd.Series(values[0], index=index, name=name)
+        series.attrs['backtesting.symbol'] = self._opts.get('symbol')
+        series.attrs['backtesting.symbols'] = self._opts.get('symbols')
+        return series
 
     @property
     def df(self) -> pd.DataFrame:

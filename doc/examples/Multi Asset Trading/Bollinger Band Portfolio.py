@@ -134,7 +134,9 @@ def bollinger_bands(close, lookback, n_std):
 # * `self.position[symbol]` inspects or closes one symbol's current position.
 #
 # The indicator dictionaries below are the main pattern to notice. Each symbol
-# gets its own middle, upper, and lower band arrays.
+# gets its own middle, upper, and lower band arrays. `size=.20` requests 20% of
+# the same-bar portfolio buying-power snapshot when the order is processed; it
+# is not a continuously rebalanced 20% target weight.
 
 # %%
 class BollingerPortfolioStrategy(Strategy):
@@ -180,7 +182,9 @@ class BollingerPortfolioStrategy(Strategy):
 # ## Run The Backtest
 #
 # This is one portfolio-level simulation. Cash is shared across the four symbols,
-# and every order competes for the same margin and liquidity.
+# and every order competes for the same margin and liquidity. If symbols trade on
+# different calendars, `PortfolioBacktest` currently uses the common index and
+# warns about any rows that are dropped before the run starts.
 
 # %%
 bt = PortfolioBacktest(

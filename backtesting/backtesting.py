@@ -968,6 +968,109 @@ class _Broker:
         price = self.last_price_for(symbol) if price is None else price
         return price * (1 + copysign(self._spread_for(symbol), size))
 
+    def _order_required_margin(self, size, adjusted_price, price, symbol=None) -> float:
+        """Margin consumed by an entry, including commissions and immediate spread loss."""
+        commission = self._commission(size, adjusted_price, symbol)
+        immediate_pl = size * (price - adjusted_price)
+        return abs(size) * price / self._leverage + commission - immediate_pl
+
+    def _prices_for_field(self, field: str, offset: int = -1) -> dict:
+        if self._is_multi_data:
+            return {
+                symbol: getattr(self._data[symbol], field)[offset]
+                for symbol in self._data.symbols
+            }
+        return {None: getattr(self._data, field)[offset]}
+
+    def _order_valuation_prices(self, order, price, is_market_order) -> dict:
+        if is_market_order and self._trade_on_close and not order.is_contingent:
+            return self._prices_for_field('Close', -2)
+        prices = self._prices_for_field('Open')
+        if not is_market_order:
+            prices[order.symbol] = price
+        return prices
+
+    @staticmethod
+    def _price_from_mapping(prices, symbol):
+        if prices is not None and symbol in prices:
+            return prices[symbol]
+        return None
+
+    def _trade_pl_at(self, trade, prices=None) -> float:
+        price = trade.exit_price or self._price_from_mapping(prices, trade.symbol)
+        price = self.last_price_for(trade.symbol) if price is None else price
+        return (trade.size * (price - trade.entry_price)) - trade._commissions
+
+    def _trade_value_at(self, trade, prices=None) -> float:
+        price = trade.exit_price or self._price_from_mapping(prices, trade.symbol)
+        price = self.last_price_for(trade.symbol) if price is None else price
+        return abs(trade.size) * price
+
+    def _equity_at(self, prices=None) -> float:
+        return self._cash + sum(self._trade_pl_at(trade, prices) for trade in self.trades)
+
+    def _margin_available_at(self, prices=None) -> float:
+        margin_used = sum(self._trade_value_at(trade, prices) / self._leverage
+                          for trade in self.trades)
+        return max(0, self._equity_at(prices) - margin_used)
+
+    def _fractional_order_size(self, size, adjusted_price, price, symbol=None,
+                               margin_available=None) -> int:
+        """Convert a fractional order into whole units under spread/commission costs."""
+        assert -1 < size < 1 and size != 0
+        margin_available = self.margin_available if margin_available is None else margin_available
+        fraction = abs(size)
+        if np.isclose(fraction, 1, rtol=0, atol=sys.float_info.epsilon * 2):
+            fraction = 1
+        budget = margin_available * fraction
+        if not np.isfinite(budget) or budget <= 0 or price <= 0 or adjusted_price <= 0:
+            return 0
+
+        sign = copysign(1, size)
+        unit_required = self._order_required_margin(int(sign), adjusted_price, price, symbol)
+        if unit_required <= 0:
+            hi = max(1, int(budget * self._leverage // price))
+        else:
+            hi = max(1, int(budget // unit_required))
+        lo = 0
+        while True:
+            signed_hi = int(sign * hi)
+            required = self._order_required_margin(signed_hi, adjusted_price, price, symbol)
+            if required > budget or hi >= sys.maxsize // 2:
+                break
+            lo, hi = hi, hi * 2
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            signed_mid = int(sign * mid)
+            required = self._order_required_margin(signed_mid, adjusted_price, price, symbol)
+            if required <= budget:
+                lo = mid
+            else:
+                hi = mid - 1
+        return int(sign * lo)
+
+    def _opposite_trade_margin(self, order, price) -> float:
+        if self._hedging:
+            return 0
+        margin = 0
+        for trade in self.trades:
+            if trade.symbol != order.symbol:
+                continue
+            if trade.is_long == order.is_long:
+                continue
+            margin += abs(trade.size) * price / self._leverage
+        return margin
+
+    def close_all_trades_at_final_close(self):
+        """Close all open trades at their symbol's final close and update final equity."""
+        if not len(self._data):
+            return
+        time_index = len(self._data) - 1
+        for trade in reversed(list(self.trades)):
+            price = self._data_for_symbol(trade.symbol).Close[-1]
+            self._close_trade(trade, price, time_index)
+        self._equity[time_index] = self.equity
+
     @property
     def equity(self) -> float:
         return self._cash + sum(trade.pl for trade in self.trades)
@@ -997,6 +1100,7 @@ class _Broker:
 
     def _process_orders(self):
         reprocess_orders = False
+        portfolio_sizing_margin = None
 
         # Process orders
         for order in list(self.orders):  # type: Order
@@ -1050,6 +1154,8 @@ class _Broker:
                 if is_market_order and self._trade_on_close and not order.is_contingent else
                 self._i)
 
+            valuation_prices = self._order_valuation_prices(order, price, is_market_order)
+
             # If order is a SL/TP order, it should close an existing trade it was contingent upon
             if order.parent_trade:
                 trade = order.parent_trade
@@ -1072,34 +1178,48 @@ class _Broker:
                     # It's a trade.close() order, now done
                     assert abs(_prev_size) >= abs(size) >= 1
                     self.orders.remove(order)
+                portfolio_sizing_margin = None
                 continue
 
             # Else this is a stand-alone trade
 
-            # Adjust price to include commission (or bid-ask spread).
+            # Adjust price for bid-ask spread.
             # In long positions, the adjusted price is a fraction higher, and vice versa.
             adjusted_price = self._adjusted_price(order.size, price, symbol=order.symbol)
-            adjusted_price_plus_commission = \
-                adjusted_price + self._commission(order.size, price, order.symbol) / abs(order.size)
 
             # If order size was specified proportionally,
-            # precompute true size in units, accounting for margin and spread/commissions
+            # precompute true size in units, accounting for margin and spread/commissions.
+            # Portfolio backtests size same-bar fractional orders from the margin snapshot
+            # at the start of order processing so equal-weight orders are not distorted
+            # by symbol iteration order.
             size = order.size
             if -1 < size < 1:
-                size = copysign(int((self.margin_available * self._leverage * abs(size))
-                                    // adjusted_price_plus_commission), size)
+                if self._is_multi_data:
+                    if portfolio_sizing_margin is None:
+                        portfolio_sizing_margin = self._margin_available_at(
+                            valuation_prices)
+                    sizing_margin = portfolio_sizing_margin
+                else:
+                    sizing_margin = self._margin_available_at(valuation_prices)
+                sizing_margin += self._opposite_trade_margin(order, price)
+                size = self._fractional_order_size(size, adjusted_price, price,
+                                                   order.symbol, sizing_margin)
                 # Not enough cash/margin even for a single unit
                 if not size:
                     warnings.warn(
-                        f'time={self._i}: Broker canceled the relative-sized order due to insufficient margin '
-                        f'(equity={self.equity:.2f}, margin_available={self.margin_available:.2f}).',
-                        category=UserWarning)
+                        f'time={self._i}: Broker canceled the relative-sized order due to '
+                        'insufficient margin '
+                        f'(equity={self.equity:.2f}, '
+                        f'margin_available={self.margin_available:.2f}).',
+                        category=UserWarning,
+                        stacklevel=2)
                     # XXX: The order is canceled by the broker?
                     self.orders.remove(order)
                     continue
             assert size == round(size)
             need_size = int(size)
 
+            closed_opposite = False
             if not self._hedging:
                 # Fill position by FIFO closing/reducing existing opposite-facing trades.
                 # Existing trades are closed at unadjusted price, because the adjustment
@@ -1115,25 +1235,32 @@ class _Broker:
                     # so it will be closed completely
                     if abs(need_size) >= abs(trade.size):
                         self._close_trade(trade, price, time_index)
+                        closed_opposite = True
                         need_size += trade.size
                     else:
                         # The existing trade is larger than the new order,
                         # so it will only be closed partially
                         self._reduce_trade(trade, price, need_size, time_index)
+                        closed_opposite = True
                         need_size = 0
 
                     if not need_size:
                         break
 
-            # If we don't have enough liquidity to cover for the order, the broker CANCELS it
-            if abs(need_size) * adjusted_price_plus_commission > \
-                    self.margin_available * self._leverage:
-                warnings.warn(
-                    f'time={self._i}: Broker canceled the order due to insufficient margin '
-                    f'(equity={self.equity:.2f}, margin_available={self.margin_available:.2f}).',
-                    category=UserWarning)
-                self.orders.remove(order)
-                continue
+            # If we don't have enough liquidity to cover for the residual opening
+            # size, the broker CANCELS it.
+            if need_size:
+                required_margin = self._order_required_margin(
+                    need_size, adjusted_price, price, order.symbol)
+                if required_margin > self._margin_available_at(valuation_prices):
+                    warnings.warn(
+                        f'time={self._i}: Broker canceled the order due to insufficient margin '
+                        f'(equity={self.equity:.2f}, '
+                        f'margin_available={self.margin_available:.2f}).',
+                        category=UserWarning,
+                        stacklevel=2)
+                    self.orders.remove(order)
+                    continue
 
             # Open a new trade
             if need_size:
@@ -1168,6 +1295,9 @@ class _Broker:
                             "somewhat dubious. "
                             "See https://github.com/kernc/backtesting.py/issues/119",
                             UserWarning)
+
+            if closed_opposite:
+                portfolio_sizing_margin = None
 
             # Order processed
             self.orders.remove(order)
@@ -1475,14 +1605,9 @@ class Backtest:
                 strategy.next()
             else:
                 if self._finalize_trades is True:
-                    # Close any remaining open trades so they produce some stats
-                    for trade in reversed(broker.trades):
-                        trade.close()
-
-                    # HACK: Re-run broker one last time to handle close orders placed in the last
-                    #  strategy iteration. Use the same OHLC values as in the last broker iteration.
-                    if start < len(self._data):
-                        try_(broker.next, exception=_OutOfMoneyError)
+                    # Close any remaining open trades at the final close so
+                    # reported trade statistics reflect end-of-backtest liquidation.
+                    broker.close_all_trades_at_final_close()
                 elif len(broker.trades):
                     warnings.warn(
                         'Some trades remain open at the end of backtest. Use '
@@ -1931,6 +2056,10 @@ class PortfolioBacktest:
                 raise TypeError('`data` keys must be non-empty symbol strings')
             prepared[symbol] = self._prepare_data(symbol, df)
 
+        symbols = tuple(prepared)
+        self._validate_symbol_mapping(spread, symbols, 'spread')
+        self._validate_symbol_mapping(commission, symbols, 'commission')
+
         indexes = [df.index for df in prepared.values()]
         common_index = indexes[0]
         for index in indexes[1:]:
@@ -1938,11 +2067,26 @@ class PortfolioBacktest:
         if common_index.empty:
             raise ValueError('Multi-asset data frames have no overlapping index values')
 
+        dropped = {
+            symbol: len(df.index.difference(common_index))
+            for symbol, df in prepared.items()
+        }
+        if any(dropped.values()):
+            detail = ', '.join(f'{symbol}={count}' for symbol, count in dropped.items() if count)
+            warnings.warn(
+                f"PortfolioBacktest align='inner' dropped rows outside the common index: {detail}.",
+                UserWarning,
+                stacklevel=2)
+
         self._data: dict[str, pd.DataFrame] = {
             symbol: df.loc[common_index].copy(deep=False)
             for symbol, df in prepared.items()
         }
-        self._benchmark_data = self._make_benchmark_data(self._data)
+        if any(np.any(df['Close'] > cash) for df in self._data.values()):
+            warnings.warn('Some prices are larger than initial cash value. Note that fractional '
+                          'trading is not supported by this class. Increase initial cash, '
+                          'trade smaller units, or use FractionalBacktest-compatible data.',
+                          stacklevel=2)
         self._broker = partial(
             _Broker, cash=cash, spread=spread, commission=commission, margin=margin,
             trade_on_close=trade_on_close, hedging=hedging,
@@ -1951,6 +2095,32 @@ class PortfolioBacktest:
         self._strategy = strategy
         self._results: pd.Series | None = None
         self._finalize_trades = bool(finalize_trades)
+
+    @staticmethod
+    def _validate_symbol_mapping(value, symbols, name):
+        if not isinstance(value, Mapping):
+            return
+        value_symbols = set(value)
+        expected_symbols = set(symbols)
+        unknown = value_symbols - expected_symbols
+        missing = expected_symbols - value_symbols
+        if unknown or missing:
+            parts = []
+            if unknown:
+                parts.append(f"unknown symbols {sorted(unknown)!r}")
+            if missing:
+                parts.append(f"missing symbols {sorted(missing)!r}")
+            message = f"`{name}` mapping keys must match portfolio symbols: {', '.join(parts)}"
+            raise KeyError(message)
+        if name == 'spread':
+            for symbol, spread in value.items():
+                if not isinstance(spread, Number):
+                    raise TypeError(f"`spread[{symbol!r}]` must be a number")
+                if spread < 0:
+                    raise ValueError(f"`spread[{symbol!r}]` must be >= 0")
+        elif name == 'commission':
+            for commission in value.values():
+                _Broker._validate_commission(commission)
 
     @staticmethod
     def _prepare_data(symbol: str, data: pd.DataFrame) -> pd.DataFrame:
@@ -1978,6 +2148,30 @@ class PortfolioBacktest:
                              "'Open', 'High', 'Low', 'Close', and (optionally) 'Volume'")
         if data[['Open', 'High', 'Low', 'Close']].isnull().values.any():
             raise ValueError(f'Some OHLC values are missing (NaN) in `data[{symbol!r}]`.')
+        ohlc = data[['Open', 'High', 'Low', 'Close']]
+        try:
+            finite_ohlc = np.isfinite(ohlc.values).all()
+        except TypeError:
+            raise ValueError(
+                f'OHLC values must be numeric and finite in `data[{symbol!r}]`.') from None
+        if not finite_ohlc:
+            raise ValueError(f'Some OHLC values are not finite in `data[{symbol!r}]`.')
+        if (ohlc <= 0).values.any():
+            raise ValueError(f'OHLC prices must be positive in `data[{symbol!r}]`.')
+        if (data['High'] < data[['Open', 'Close']].max(axis=1)).any():
+            raise ValueError(f'`data[{symbol!r}]` contains High values below Open/Close.')
+        if (data['Low'] > data[['Open', 'Close']].min(axis=1)).any():
+            raise ValueError(f'`data[{symbol!r}]` contains Low values above Open/Close.')
+        if (data['Low'] > data['High']).any():
+            raise ValueError(f'`data[{symbol!r}]` contains Low values above High.')
+        if data['Volume'].notna().any():
+            try:
+                negative_volume = (data['Volume'].dropna() < 0).any()
+            except TypeError:
+                raise ValueError(
+                    f'Volume values must be numeric in `data[{symbol!r}]`.') from None
+            if negative_volume:
+                raise ValueError(f'`data[{symbol!r}]` contains negative Volume values.')
         if not data.index.is_monotonic_increasing:
             warnings.warn(f'Data index for {symbol!r} is not sorted in ascending order. Sorting.',
                           stacklevel=3)
@@ -1989,9 +2183,11 @@ class PortfolioBacktest:
         return data
 
     @staticmethod
-    def _make_benchmark_data(data: Mapping[str, pd.DataFrame]) -> pd.DataFrame:
+    def _make_benchmark_data(data: Mapping[str, pd.DataFrame],
+                             first_trading_bar: int = 0) -> pd.DataFrame:
         closes = pd.DataFrame({symbol: df['Close'] for symbol, df in data.items()})
-        benchmark_close = (closes / closes.iloc[0]).mean(axis=1)
+        first_trading_bar = min(max(0, int(first_trading_bar)), len(closes) - 1)
+        benchmark_close = (closes / closes.iloc[first_trading_bar]).mean(axis=1)
         return pd.DataFrame({
             'Open': benchmark_close,
             'High': benchmark_close,
@@ -2015,7 +2211,9 @@ class PortfolioBacktest:
         data._update()
 
         indicator_attrs = _strategy_indicator_specs(strategy)
-        start = 1 + _indicator_warmup_nbars(strategy)
+        warmup_nbars = _indicator_warmup_nbars(strategy)
+        start = 1 + warmup_nbars
+        benchmark_data = self._make_benchmark_data(self._data, warmup_nbars)
 
         with np.errstate(invalid='ignore'):
             for i in _tqdm(range(start, len(data)), desc=self.run.__qualname__,
@@ -2032,11 +2230,7 @@ class PortfolioBacktest:
                 strategy.next()
             else:
                 if self._finalize_trades is True:
-                    for trade in reversed(broker.trades):
-                        trade.close()
-
-                    if start < len(data):
-                        try_(broker.next, exception=_OutOfMoneyError)
+                    broker.close_all_trades_at_final_close()
                 elif len(broker.trades):
                     warnings.warn(
                         'Some trades remain open at the end of backtest. Use '
@@ -2049,9 +2243,10 @@ class PortfolioBacktest:
             self._results = compute_stats(
                 trades=broker.closed_trades,
                 equity=equity,
-                ohlc_data=self._benchmark_data,
+                ohlc_data=benchmark_data,
                 risk_free_rate=0.0,
                 strategy_instance=strategy,
+                stats_start=warmup_nbars,
             )
 
         return self._results
