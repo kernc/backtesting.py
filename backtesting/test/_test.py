@@ -468,6 +468,44 @@ class TestBacktest(TestCase):
 
         self.assertRaises(ValueError, Backtest(SHORT_DATA, S, spread=.02).run)
 
+    def test_symbols_column_does_not_make_single_asset_orders_multi_asset(self):
+        data = GOOG.iloc[:10].copy()
+        data['symbols'] = np.arange(len(data))
+        seen = []
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                seen.append(self.data.symbols[-1])
+                if not self.position:
+                    self.buy(size=1)
+
+        stats = Backtest(data, S, cash=100_000, finalize_trades=True).run()
+        self.assertGreaterEqual(stats['# Trades'], 1)
+        self.assertTrue(seen)
+        self.assertEqual(seen[0], data['symbols'].iloc[1])
+
+    def test_symbol_column_is_not_shadowed_by_data_metadata(self):
+        data = GOOG.iloc[:10].copy()
+        data['symbol'] = np.arange(len(data)) + 100
+        seen = []
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                seen.append(self.data.symbol[-1])
+                if not self.position:
+                    self.buy(size=1)
+
+        stats = Backtest(data, S, cash=100_000, finalize_trades=True).run()
+        self.assertGreaterEqual(stats['# Trades'], 1)
+        self.assertTrue(seen)
+        self.assertEqual(seen[0], data['symbol'].iloc[1])
+
 
 class TestStrategy(TestCase):
     @staticmethod
@@ -1254,6 +1292,58 @@ class TestLib(TestCase):
         with _tempfile() as f:
             bt.plot(symbol='B', filename=f, open_browser=False, plot_pl=False)
 
+    def test_PortfolioBacktest_plot_aligns_data_trades_and_indicators_after_warmup(self):
+        import backtesting.backtesting as backtesting_module
+
+        index = pd.date_range('2020-01-01', periods=6)
+        data = pd.DataFrame({
+            'Open': [10, 10, 10, 11, 12, 13],
+            'High': [10, 10, 10, 11, 12, 13],
+            'Low': [10, 10, 10, 11, 12, 13],
+            'Close': [10, 10, 10, 11, 12, 13],
+            'Volume': [1000] * 6,
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                self.sma = self.I(lambda close: pd.Series(close).rolling(3).mean(),
+                                  self.data['A'].Close,
+                                  name='sma')
+
+            def next(self):
+                if len(self.data) == 4:
+                    self.buy('A', size=1)
+                elif len(self.data) == 5:
+                    self.position['A'].close()
+
+        bt = PortfolioBacktest({'A': data}, S, cash=10_000)
+        stats = bt.run()
+        captured = {}
+
+        def fake_plot(**kwargs):
+            captured.update(kwargs)
+            return 'plot-result'
+
+        with patch(backtesting_module, 'plot', fake_plot):
+            result = bt.plot(symbol='A')
+
+        expected_index = stats['_equity_curve'].index
+        start_offset = data.index.get_indexer([expected_index[0]])[0]
+        expected_entry_bars = (stats['_trades']['EntryBar'] - start_offset).clip(lower=0)
+        expected_exit_bars = stats['_trades']['ExitBar'] - start_offset
+
+        self.assertEqual(result, 'plot-result')
+        self.assertTrue(captured['df'].index.equals(expected_index))
+        self.assertTrue(captured['indicators'][0].df.index.equals(expected_index))
+        self.assertEqual(captured['results']['_trades']['EntryBar'].tolist(),
+                         expected_entry_bars.tolist())
+        self.assertEqual(captured['results']['_trades']['ExitBar'].tolist(),
+                         expected_exit_bars.tolist())
+        self.assertEqual(captured['trade_markers']['EntryBar'].tolist(),
+                         expected_entry_bars.tolist())
+        self.assertEqual(captured['trade_markers']['ExitBar'].tolist(),
+                         expected_exit_bars.tolist())
+
     def test_PortfolioBacktest_indicators_with_same_name_keep_boolean_values(self):
         index = pd.date_range('2020-01-01', periods=5)
         data = {
@@ -1550,6 +1640,56 @@ class TestLib(TestCase):
         stats = Backtest(data, S, cash=10_000, commission=(0, -.01),
                          finalize_trades=True).run()
         self.assertEqual(stats['_trades'].iloc[0].Size, 101)
+
+    def test_Backtest_fractional_order_rebate_sizing_is_bounded_when_rebate_exceeds_margin(self):
+        data = pd.DataFrame({
+            'Open': [100, 100, 100, 100],
+            'High': [100, 100, 100, 100],
+            'Low': [100, 100, 100, 100],
+            'Close': [100, 100, 100, 100],
+            'Volume': [1000] * 4,
+        })
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if not self.position:
+                    self.buy()
+
+        stats = Backtest(data, S, cash=10_000, margin=.05,
+                         commission=(0, -.1), finalize_trades=True).run()
+        trade = stats['_trades'].iloc[0]
+        self.assertEqual(trade.Size, 2000)
+        self.assertLess(trade.Size, 10_000)
+
+    def test_Backtest_fractional_order_callable_rebate_still_searches_affordable_size(self):
+        data = pd.DataFrame({
+            'Open': [100, 100, 100, 100],
+            'High': [100, 100, 100, 100],
+            'Low': [100, 100, 100, 100],
+            'Close': [100, 100, 100, 100],
+            'Volume': [1000] * 4,
+        })
+
+        def commission(size, price):
+            n = abs(size)
+            if n == 1:
+                return -2 * price
+            return max(0, n - 50) * price
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if not self.position:
+                    self.buy()
+
+        stats = Backtest(data, S, cash=10_000, commission=commission,
+                         finalize_trades=True).run()
+        self.assertEqual(stats['_trades'].iloc[0].Size, 75)
 
     def test_PortfolioBacktest_fractional_sizing_uses_fill_open_not_current_close(self):
         index = pd.date_range('2020-01-01', periods=4)

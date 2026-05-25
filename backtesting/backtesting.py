@@ -836,7 +836,7 @@ class _Broker:
 
     @property
     def _is_multi_data(self):
-        return hasattr(self._data, 'symbols')
+        return isinstance(self._data, _MultiData)
 
     @staticmethod
     def _validate_commission(commission):
@@ -1027,18 +1027,25 @@ class _Broker:
             return 0
 
         sign = copysign(1, size)
+        gross_cap = max(0, int(budget * self._leverage // price))
+        if gross_cap <= 0:
+            return 0
+        lo = 0
         unit_required = self._order_required_margin(int(sign), adjusted_price, price, symbol)
         if unit_required <= 0:
-            hi = max(1, int(budget * self._leverage // price))
-        else:
-            hi = max(1, int(budget // unit_required))
-        lo = 0
-        while True:
+            hi = gross_cap
             signed_hi = int(sign * hi)
             required = self._order_required_margin(signed_hi, adjusted_price, price, symbol)
-            if required > budget or hi >= sys.maxsize // 2:
-                break
-            lo, hi = hi, hi * 2
+            if required <= budget:
+                return signed_hi
+        else:
+            hi = max(1, int(budget // unit_required))
+            while True:
+                signed_hi = int(sign * hi)
+                required = self._order_required_margin(signed_hi, adjusted_price, price, symbol)
+                if required > budget or hi >= sys.maxsize // 2:
+                    break
+                lo, hi = hi, hi * 2
         while lo < hi:
             mid = (lo + hi + 1) // 2
             signed_mid = int(sign * mid)
@@ -2270,15 +2277,37 @@ class PortfolioBacktest:
             raise KeyError(f"Symbol {symbol!r} not in data")
 
         plot_results = results.copy()
-        trades = plot_results['_trades']
+        equity_index = plot_results['_equity_curve'].index
+        symbol_df = self._data[symbol].loc[equity_index]
+        start_offset = self._data[symbol].index.get_indexer([equity_index[0]])[0]
+
+        def _shift_trade_bars(trades):
+            if not len(trades):
+                return trades.copy(deep=False)
+            trades = trades.copy()
+            trades['EntryBar'] = (trades['EntryBar'] - start_offset).clip(lower=0)
+            trades['ExitBar'] = trades['ExitBar'] - start_offset
+            return trades[trades['ExitBar'] >= 0]
+
+        trades = _shift_trade_bars(plot_results['_trades'])
+        plot_results['_trades'] = trades
         trade_markers = trades
         if 'Symbol' in trades:
             trade_markers = trades[trades['Symbol'] == symbol]
+
+        def _align_indicator(indicator):
+            aligned = indicator.df.reindex(equity_index)
+            return _Indicator(aligned.values.T,
+                              **dict(indicator._opts,
+                                     name=indicator.name,
+                                     index=equity_index))
+
         indicators = [
-            indicator for indicator in plot_results['_strategy']._indicators
+            _align_indicator(indicator)
+            for indicator in plot_results['_strategy']._indicators
             if indicator._opts.get('symbol') in (None, symbol)
         ]
-        return plot(results=plot_results, df=self._data[symbol],
+        return plot(results=plot_results, df=symbol_df,
                     indicators=indicators, trade_markers=trade_markers,
                     reverse_indicators=reverse_indicators, **kwargs)
 

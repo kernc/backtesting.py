@@ -422,10 +422,6 @@ class _Data:
     def index(self) -> pd.DatetimeIndex:
         return self.__get_array('__index')
 
-    @property
-    def symbol(self):
-        return self.__symbol
-
     # Make pickling in Backtest.optimize() work with our catch-all __getattr__
     def __getstate__(self):
         return self.__dict__
