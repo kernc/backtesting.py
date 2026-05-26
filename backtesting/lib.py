@@ -272,8 +272,12 @@ def compute_stats(
         calc_trades['ExitBar'] = calc_trades['ExitBar'] - bar_offset
         calc_trades = calc_trades[calc_trades['ExitBar'] >= 0]
 
+    # At this point, `data` is aligned to `stats._equity_curve`. If a non-zero
+    # bar offset was found, the indicator warmup is already outside this frame.
+    strategy_instance = None if bar_offset else stats._strategy
     result = _compute_stats(trades=calc_trades, equity=equity.values, ohlc_data=data,
-                            risk_free_rate=risk_free_rate, strategy_instance=stats._strategy)
+                            risk_free_rate=risk_free_rate,
+                            strategy_instance=strategy_instance)
     if len(calc_trades) == len(trades):
         result.at['_trades'] = trades
     return result

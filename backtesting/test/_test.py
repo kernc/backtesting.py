@@ -992,14 +992,24 @@ class TestLib(TestCase):
         long_trades = stats._trades[stats._trades.Size > 0]
 
         recomputed = compute_stats(stats=stats, data={'A': data})
+        benchmark = PortfolioBacktest._make_benchmark_data({'A': data}, 2)
+        recomputed_benchmark = compute_stats(stats=stats, data=benchmark)
+        recomputed_benchmark_sliced = compute_stats(
+            stats=stats, data=benchmark.loc[stats._equity_curve.index])
         long_stats = compute_stats(stats=stats, data={'A': data}, trades=long_trades)
 
         self.assertEqual(recomputed['Start'], stats['Start'])
         self.assertEqual(recomputed['# Trades'], stats['# Trades'])
         self.assertAlmostEqual(recomputed['Buy & Hold Return [%]'],
                                stats['Buy & Hold Return [%]'])
+        self.assertAlmostEqual(recomputed_benchmark['Buy & Hold Return [%]'],
+                               stats['Buy & Hold Return [%]'])
+        self.assertAlmostEqual(recomputed_benchmark_sliced['Buy & Hold Return [%]'],
+                               stats['Buy & Hold Return [%]'])
         self.assertAlmostEqual(recomputed['Beta'], stats['Beta'])
         self.assertAlmostEqual(recomputed['Alpha [%]'], stats['Alpha [%]'])
+        self.assertAlmostEqual(recomputed_benchmark['Alpha [%]'], stats['Alpha [%]'])
+        self.assertAlmostEqual(recomputed_benchmark_sliced['Alpha [%]'], stats['Alpha [%]'])
         self.assertEqual(long_stats['# Trades'], len(long_trades))
         self.assertEqual(long_stats['Exposure Time [%]'], stats['Exposure Time [%]'])
         assert_frame_equal(recomputed._trades, stats._trades)
