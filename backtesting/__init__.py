@@ -14,6 +14,7 @@ and advisable to go through all of them. They are short.
 * [Library of Utilities and Composable Base Strategies](../examples/Strategies Library.html)
 * [Multiple Time Frames](../examples/Multiple Time Frames.html)
 * [Multi-Asset Portfolio](../examples/Multi Asset Trading/Bollinger Band Portfolio.html)
+* [Leveraged Cointegration Pairs Trading](../examples/Multi Asset Trading/Leveraged Cointegration Pairs Trading.html)
 * [**Parameter Heatmap & Optimization**](../examples/Parameter Heatmap &amp; Optimization.html)
 * [Trading with Machine Learning](../examples/Trading with Machine Learning.html)
 
