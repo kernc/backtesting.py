@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import warnings
 from collections import OrderedDict
+from collections.abc import Mapping
 from inspect import currentframe
 from itertools import chain, compress, count
 from numbers import Number
@@ -174,7 +175,7 @@ def quantile(series: Sequence, quantile: Union[None, float] = None):
 def compute_stats(
         *,
         stats: pd.Series,
-        data: pd.DataFrame,
+        data: Union[pd.DataFrame, Mapping[str, pd.DataFrame]],
         trades: pd.DataFrame = None,
         risk_free_rate: float = 0.) -> pd.Series:
     """
@@ -182,7 +183,8 @@ def compute_stats(
 
     `stats` is the statistics series as returned by `backtesting.backtesting.Backtest.run()`.
     `data` is OHLC data as passed to the `backtesting.backtesting.Backtest`
-    the `stats` were obtained in.
+    the `stats` were obtained in. For `PortfolioBacktest` results, pass either
+    a benchmark OHLC dataframe or the original symbol-to-OHLC mapping.
     `trades` can be a dataframe subset of `stats._trades` (e.g. only long trades).
     You can also tune `risk_free_rate`, used in calculation of Sharpe and Sortino ratios.
 
@@ -191,17 +193,55 @@ def compute_stats(
         >>> long_stats = compute_stats(stats=stats, trades=only_long_trades,
         ...                            data=GOOG, risk_free_rate=.02)
     """
+    if isinstance(data, Mapping):
+        from .backtesting import PortfolioBacktest
+        data = PortfolioBacktest._make_benchmark_data(data)
+
     equity = stats._equity_curve.Equity
+    equity_index = equity.index
+    if not data.index.equals(equity_index):
+        missing = equity_index.difference(data.index)
+        if len(missing):
+            raise ValueError('`data` index must contain all `stats._equity_curve` index values')
+        bar_offset = data.index.get_indexer([equity_index[0]])[0]
+        data = data.loc[equity_index]
+    else:
+        bar_offset = 0
+
+    given_trades = trades
     if trades is None:
         trades = stats._trades
-    else:
+
+    if not bar_offset:
+        for t in trades.itertuples(index=False):
+            if 'EntryTime' not in trades or pd.isna(t.EntryTime):
+                continue
+            entry_bar = equity_index.get_indexer([t.EntryTime])[0]
+            if entry_bar >= 0:
+                bar_offset = t.EntryBar - entry_bar
+                break
+
+    if given_trades is not None:
         # XXX: Is this buggy?
         equity = equity.copy()
         equity[:] = stats._equity_curve.Equity.iloc[0]
         for t in trades.itertuples(index=False):
-            equity.iloc[t.EntryBar:] += t.PnL
-    return _compute_stats(trades=trades, equity=equity.values, ohlc_data=data,
-                          risk_free_rate=risk_free_rate, strategy_instance=stats._strategy)
+            entry_bar = max(0, t.EntryBar - bar_offset)
+            if entry_bar < len(equity):
+                equity.iloc[entry_bar:] += t.PnL
+
+    calc_trades = trades
+    if bar_offset:
+        calc_trades = trades.copy()
+        calc_trades['EntryBar'] = (calc_trades['EntryBar'] - bar_offset).clip(lower=0)
+        calc_trades['ExitBar'] = calc_trades['ExitBar'] - bar_offset
+        calc_trades = calc_trades[calc_trades['ExitBar'] >= 0]
+
+    result = _compute_stats(trades=calc_trades, equity=equity.values, ohlc_data=data,
+                            risk_free_rate=risk_free_rate, strategy_instance=stats._strategy)
+    if len(calc_trades) == len(trades):
+        result.at['_trades'] = trades
+    return result
 
 
 def resample_apply(rule: str,

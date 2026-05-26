@@ -967,6 +967,40 @@ class TestLib(TestCase):
         self.assertEqual(stats._strategy, long_stats._strategy)
         assert_frame_equal(long_stats._trades, only_long_trades)
 
+    def test_compute_stats_portfolio_after_warmup(self):
+        index = pd.date_range('2020-01-01', periods=6)
+        data = pd.DataFrame({
+            'Open': [10, 10, 10, 12, 15, 18],
+            'High': [10, 10, 10, 12, 15, 18],
+            'Low': [10, 10, 10, 12, 15, 18],
+            'Close': [10, 10, 10, 12, 15, 18],
+            'Volume': [1000] * 6,
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                self.sma = self.I(lambda close: pd.Series(close).rolling(3).mean(),
+                                  self.data['A'].Close)
+
+            def next(self):
+                if len(self.data) == 4:
+                    self.buy('A', size=1)
+                elif len(self.data) == 5:
+                    self.position['A'].close()
+
+        stats = PortfolioBacktest({'A': data}, S, cash=10_000).run()
+        long_trades = stats._trades[stats._trades.Size > 0]
+
+        recomputed = compute_stats(stats=stats, data={'A': data})
+        long_stats = compute_stats(stats=stats, data={'A': data}, trades=long_trades)
+
+        self.assertEqual(recomputed['Start'], stats['Start'])
+        self.assertEqual(recomputed['# Trades'], stats['# Trades'])
+        self.assertEqual(long_stats['# Trades'], len(long_trades))
+        self.assertEqual(long_stats['Exposure Time [%]'], stats['Exposure Time [%]'])
+        assert_frame_equal(recomputed._trades, stats._trades)
+        assert_frame_equal(long_stats._trades, long_trades)
+
     def test_SignalStrategy(self):
         class S(SignalStrategy):
             def init(self):
