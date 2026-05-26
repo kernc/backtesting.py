@@ -452,7 +452,6 @@ class _Data:
               if self.__len < len(self.__df)
               else self.__df)
         if self.__symbol is not None:
-            df = df.copy(deep=False)
             symbols = frozenset((self.__symbol,))
             df.columns = [
                 _backtesting_series_name(column, symbols=symbols)

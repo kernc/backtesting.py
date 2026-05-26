@@ -2206,25 +2206,31 @@ class PortfolioBacktest:
         ohlc = data[['Open', 'High', 'Low', 'Close']]
         PortfolioBacktest._validate_real_numeric_columns(
             ohlc, ohlc.columns, label='OHLC', symbol=symbol)
-        finite_ohlc = np.isfinite(ohlc.values).all()
+        ohlc_values = ohlc.to_numpy(dtype=float, na_value=np.nan)
+        finite_ohlc = np.isfinite(ohlc_values).all()
         if not finite_ohlc:
             raise ValueError(f'Some OHLC values are not finite in `data[{symbol!r}]`.')
-        if (ohlc <= 0).values.any():
+        if (ohlc_values <= 0).any():
             raise ValueError(f'OHLC prices must be positive in `data[{symbol!r}]`.')
-        if (data['High'] < data[['Open', 'Close']].max(axis=1)).any():
+        open_ = data['Open'].to_numpy(dtype=float, na_value=np.nan)
+        high = data['High'].to_numpy(dtype=float, na_value=np.nan)
+        low = data['Low'].to_numpy(dtype=float, na_value=np.nan)
+        close = data['Close'].to_numpy(dtype=float, na_value=np.nan)
+        if (high < np.maximum(open_, close)).any():
             raise ValueError(f'`data[{symbol!r}]` contains High values below Open/Close.')
-        if (data['Low'] > data[['Open', 'Close']].min(axis=1)).any():
+        if (low > np.minimum(open_, close)).any():
             raise ValueError(f'`data[{symbol!r}]` contains Low values above Open/Close.')
-        if (data['Low'] > data['High']).any():
+        if (low > high).any():
             raise ValueError(f'`data[{symbol!r}]` contains Low values above High.')
         if data['Volume'].notna().any():
             if not PortfolioBacktest._is_real_numeric_dtype(data['Volume'].dtype):
                 raise ValueError(
                     f'Volume values must be numeric in `data[{symbol!r}]`.')
             volume = data['Volume'].dropna()
-            if not np.isfinite(volume.values).all():
+            volume_values = volume.to_numpy(dtype=float, na_value=np.nan)
+            if not np.isfinite(volume_values).all():
                 raise ValueError(f'Volume values must be finite in `data[{symbol!r}]`.')
-            if (volume < 0).any():
+            if (volume_values < 0).any():
                 raise ValueError(f'`data[{symbol!r}]` contains negative Volume values.')
         if not data.index.is_monotonic_increasing:
             warnings.warn(f'Data index for {symbol!r} is not sorted in ascending order. Sorting.',
@@ -2254,6 +2260,9 @@ class PortfolioBacktest:
         """
         Run the portfolio backtest. Returns the same statistics series shape as
         `Backtest.run()`, with `_trades.Symbol` identifying each traded asset.
+        `_equity_curve` starts at the first post-warmup trading bar, while
+        `_trades.EntryBar` and `_trades.ExitBar` remain absolute positions in
+        the original aligned data.
         """
         data = _MultiData({symbol: df.copy(deep=False)
                            for symbol, df in self._data.items()})

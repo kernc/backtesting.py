@@ -1690,6 +1690,26 @@ class TestLib(TestCase):
         self.assertEqual(stats['Equity Final [$]'], 0)
         self.assertEqual(len(stats['_strategy'].data), len(data))
 
+    def test_PortfolioBacktest_data_df_mutations_survive_init_update(self):
+        index = pd.date_range('2020-01-01', periods=5)
+        data = pd.DataFrame({
+            'Open': [100, 101, 102, 103, 104],
+            'High': [100, 101, 102, 103, 104],
+            'Low': [100, 101, 102, 103, 104],
+            'Close': [100, 101, 102, 103, 104],
+        }, index=index)
+        seen = []
+
+        class S(Strategy):
+            def init(self):
+                self.data['A'].df['Signal'] = np.arange(len(self.data))
+
+            def next(self):
+                seen.append(self.data['A'].Signal[-1])
+
+        PortfolioBacktest({'A': data}, S).run()
+        self.assertEqual(seen, [1, 2, 3, 4])
+
     def test_PortfolioBacktest_inner_alignment_warns_on_dropped_rows(self):
         index_a = pd.date_range('2020-01-01', periods=4)
         index_b = pd.date_range('2020-01-03', periods=2)
@@ -2304,6 +2324,27 @@ class TestLib(TestCase):
         infinite_volume.loc[infinite_volume.index[0], 'Volume'] = np.inf
         with self.assertRaisesRegex(ValueError, 'Volume values must be finite'):
             PortfolioBacktest({'A': infinite_volume}, S)
+
+    def test_PortfolioBacktest_accepts_nullable_numeric_data_dtypes(self):
+        index = pd.date_range('2020-01-01', periods=3)
+        data = pd.DataFrame({
+            'Open': pd.array([100, 101, 102], dtype='Float64'),
+            'High': pd.array([101, 102, 103], dtype='Float64'),
+            'Low': pd.array([99, 100, 101], dtype='Float64'),
+            'Close': pd.array([100, 101, 102], dtype='Float64'),
+            'Volume': pd.array([1000, 1001, 1002], dtype='Int64'),
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A', size=1)
+
+        stats = PortfolioBacktest({'A': data}, S, cash=10_000, finalize_trades=True).run()
+        self.assertEqual(stats['# Trades'], 1)
 
     def test_PortfolioBacktest_validates_symbol_mapped_costs_early(self):
         index = pd.date_range('2020-01-01', periods=2)
