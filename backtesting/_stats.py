@@ -98,11 +98,17 @@ def compute_stats(
 
             for ind in strategy_instance._indicators:
                 ind_symbol = ind._opts.get('symbol')
+                ind_name = ind.name
                 ind = np.atleast_2d(ind)
                 for i, values in enumerate(ind):  # multi-d indicators
-                    suffix = f'_{i}' if len(ind) > 1 else ''
-                    entry_col = f'Entry_{ind.name}{suffix}'
-                    exit_col = f'Exit_{ind.name}{suffix}'
+                    if isinstance(ind_name, (list, tuple)):
+                        name = ind_name[i]
+                        suffix = ''
+                    else:
+                        name = ind_name
+                        suffix = f'_{i}' if len(ind) > 1 else ''
+                    entry_col = f'Entry_{name}{suffix}'
+                    exit_col = f'Exit_{name}{suffix}'
                     if ind_symbol is not None and 'Symbol' in trades_df:
                         if entry_col not in trades_df:
                             trades_df[entry_col] = _empty_indicator_column(

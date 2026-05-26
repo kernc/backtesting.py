@@ -1425,6 +1425,43 @@ class TestLib(TestCase):
         self.assertTrue(np.isfinite(trades['Entry_same']).all())
         self.assertTrue(np.isfinite(trades['Exit_same']).all())
 
+    def test_PortfolioBacktest_multi_output_indicator_uses_component_names_in_trades(self):
+        index = pd.date_range('2020-01-01', periods=5)
+        data = {
+            'A': pd.DataFrame({
+                'Open': [10, 11, 12, 13, 14],
+                'High': [10, 11, 12, 13, 14],
+                'Low': [10, 11, 12, 13, 14],
+                'Close': [10, 11, 12, 13, 14],
+            }, index=index),
+        }
+
+        def bands(close):
+            close = np.asarray(close)
+            return np.vstack([close - 1, close, close + 1])
+
+        class S(Strategy):
+            def init(self):
+                self.bands = self.I(bands,
+                                    self.data['A'].Close,
+                                    name=['A lower', 'A middle', 'A upper'])
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A', size=1)
+                elif len(self.data) == 4:
+                    self.position['A'].close()
+
+        trades = PortfolioBacktest(data, S).run()['_trades']
+        self.assertEqual(trades['Entry_A lower'].tolist(), [11])
+        self.assertEqual(trades['Entry_A middle'].tolist(), [12])
+        self.assertEqual(trades['Entry_A upper'].tolist(), [13])
+        self.assertEqual(trades['Exit_A lower'].tolist(), [13])
+        self.assertEqual(trades['Exit_A middle'].tolist(), [14])
+        self.assertEqual(trades['Exit_A upper'].tolist(), [15])
+        self.assertFalse(any(str(column).startswith("Entry_['A lower'")
+                             for column in trades.columns))
+
     def test_PortfolioBacktest_cross_symbol_indicator_is_global(self):
         index = pd.date_range('2020-01-01', periods=5)
         data = {
@@ -1889,6 +1926,37 @@ class TestLib(TestCase):
         self.assertEqual(trade.ExitBar, 3)
         self.assertEqual(trade.ExitPrice, 30)
         self.assertEqual(trade.PnL, 10)
+
+    def test_PortfolioBacktest_finalize_trades_drops_final_bar_close_orders(self):
+        index = pd.date_range('2020-01-01', periods=4)
+        data = pd.DataFrame({
+            'Open': [10, 10, 20, 25],
+            'High': [10, 10, 20, 30],
+            'Low': [10, 10, 20, 25],
+            'Close': [10, 10, 20, 30],
+            'Volume': [1000] * 4,
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A', size=1)
+                elif len(self.data) == len(data):
+                    self.position['A'].close()
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always')
+            stats = PortfolioBacktest({'A': data}, S, cash=10_000,
+                                      finalize_trades=True).run()
+
+        pending_warnings = [w for w in caught if 'pending order' in str(w.message)]
+        self.assertEqual(pending_warnings, [])
+        self.assertEqual(stats['_trades'].iloc[0].ExitBar, 3)
+        self.assertEqual(stats['_trades'].iloc[0].ExitPrice, 30)
+        self.assertEqual(stats['_strategy'].orders, ())
 
     def test_PortfolioBacktest_warns_about_pending_orders_at_end(self):
         index = pd.date_range('2020-01-01', periods=3)

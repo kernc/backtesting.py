@@ -256,6 +256,9 @@ stats_tighter[["Return [%]", "Max. Drawdown [%]", "# Trades", "Win Rate [%]"]]
 #
 # * Use `PortfolioBacktest` when your strategy needs shared capital across assets.
 # * Use `MultiBacktest` when you want independent single-asset runs for comparison.
+# * Portfolio `Buy & Hold Return [%]`, `Alpha [%]`, and `Beta` use an equal-weight
+#   average of normalized symbol closes, rebased after indicator warmup. They are
+#   not a cash-weighted or margin-aware buy-and-hold portfolio.
 # * Real multi-asset data should be adjusted for splits/dividends when appropriate.
 # * Transaction costs matter more in a portfolio strategy because capital can turn
 #   over across several symbols at once.

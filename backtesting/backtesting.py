@@ -1080,6 +1080,10 @@ class _Broker:
         for trade in reversed(list(self.trades)):
             price = self._data_for_symbol(trade.symbol).Close[-1]
             self._close_trade(trade, price, time_index)
+        self.orders[:] = [
+            order for order in self.orders
+            if not (order.parent_trade and order.parent_trade not in self.trades)
+        ]
         self._equity[time_index] = self.equity
 
     @property
@@ -2040,6 +2044,11 @@ class PortfolioBacktest:
     power than is available, the broker processes them first-come-first-served.
     Market orders placed on the final bar cannot be filled because there is no
     next bar; such pending orders are warned about at the end of `run()`.
+
+    Portfolio benchmark statistics such as `Buy & Hold Return [%]`, `Alpha [%]`,
+    and `Beta` use an equal-weight average of normalized symbol closes, rebased
+    after indicator warmup. They are not a cash-weighted or margin-aware buy-and-
+    hold portfolio.
     """
     def __init__(self,
                  data: Mapping[str, pd.DataFrame],
@@ -2262,7 +2271,9 @@ class PortfolioBacktest:
         `Backtest.run()`, with `_trades.Symbol` identifying each traded asset.
         `_equity_curve` starts at the first post-warmup trading bar, while
         `_trades.EntryBar` and `_trades.ExitBar` remain absolute positions in
-        the original aligned data.
+        the original aligned data. `Buy & Hold Return [%]`, `Alpha [%]`, and
+        `Beta` are measured against an equal-weight average of normalized
+        symbol closes, rebased after indicator warmup.
         """
         data = _MultiData({symbol: df.copy(deep=False)
                            for symbol, df in self._data.items()})
