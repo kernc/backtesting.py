@@ -846,10 +846,14 @@ class _Broker:
             commission_fixed, commission_relative = commission
         except TypeError:
             commission_fixed, commission_relative = 0, commission
-        assert commission_fixed >= 0, 'Need fixed cash commission in $ >= 0'
-        assert -.1 <= commission_relative < .1, \
-            ("commission should be between -10% "
-             f"(e.g. market-maker's rebates) and 10% (fees), is {commission_relative}")
+        except ValueError:
+            raise ValueError('`commission` tuple must be `(fixed, relative)`') from None
+        if commission_fixed < 0:
+            raise ValueError('Need fixed cash commission in $ >= 0')
+        if not -.1 <= commission_relative < .1:
+            raise ValueError(
+                "commission should be between -10% "
+                f"(e.g. market-maker's rebates) and 10% (fees), is {commission_relative}")
         return commission_fixed, commission_relative
 
     def _normalize_commission(self, commission):
@@ -2029,6 +2033,13 @@ class PortfolioBacktest:
     per-symbol data with `self.data["AAPL"].Close`, place orders with
     `self.buy("AAPL", size=...)`, and inspect positions with
     `self.position["AAPL"]`.
+
+    Fractional order sizes reserve a fraction of the portfolio buying-power
+    snapshot available when each order is processed; they are not continuously
+    rebalanced target weights. If same-bar fractional orders request more buying
+    power than is available, the broker processes them first-come-first-served.
+    Market orders placed on the final bar cannot be filled because there is no
+    next bar; such pending orders are warned about at the end of `run()`.
     """
     def __init__(self,
                  data: Mapping[str, pd.DataFrame],
@@ -2056,6 +2067,14 @@ class PortfolioBacktest:
             raise TypeError('`spread` must be a float value or a mapping by symbol')
         if not isinstance(commission, (Number, tuple, Mapping)) and not callable(commission):
             raise TypeError('`commission` must be a float, tuple, callable, or mapping by symbol')
+        if not isinstance(cash, Number) or not np.isfinite(cash) or cash <= 0:
+            raise ValueError(f'`cash` must be > 0, is {cash}')
+        if not isinstance(margin, Number) or not np.isfinite(margin) or not 0 < margin <= 1:
+            raise ValueError(f'`margin` must be between 0 and 1, is {margin}')
+        if isinstance(spread, Number):
+            self._validate_spread(spread, '`spread`')
+        if not isinstance(commission, Mapping):
+            _Broker._validate_commission(commission)
 
         prepared: dict[str, pd.DataFrame] = {}
         for symbol, df in data.items():
@@ -2104,6 +2123,15 @@ class PortfolioBacktest:
         self._finalize_trades = bool(finalize_trades)
 
     @staticmethod
+    def _validate_spread(spread, name):
+        if not isinstance(spread, Number) or np.iscomplexobj(spread):
+            raise TypeError(f'{name} must be a number')
+        if not np.isfinite(spread):
+            raise ValueError(f'{name} must be finite')
+        if spread < 0:
+            raise ValueError(f'{name} must be >= 0')
+
+    @staticmethod
     def _validate_symbol_mapping(value, symbols, name):
         if not isinstance(value, Mapping):
             return
@@ -2121,13 +2149,23 @@ class PortfolioBacktest:
             raise KeyError(message)
         if name == 'spread':
             for symbol, spread in value.items():
-                if not isinstance(spread, Number):
-                    raise TypeError(f"`spread[{symbol!r}]` must be a number")
-                if spread < 0:
-                    raise ValueError(f"`spread[{symbol!r}]` must be >= 0")
+                PortfolioBacktest._validate_spread(spread, f"`spread[{symbol!r}]`")
         elif name == 'commission':
             for commission in value.values():
                 _Broker._validate_commission(commission)
+
+    @staticmethod
+    def _is_real_numeric_dtype(dtype) -> bool:
+        return (pd.api.types.is_numeric_dtype(dtype) and
+                not pd.api.types.is_bool_dtype(dtype) and
+                not pd.api.types.is_complex_dtype(dtype))
+
+    @staticmethod
+    def _validate_real_numeric_columns(frame: pd.DataFrame, columns, *, label: str, symbol: str):
+        for column in columns:
+            if not PortfolioBacktest._is_real_numeric_dtype(frame[column].dtype):
+                raise ValueError(
+                    f'{label} values must be real numeric in `data[{symbol!r}]`.')
 
     @staticmethod
     def _prepare_data(symbol: str, data: pd.DataFrame) -> pd.DataFrame:
@@ -2145,6 +2183,11 @@ class PortfolioBacktest:
             except ValueError:
                 pass
 
+        if data.index.hasnans:
+            raise ValueError(
+                f"`data[{symbol!r}]` index contains missing values; "
+                "PortfolioBacktest requires a complete index for each symbol.")
+
         if not data.index.is_unique:
             raise ValueError(
                 f"`data[{symbol!r}]` index contains duplicate values; "
@@ -2161,11 +2204,9 @@ class PortfolioBacktest:
         if data[['Open', 'High', 'Low', 'Close']].isnull().values.any():
             raise ValueError(f'Some OHLC values are missing (NaN) in `data[{symbol!r}]`.')
         ohlc = data[['Open', 'High', 'Low', 'Close']]
-        try:
-            finite_ohlc = np.isfinite(ohlc.values).all()
-        except TypeError:
-            raise ValueError(
-                f'OHLC values must be numeric and finite in `data[{symbol!r}]`.') from None
+        PortfolioBacktest._validate_real_numeric_columns(
+            ohlc, ohlc.columns, label='OHLC', symbol=symbol)
+        finite_ohlc = np.isfinite(ohlc.values).all()
         if not finite_ohlc:
             raise ValueError(f'Some OHLC values are not finite in `data[{symbol!r}]`.')
         if (ohlc <= 0).values.any():
@@ -2177,12 +2218,13 @@ class PortfolioBacktest:
         if (data['Low'] > data['High']).any():
             raise ValueError(f'`data[{symbol!r}]` contains Low values above High.')
         if data['Volume'].notna().any():
-            try:
-                negative_volume = (data['Volume'].dropna() < 0).any()
-            except TypeError:
+            if not PortfolioBacktest._is_real_numeric_dtype(data['Volume'].dtype):
                 raise ValueError(
-                    f'Volume values must be numeric in `data[{symbol!r}]`.') from None
-            if negative_volume:
+                    f'Volume values must be numeric in `data[{symbol!r}]`.')
+            volume = data['Volume'].dropna()
+            if not np.isfinite(volume.values).all():
+                raise ValueError(f'Volume values must be finite in `data[{symbol!r}]`.')
+            if (volume < 0).any():
                 raise ValueError(f'`data[{symbol!r}]` contains negative Volume values.')
         if not data.index.is_monotonic_increasing:
             warnings.warn(f'Data index for {symbol!r} is not sorted in ascending order. Sorting.',
@@ -2248,6 +2290,14 @@ class PortfolioBacktest:
                         'Some trades remain open at the end of backtest. Use '
                         '`PortfolioBacktest(..., finalize_trades=True)` to close them and '
                         'include them in stats.', stacklevel=2)
+
+            pending_orders = [order for order in broker.orders if not order.is_contingent]
+            if pending_orders:
+                warnings.warn(
+                    f'{len(pending_orders)} pending order(s) remain at the end of portfolio backtest. '
+                    'Orders placed on the final bar cannot be filled because there is no next bar.',
+                    UserWarning,
+                    stacklevel=2)
 
             data._set_length(full_len)
 

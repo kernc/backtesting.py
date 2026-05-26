@@ -1754,6 +1754,48 @@ class TestLib(TestCase):
         self.assertEqual(trades_ab['Size'].tolist(), [50, 50])
         assert_frame_equal(trades_ab[['Symbol', 'Size']], trades_ba[['Symbol', 'Size']])
 
+    def test_PortfolioBacktest_overbooked_fractional_orders_are_first_come_first_served(self):
+        index = pd.date_range('2020-01-01', periods=3)
+
+        def ohlc():
+            return pd.DataFrame({
+                'Open': [100] * len(index),
+                'High': [100] * len(index),
+                'Low': [100] * len(index),
+                'Close': [100] * len(index),
+                'Volume': [1000] * len(index),
+            }, index=index)
+
+        class BuyAB(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A', size=.6)
+                    self.buy('B', size=.6)
+
+        class BuyBA(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('B', size=.6)
+                    self.buy('A', size=.6)
+
+        with self.assertWarnsRegex(UserWarning, 'insufficient margin'):
+            stats_ab = PortfolioBacktest({'A': ohlc(), 'B': ohlc()}, BuyAB,
+                                         cash=10_000, finalize_trades=True).run()
+        with self.assertWarnsRegex(UserWarning, 'insufficient margin'):
+            stats_ba = PortfolioBacktest({'A': ohlc(), 'B': ohlc()}, BuyBA,
+                                         cash=10_000, finalize_trades=True).run()
+
+        self.assertEqual(stats_ab['_trades']['Symbol'].tolist(), ['A'])
+        self.assertEqual(stats_ab['_trades']['Size'].tolist(), [60])
+        self.assertEqual(stats_ba['_trades']['Symbol'].tolist(), ['B'])
+        self.assertEqual(stats_ba['_trades']['Size'].tolist(), [60])
+
     def test_PortfolioBacktest_tuple_held_indicators_are_sliced(self):
         index = pd.date_range('2020-01-01', periods=5)
         data = pd.DataFrame({
@@ -1782,6 +1824,28 @@ class TestLib(TestCase):
         self.assertGreater(len(seen), 0)
         self.assertEqual(seen[0][0], 4)
 
+    def test_PortfolioBacktest_warns_all_nan_indicator_ignored_for_warmup(self):
+        index = pd.date_range('2020-01-01', periods=4)
+        data = pd.DataFrame({
+            'Open': [100, 101, 102, 103],
+            'High': [100, 101, 102, 103],
+            'Low': [100, 101, 102, 103],
+            'Close': [100, 101, 102, 103],
+            'Volume': [1000] * 4,
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                self.bad = self.I(lambda close: np.full(len(close), np.nan),
+                                  self.data['A'].Close,
+                                  name='all nan')
+
+            def next(self):
+                pass
+
+        with self.assertWarnsRegex(UserWarning, 'all-NaN indicator'):
+            PortfolioBacktest({'A': data}, S).run()
+
     def test_PortfolioBacktest_finalize_trades_exits_on_final_close(self):
         index = pd.date_range('2020-01-01', periods=4)
         data = pd.DataFrame({
@@ -1805,6 +1869,28 @@ class TestLib(TestCase):
         self.assertEqual(trade.ExitBar, 3)
         self.assertEqual(trade.ExitPrice, 30)
         self.assertEqual(trade.PnL, 10)
+
+    def test_PortfolioBacktest_warns_about_pending_orders_at_end(self):
+        index = pd.date_range('2020-01-01', periods=3)
+        data = pd.DataFrame({
+            'Open': [100, 101, 102],
+            'High': [100, 101, 102],
+            'Low': [100, 101, 102],
+            'Close': [100, 101, 102],
+            'Volume': [1000] * 3,
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 3:
+                    self.buy('A', size=1)
+
+        with self.assertWarnsRegex(UserWarning, 'pending order'):
+            stats = PortfolioBacktest({'A': data}, S, cash=10_000, finalize_trades=True).run()
+        self.assertEqual(len(stats['_trades']), 0)
 
     def test_PortfolioBacktest_benchmark_return_rebases_at_strategy_start(self):
         index = pd.date_range('2020-01-01', periods=3)
@@ -2181,6 +2267,44 @@ class TestLib(TestCase):
         with self.assertRaisesRegex(ValueError, 'Volume values must be numeric'):
             PortfolioBacktest({'A': bad_volume}, S)
 
+    def test_PortfolioBacktest_rejects_invalid_data_dtypes_and_index(self):
+        index = pd.date_range('2020-01-01', periods=2)
+        data = pd.DataFrame({
+            'Open': [100., 101.],
+            'High': [101., 102.],
+            'Low': [99., 100.],
+            'Close': [100., 101.],
+            'Volume': [1000., 1000.],
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                pass
+
+        bool_ohlc = data.copy()
+        for col in ['Open', 'High', 'Low', 'Close']:
+            bool_ohlc[col] = True
+        with self.assertRaisesRegex(ValueError, 'OHLC values must be real numeric'):
+            PortfolioBacktest({'A': bool_ohlc}, S)
+
+        complex_ohlc = data.copy()
+        complex_ohlc['Close'] = complex_ohlc['Close'].astype(complex)
+        with self.assertRaisesRegex(ValueError, 'OHLC values must be real numeric'):
+            PortfolioBacktest({'A': complex_ohlc}, S)
+
+        nat_index = data.copy()
+        nat_index.index = pd.DatetimeIndex([pd.Timestamp('2020-01-01'), pd.NaT])
+        with self.assertRaisesRegex(ValueError, 'index contains missing values'):
+            PortfolioBacktest({'A': nat_index}, S)
+
+        infinite_volume = data.copy()
+        infinite_volume.loc[infinite_volume.index[0], 'Volume'] = np.inf
+        with self.assertRaisesRegex(ValueError, 'Volume values must be finite'):
+            PortfolioBacktest({'A': infinite_volume}, S)
+
     def test_PortfolioBacktest_validates_symbol_mapped_costs_early(self):
         index = pd.date_range('2020-01-01', periods=2)
         data = pd.DataFrame({
@@ -2202,6 +2326,44 @@ class TestLib(TestCase):
             PortfolioBacktest({'A': data}, S, commission={'B': 0})
         with self.assertRaisesRegex(KeyError, 'B'):
             PortfolioBacktest({'A': data}, S, spread={'B': 0})
+
+    def test_PortfolioBacktest_validates_scalar_costs_and_broker_config_early(self):
+        index = pd.date_range('2020-01-01', periods=2)
+        data = pd.DataFrame({
+            'Open': [100, 100],
+            'High': [100, 100],
+            'Low': [100, 100],
+            'Close': [100, 100],
+            'Volume': [1000, 1000],
+        }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                pass
+
+        with self.assertRaisesRegex(ValueError, '`spread` must be >= 0'):
+            PortfolioBacktest({'A': data}, S, spread=-0.01)
+
+        with self.assertRaisesRegex(ValueError, '`spread` must be finite'):
+            PortfolioBacktest({'A': data}, S, spread=np.inf)
+
+        with self.assertRaisesRegex(ValueError, 'commission'):
+            PortfolioBacktest({'A': data}, S, commission=(-1, 0))
+
+        with self.assertRaisesRegex(ValueError, 'commission'):
+            PortfolioBacktest({'A': data}, S, commission=(1,))
+
+        with self.assertRaisesRegex(ValueError, 'cash'):
+            PortfolioBacktest({'A': data}, S, cash=0)
+
+        with self.assertRaisesRegex(ValueError, 'margin'):
+            PortfolioBacktest({'A': data}, S, margin=0)
+
+        with self.assertRaisesRegex(ValueError, 'margin'):
+            PortfolioBacktest({'A': data}, S, margin=1.5)
 
 
 class TestUtil(TestCase):

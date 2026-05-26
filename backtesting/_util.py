@@ -258,9 +258,27 @@ def _strategy_indicator_specs(strategy):
 def _indicator_warmup_nbars(strategy):
     if strategy is None:
         return 0
-    nbars = max((np.isnan(indicator.astype(float)).argmin(axis=-1).max()
-                 for _, indicator in _strategy_indicators(strategy)
-                 if not indicator._opts['scatter']), default=0)
+    nbars = 0
+    warned_all_nan = bool(getattr(strategy, '_warned_all_nan_indicator_warmup', False))
+    for _, indicator in _strategy_indicators(strategy):
+        if indicator._opts['scatter']:
+            continue
+        values = indicator.astype(float)
+        isnan = np.isnan(values)
+        all_nan = np.all(isnan, axis=-1)
+        if np.any(all_nan):
+            if not warned_all_nan:
+                warnings.warn(
+                    'all-NaN indicator values were ignored for warm-up calculation.',
+                    UserWarning,
+                    stacklevel=2)
+                setattr(strategy, '_warned_all_nan_indicator_warmup', True)
+                warned_all_nan = True
+            if np.all(all_nan):
+                continue
+            if isinstance(all_nan, np.ndarray):
+                isnan = isnan[~all_nan]
+        nbars = max(nbars, np.asarray(isnan).argmin(axis=-1).max())
     return nbars
 
 

@@ -136,7 +136,10 @@ def bollinger_bands(close, lookback, n_std):
 # The indicator dictionaries below are the main pattern to notice. Each symbol
 # gets its own middle, upper, and lower band arrays. `size=.20` requests 20% of
 # the same-bar portfolio buying-power snapshot when the order is processed; it
-# is not a continuously rebalanced 20% target weight.
+# is not a continuously rebalanced 20% target weight. If several same-bar
+# fractional orders together request more buying power than is available, the
+# broker processes them first-come-first-served in the order the strategy places
+# them, and later orders can be canceled for insufficient margin.
 
 # %%
 class BollingerPortfolioStrategy(Strategy):
