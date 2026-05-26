@@ -86,6 +86,28 @@ def _symbols_from_opts(opts):
     return frozenset(() if symbol is None else (symbol,))
 
 
+def _backtesting_opts(*, symbol=None, symbols=None):
+    symbols = _symbols_from_opts({'symbol': symbol, 'symbols': symbols})
+    return {
+        'symbol': _symbol_from_symbols(symbols),
+        'symbols': symbols,
+    }
+
+
+def _apply_backtesting_attrs(value, *, symbol=None, symbols=None):
+    if hasattr(value, 'attrs'):
+        opts = _backtesting_opts(symbol=symbol, symbols=symbols)
+        value.attrs['backtesting.symbol'] = opts['symbol']
+        value.attrs['backtesting.symbols'] = opts['symbols']
+    return value
+
+
+def _backtesting_series_name(name, *, symbol=None, symbols=None):
+    if isinstance(name, str):
+        return _SeriesName(name, _backtesting_opts(symbol=symbol, symbols=symbols))
+    return name
+
+
 def _merged_symbols(*values):
     symbols = set()
 
@@ -96,22 +118,43 @@ def _merged_symbols(*values):
         elif isinstance(value, (list, tuple)):
             for item in value:
                 _scan(item)
+        elif isinstance(value, pd.DataFrame):
+            local_symbols = set()
+            for column in value.columns:
+                opts = getattr(column, '_opts', None)
+                if opts is not None:
+                    local_symbols.update(_symbols_from_opts(opts))
+
+            # Pandas often propagates `.attrs` from only one operand during
+            # arithmetic. Treat attrs as supplemental metadata only when the
+            # object also carries symbol-aware column/name metadata; otherwise
+            # a derived cross-symbol result can be falsely attributed to a
+            # single source symbol.
+            attrs = getattr(value, 'attrs', None)
+            if local_symbols and attrs:
+                local_symbols.update(_symbols_from_opts({
+                    'symbol': attrs.get('backtesting.symbol'),
+                    'symbols': attrs.get('backtesting.symbols'),
+                }))
+            symbols.update(local_symbols)
         else:
+            local_symbols = set()
             opts = getattr(value, '_opts', None)
             if opts is not None:
-                symbols.update(_symbols_from_opts(opts))
+                local_symbols.update(_symbols_from_opts(opts))
 
             name = getattr(value, 'name', None)
             opts = getattr(name, '_opts', None)
             if opts is not None:
-                symbols.update(_symbols_from_opts(opts))
+                local_symbols.update(_symbols_from_opts(opts))
 
             attrs = getattr(value, 'attrs', None)
-            if attrs:
-                symbols.update(_symbols_from_opts({
+            if local_symbols and attrs:
+                local_symbols.update(_symbols_from_opts({
                     'symbol': attrs.get('backtesting.symbol'),
                     'symbols': attrs.get('backtesting.symbols'),
                 }))
+            symbols.update(local_symbols)
 
     for value in values:
         _scan(value)
@@ -326,7 +369,13 @@ class _Array(np.ndarray):
     def df(self) -> pd.DataFrame:
         values = np.atleast_2d(np.asarray(self))
         index = self._opts['index'][:values.shape[1]]
-        df = pd.DataFrame(values.T, index=index, columns=[self.name] * len(values))
+        column_name = _backtesting_series_name(self.name,
+                                               symbol=self._opts.get('symbol'),
+                                               symbols=self._opts.get('symbols'))
+        df = pd.DataFrame(values.T, index=index, columns=[column_name] * len(values))
+        _apply_backtesting_attrs(df,
+                                 symbol=self._opts.get('symbol'),
+                                 symbols=self._opts.get('symbols'))
         return df
 
 
@@ -381,9 +430,20 @@ class _Data:
 
     @property
     def df(self) -> pd.DataFrame:
-        return (self.__df.iloc[:self.__len]
-                if self.__len < len(self.__df)
-                else self.__df)
+        df = (self.__df.iloc[:self.__len]
+              if self.__len < len(self.__df)
+              else self.__df)
+        if self.__symbol is not None:
+            df = df.copy(deep=False)
+            symbols = frozenset((self.__symbol,))
+            df.columns = [
+                _backtesting_series_name(column, symbols=symbols)
+                for column in df.columns
+            ]
+            _apply_backtesting_attrs(df, symbols=symbols)
+            for column in df.columns:
+                _apply_backtesting_attrs(df[column], symbols=symbols)
+        return df
 
     @property
     def pip(self) -> float:

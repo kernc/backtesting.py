@@ -2145,6 +2145,11 @@ class PortfolioBacktest:
             except ValueError:
                 pass
 
+        if not data.index.is_unique:
+            raise ValueError(
+                f"`data[{symbol!r}]` index contains duplicate values; "
+                "PortfolioBacktest requires a unique index for each symbol.")
+
         if 'Volume' not in data:
             data['Volume'] = np.nan
 

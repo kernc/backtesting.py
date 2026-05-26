@@ -1063,6 +1063,251 @@ class TestLib(TestCase):
         self.assertEqual(stats['_trades']['PnL'].tolist(), [20, -10])
         self.assertEqual(stats['Equity Final [$]'], 10_010)
 
+    def test_PortfolioBacktest_rejects_duplicate_index(self):
+        index = pd.to_datetime([
+            '2020-01-01', '2020-01-01', '2020-01-02', '2020-01-03'
+        ])
+
+        def frame(values):
+            return pd.DataFrame({
+                'Open': values,
+                'High': values,
+                'Low': values,
+                'Close': values,
+            }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                pass
+
+        with self.assertRaisesRegex(ValueError, 'duplicate|unique|index'):
+            PortfolioBacktest({'A': frame([10, 11, 12, 13]),
+                               'B': frame([20, 21, 22, 23])}, S)
+
+    def test_PortfolioBacktest_data_df_indicator_keeps_symbol(self):
+        index = pd.date_range('2020-01-01', periods=6)
+
+        def frame(values):
+            return pd.DataFrame({
+                'Open': values,
+                'High': values,
+                'Low': values,
+                'Close': values,
+            }, index=index)
+
+        data = {
+            'A': frame([10, 11, 12, 13, 14, 15]),
+            'B': frame([100, 100, 100, 100, 100, 100]),
+        }
+
+        class S(Strategy):
+            def init(self):
+                self.a_close = self.I(lambda: self.data['A'].df.Close,
+                                      name='A_df_close')
+
+            def next(self):
+                if len(self.data) == 3:
+                    self.buy('B')
+                elif len(self.data) == 5:
+                    self.position['B'].close()
+
+        stats = PortfolioBacktest(data, S, cash=10_000).run()
+        indicator = stats['_strategy']._indicators[0]
+        trades = stats['_trades']
+
+        self.assertEqual(indicator._opts.get('symbol'), 'A')
+        self.assertTrue(trades['Entry_A_df_close'].isna().all())
+        self.assertTrue(trades['Exit_A_df_close'].isna().all())
+
+    def test_PortfolioBacktest_array_df_indicator_keeps_symbol(self):
+        index = pd.date_range('2020-01-01', periods=6)
+
+        def frame(values):
+            return pd.DataFrame({
+                'Open': values,
+                'High': values,
+                'Low': values,
+                'Close': values,
+            }, index=index)
+
+        data = {
+            'A': frame([10, 11, 12, 13, 14, 15]),
+            'B': frame([100, 100, 100, 100, 100, 100]),
+        }
+
+        class S(Strategy):
+            def init(self):
+                self.a_close = self.I(lambda: self.data['A'].Close.df,
+                                      name='A_array_df')
+
+            def next(self):
+                if len(self.data) == 3:
+                    self.buy('B')
+                elif len(self.data) == 5:
+                    self.position['B'].close()
+
+        stats = PortfolioBacktest(data, S, cash=10_000).run()
+        indicator = stats['_strategy']._indicators[0]
+        trades = stats['_trades']
+
+        self.assertEqual(indicator._opts.get('symbol'), 'A')
+        self.assertTrue(trades['Entry_A_array_df'].isna().all())
+        self.assertTrue(trades['Exit_A_array_df'].isna().all())
+
+    def test_PortfolioBacktest_dataframe_indicator_column_metadata_keeps_symbol(self):
+        index = pd.date_range('2020-01-01', periods=6)
+
+        def frame(values):
+            return pd.DataFrame({
+                'Open': values,
+                'High': values,
+                'Low': values,
+                'Close': values,
+            }, index=index)
+
+        data = {
+            'A': frame([10, 11, 12, 13, 14, 15]),
+            'B': frame([100, 100, 100, 100, 100, 100]),
+        }
+
+        class S(Strategy):
+            def init(self):
+                self.a_df = self.I(lambda: pd.DataFrame(self.data['A'].Close.s),
+                                   name='A_df')
+
+            def next(self):
+                if len(self.data) == 3:
+                    self.buy('B')
+                elif len(self.data) == 5:
+                    self.position['B'].close()
+
+        stats = PortfolioBacktest(data, S, cash=10_000).run()
+        indicator = stats['_strategy']._indicators[0]
+        trades = stats['_trades']
+
+        self.assertEqual(indicator._opts.get('symbol'), 'A')
+        self.assertTrue(trades['Entry_A_df'].isna().all())
+        self.assertTrue(trades['Exit_A_df'].isna().all())
+
+    def test_PortfolioBacktest_cross_symbol_dataframe_indicator_stays_global(self):
+        index = pd.date_range('2020-01-01', periods=5)
+        data = {
+            'A': pd.DataFrame({
+                'Open': [10, 11, 12, 13, 14],
+                'High': [10, 11, 12, 13, 14],
+                'Low': [10, 11, 12, 13, 14],
+                'Close': [10, 11, 12, 13, 14],
+            }, index=index),
+            'B': pd.DataFrame({
+                'Open': [20, 21, 22, 23, 24],
+                'High': [20, 21, 22, 23, 24],
+                'Low': [20, 21, 22, 23, 24],
+                'Close': [20, 21, 22, 23, 24],
+            }, index=index),
+        }
+
+        class S(Strategy):
+            def init(self):
+                def indicator():
+                    return pd.concat([
+                        self.data['A'].Close.s,
+                        self.data['B'].Close.s,
+                    ], axis=1)
+                self.cross = self.I(indicator, name=['A_close', 'B_close'])
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('B', size=1)
+                elif len(self.data) == 4:
+                    self.position['B'].close()
+
+        stats = PortfolioBacktest(data, S).run()
+        indicator = stats['_strategy']._indicators[0]
+        self.assertIsNone(indicator._opts.get('symbol'))
+        self.assertEqual(set(indicator._opts.get('symbols', ())), {'A', 'B'})
+
+    def test_PortfolioBacktest_cross_symbol_df_accessor_arithmetic_stays_global(self):
+        index = pd.date_range('2020-01-01', periods=5)
+        data = {
+            'A': pd.DataFrame({
+                'Open': [10, 11, 12, 13, 14],
+                'High': [10, 11, 12, 13, 14],
+                'Low': [10, 11, 12, 13, 14],
+                'Close': [10, 11, 12, 13, 14],
+            }, index=index),
+            'B': pd.DataFrame({
+                'Open': [20, 21, 22, 23, 24],
+                'High': [20, 21, 22, 23, 24],
+                'Low': [20, 21, 22, 23, 24],
+                'Close': [20, 21, 22, 23, 24],
+            }, index=index),
+        }
+
+        class S(Strategy):
+            def init(self):
+                self.cross = self.I(lambda: self.data['A'].df.Close + self.data['B'].df.Close,
+                                    name='cross_df_sum')
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A', size=1)
+                    self.buy('B', size=1)
+                elif len(self.data) == 4:
+                    self.position['A'].close()
+                    self.position['B'].close()
+
+        stats = PortfolioBacktest(data, S).run()
+        indicator = stats['_strategy']._indicators[0]
+        trades = stats['_trades'].sort_values('Symbol').reset_index(drop=True)
+
+        self.assertIsNone(indicator._opts.get('symbol'))
+        self.assertEqual(set(indicator._opts.get('symbols', ())), {'A', 'B'})
+        self.assertEqual(trades['Entry_cross_df_sum'].tolist(), [34, 34])
+        self.assertEqual(trades['Exit_cross_df_sum'].tolist(), [38, 38])
+
+    def test_PortfolioBacktest_cross_symbol_df_accessor_mismatched_columns_stays_global(self):
+        index = pd.date_range('2020-01-01', periods=5)
+
+        def frame(values):
+            close = np.asarray(values)
+            open_ = close + 1
+            return pd.DataFrame({
+                'Open': open_,
+                'High': open_,
+                'Low': close,
+                'Close': close,
+            }, index=index)
+
+        data = {
+            'A': frame([10, 11, 12, 13, 14]),
+            'B': frame([20, 21, 22, 23, 24]),
+        }
+
+        class S(Strategy):
+            def init(self):
+                self.cross = self.I(lambda: self.data['A'].df.Close + self.data['B'].df.Open,
+                                    name='cross_df_mixed')
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A', size=1)
+                    self.buy('B', size=1)
+                elif len(self.data) == 4:
+                    self.position['A'].close()
+                    self.position['B'].close()
+
+        stats = PortfolioBacktest(data, S).run()
+        indicator = stats['_strategy']._indicators[0]
+        trades = stats['_trades'].sort_values('Symbol').reset_index(drop=True)
+
+        self.assertIsNone(indicator._opts.get('symbol'))
+        self.assertEqual(indicator._opts.get('symbols'), frozenset())
+        self.assertEqual(trades['Entry_cross_df_mixed'].tolist(), [35, 35])
+        self.assertEqual(trades['Exit_cross_df_mixed'].tolist(), [39, 39])
+
     def test_PortfolioBacktest_indicator_dicts(self):
         index = pd.date_range('2020-01-01', periods=5)
         data = {
@@ -1117,6 +1362,47 @@ class TestLib(TestCase):
             def init(self):
                 self.identity = {
                     symbol: self.I(lambda close: close, self.data[symbol].Close,
+                                   name='same')
+                    for symbol in self.data.symbols
+                }
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A', size=1)
+                    self.buy('B', size=1)
+                elif len(self.data) == 4:
+                    self.position['A'].close()
+                    self.position['B'].close()
+
+        stats = PortfolioBacktest(data, S).run()
+        trades = stats['_trades'].sort_values('Symbol').reset_index(drop=True)
+        self.assertEqual(trades['Symbol'].tolist(), ['A', 'B'])
+        self.assertEqual(trades['Entry_same'].tolist(), [12, 22])
+        self.assertEqual(trades['Exit_same'].tolist(), [14, 24])
+        self.assertTrue(pd.api.types.is_numeric_dtype(trades['Entry_same']))
+        self.assertTrue(pd.api.types.is_numeric_dtype(trades['Exit_same']))
+        self.assertTrue(np.isfinite(trades['Entry_same']).all())
+        self.assertTrue(np.isfinite(trades['Exit_same']).all())
+
+    def test_PortfolioBacktest_dataframe_indicators_with_same_name_keep_symbol_values(self):
+        index = pd.date_range('2020-01-01', periods=5)
+        data = {
+            symbol: pd.DataFrame({
+                'Open': values,
+                'High': values,
+                'Low': values,
+                'Close': values,
+            }, index=index)
+            for symbol, values in {
+                'A': np.arange(10, 15),
+                'B': np.arange(20, 25),
+            }.items()
+        }
+
+        class S(Strategy):
+            def init(self):
+                self.identity = {
+                    symbol: self.I(lambda symbol=symbol: self.data[symbol].df.Close,
                                    name='same')
                     for symbol in self.data.symbols
                 }
@@ -1979,12 +2265,16 @@ class TestDocs(TestCase):
     @unittest.skipUnless(sys.platform.startswith('linux'), "test_examples requires mp.start_method=fork")
     def test_examples(self):
         import backtesting
-        examples = glob(os.path.join(self.DOCS_DIR, 'examples', '*.py'))
+        examples_root = os.path.join(self.DOCS_DIR, 'examples')
+        examples = glob(os.path.join(examples_root, '**', '*.py'), recursive=True)
         self.assertGreaterEqual(len(examples), 4)
+        self.assertIn(os.path.join(examples_root, 'Multi Asset Trading',
+                                   'Bollinger Band Portfolio.py'),
+                      examples)
         with chdir(gettempdir()), \
                 patch(backtesting, 'Pool', mp.get_context('fork').Pool):
             for file in examples:
-                with self.subTest(example=os.path.basename(file)):
+                with self.subTest(example=os.path.relpath(file, examples_root)):
                     run_path(file)
 
     def test_backtest_run_docstring_contains_stats_keys(self):

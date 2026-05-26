@@ -169,7 +169,7 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades, tra
         warnings.warn(f"Data contains too many candlesticks to plot; downsampling to {freq!r}. "
                       "See `Backtest.plot(resample=...)`")
 
-    from .lib import OHLCV_AGG, _EQUITY_AGG
+    from .lib import _EQUITY_AGG, OHLCV_AGG
     df = df.resample(freq, label='right').agg(OHLCV_AGG).dropna()
 
     def try_mean_first(indicator):
@@ -277,12 +277,12 @@ def plot(*, results: pd.Series,
         size=trades['Size'],
         returns_positive=(trades['ReturnPct'] > 0).astype(int).astype(str),
     ))
-    ohlc_trade_source = ColumnDataSource(dict(
-        index=trade_markers['ExitBar'],
-        datetime=trade_markers['ExitTime'],
-        size=trade_markers['Size'],
-        returns_positive=(trade_markers['ReturnPct'] > 0).astype(int).astype(str),
-    ))
+    ohlc_trade_source = ColumnDataSource({
+        'index': trade_markers['ExitBar'],
+        'datetime': trade_markers['ExitTime'],
+        'size': trade_markers['Size'],
+        'returns_positive': (trade_markers['ReturnPct'] > 0).astype(int).astype(str),
+    })
 
     inc_cmap = factor_cmap('inc', COLORS, ['0', '1'])
     cmap = factor_cmap('returns_positive', COLORS, ['0', '1'])
