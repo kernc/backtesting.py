@@ -183,7 +183,10 @@ def compute_stats(
     # our risk doesn't; they use the simpler approach below.
     annualized_return = (1 + gmean_day_return)**annual_trading_days - 1
     s.loc['Return (Ann.) [%]'] = annualized_return * 100
-    s.loc['Volatility (Ann.) [%]'] = np.sqrt((day_returns.var(ddof=int(bool(day_returns.shape))) + (1 + gmean_day_return)**2)**annual_trading_days - (1 + gmean_day_return)**(2 * annual_trading_days)) * 100  # noqa: E501
+    with np.errstate(over='ignore', invalid='ignore'):
+        s.loc['Volatility (Ann.) [%]'] = np.sqrt(
+            (day_returns.var(ddof=int(bool(day_returns.shape))) + (1 + gmean_day_return)**2) **
+            annual_trading_days - (1 + gmean_day_return)**(2 * annual_trading_days)) * 100
     # s.loc['Return (Ann.) [%]'] = gmean_day_return * annual_trading_days * 100
     # s.loc['Risk (Ann.) [%]'] = day_returns.std(ddof=1) * np.sqrt(annual_trading_days) * 100
     if is_datetime_index:
@@ -198,8 +201,9 @@ def compute_stats(
         s.loc['Sortino Ratio'] = (annualized_return - risk_free_rate) / (np.sqrt(np.mean(day_returns.clip(-np.inf, 0)**2)) * np.sqrt(annual_trading_days))  # noqa: E501
     max_dd = -np.nan_to_num(dd.max())
     s.loc['Calmar Ratio'] = annualized_return / (-max_dd or np.nan)
-    equity_log_returns = np.log(equity[1:] / equity[:-1])
-    market_log_returns = np.log(c[1:] / c[:-1])
+    with np.errstate(divide='ignore', invalid='ignore'):
+        equity_log_returns = np.log(equity[1:] / equity[:-1])
+        market_log_returns = np.log(c[1:] / c[:-1])
     beta = np.nan
     if len(equity_log_returns) > 1 and len(market_log_returns) > 1:
         # len == 0 on dummy call `stats_keys = compute_stats(...)` pre optimization

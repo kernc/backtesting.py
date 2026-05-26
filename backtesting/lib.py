@@ -193,12 +193,51 @@ def compute_stats(
         >>> long_stats = compute_stats(stats=stats, trades=only_long_trades,
         ...                            data=GOOG, risk_free_rate=.02)
     """
-    if isinstance(data, Mapping):
-        from .backtesting import PortfolioBacktest
-        data = PortfolioBacktest._make_benchmark_data(data)
-
     equity = stats._equity_curve.Equity
     equity_index = equity.index
+    given_trades = trades
+    if trades is None:
+        trades = stats._trades
+
+    if isinstance(data, Mapping):
+        from .backtesting import PortfolioBacktest
+
+        data_mapping = dict(data)
+        indexes = [df.index for df in data_mapping.values()]
+        common_index = indexes[0]
+        for index in indexes[1:]:
+            common_index = common_index.intersection(index, sort=False)
+
+        missing = equity_index.difference(common_index)
+        if len(missing):
+            raise ValueError('`data` index must contain all `stats._equity_curve` index values')
+
+        bar_offset = int(common_index.get_indexer([equity_index[0]])[0])
+        aligned_data = {
+            symbol: df.loc[common_index]
+            for symbol, df in data_mapping.items()
+        }
+        data = PortfolioBacktest._make_benchmark_data(aligned_data, bar_offset)
+
+        full_equity = pd.Series(index=data.index, dtype=float)
+        full_equity.iloc[:bar_offset] = equity.iloc[0]
+        full_equity.loc[equity_index] = equity
+        equity = full_equity.ffill().bfill()
+
+        if given_trades is not None:
+            equity = equity.copy()
+            equity[:] = stats._equity_curve.Equity.iloc[0]
+            for t in trades.itertuples(index=False):
+                entry_bar = max(bar_offset, t.EntryBar)
+                if entry_bar < len(equity):
+                    equity.iloc[entry_bar:] += t.PnL
+
+        result = _compute_stats(trades=trades, equity=equity.values, ohlc_data=data,
+                                risk_free_rate=risk_free_rate, strategy_instance=stats._strategy,
+                                stats_start=bar_offset)
+        result.at['_trades'] = trades
+        return result
+
     if not data.index.equals(equity_index):
         missing = equity_index.difference(data.index)
         if len(missing):
@@ -207,10 +246,6 @@ def compute_stats(
         data = data.loc[equity_index]
     else:
         bar_offset = 0
-
-    given_trades = trades
-    if trades is None:
-        trades = stats._trades
 
     if not bar_offset:
         for t in trades.itertuples(index=False):

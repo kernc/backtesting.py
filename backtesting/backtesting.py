@@ -1275,6 +1275,8 @@ class _Broker:
                         category=UserWarning,
                         stacklevel=2)
                     self.orders.remove(order)
+                    if closed_opposite:
+                        portfolio_sizing_margin = None
                     continue
 
             # Open a new trade

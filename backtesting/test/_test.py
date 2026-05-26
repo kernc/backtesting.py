@@ -996,6 +996,10 @@ class TestLib(TestCase):
 
         self.assertEqual(recomputed['Start'], stats['Start'])
         self.assertEqual(recomputed['# Trades'], stats['# Trades'])
+        self.assertAlmostEqual(recomputed['Buy & Hold Return [%]'],
+                               stats['Buy & Hold Return [%]'])
+        self.assertAlmostEqual(recomputed['Beta'], stats['Beta'])
+        self.assertAlmostEqual(recomputed['Alpha [%]'], stats['Alpha [%]'])
         self.assertEqual(long_stats['# Trades'], len(long_trades))
         self.assertEqual(long_stats['Exposure Time [%]'], stats['Exposure Time [%]'])
         assert_frame_equal(recomputed._trades, stats._trades)
@@ -1155,6 +1159,42 @@ class TestLib(TestCase):
         self.assertEqual(indicator._opts.get('symbol'), 'A')
         self.assertTrue(trades['Entry_A_df_close'].isna().all())
         self.assertTrue(trades['Exit_A_df_close'].isna().all())
+
+    def test_PortfolioBacktest_data_df_tuple_indicator_keeps_symbol(self):
+        index = pd.date_range('2020-01-01', periods=6)
+
+        def frame(values):
+            return pd.DataFrame({
+                'Open': values,
+                'High': values,
+                'Low': values,
+                'Close': values,
+            }, index=index)
+
+        data = {
+            'A': frame([10, 11, 12, 13, 14, 15]),
+            'B': frame([100, 100, 100, 100, 100, 100]),
+        }
+
+        class S(Strategy):
+            def init(self):
+                self.a_sma = self.I(
+                    lambda: self.data.df[('A', 'Close')].rolling(2).mean(),
+                    name='A_sma')
+
+            def next(self):
+                if len(self.data) == 3:
+                    self.buy('B')
+                elif len(self.data) == 5:
+                    self.position['B'].close()
+
+        stats = PortfolioBacktest(data, S, cash=10_000).run()
+        indicator = stats['_strategy']._indicators[0]
+        trades = stats['_trades']
+
+        self.assertEqual(indicator._opts.get('symbol'), 'A')
+        self.assertTrue(trades['Entry_A_sma'].isna().all())
+        self.assertTrue(trades['Exit_A_sma'].isna().all())
 
     def test_PortfolioBacktest_array_df_indicator_keeps_symbol(self):
         index = pd.date_range('2020-01-01', periods=6)
@@ -2289,6 +2329,38 @@ class TestLib(TestCase):
                              for m in messages))
         self.assertGreaterEqual(len(stats['_trades']), 1)
         self.assertEqual(stats['_trades'].iloc[0].ExitBar, 3)
+
+    def test_PortfolioBacktest_fractional_sizing_refreshes_after_opposite_cancel(self):
+        index = pd.date_range('2020-01-01', periods=6)
+
+        def ohlc():
+            return pd.DataFrame({
+                'Open': [100] * len(index),
+                'High': [100] * len(index),
+                'Low': [100] * len(index),
+                'Close': [100] * len(index),
+                'Volume': [1000] * len(index),
+            }, index=index)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy('A', size=50)
+                elif len(self.data) == 3:
+                    self.buy('B', size=.1, tag='Bfrac')
+                    self.sell('A', size=1000)
+                    self.buy('C', size=.5, tag='Cfrac')
+
+        with self.assertWarnsRegex(UserWarning, 'insufficient margin'):
+            stats = PortfolioBacktest({'A': ohlc(), 'B': ohlc(), 'C': ohlc()}, S,
+                                      cash=10_000, margin=.5,
+                                      finalize_trades=True).run()
+        trades = stats['_trades']
+        self.assertEqual(trades.loc[trades.Tag == 'Bfrac', 'Size'].tolist(), [15])
+        self.assertEqual(trades.loc[trades.Tag == 'Cfrac', 'Size'].tolist(), [92])
 
     def test_PortfolioBacktest_pandas_series_indicator_preserves_symbol(self):
         index = pd.date_range('2020-01-01', periods=5)

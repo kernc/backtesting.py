@@ -111,6 +111,16 @@ def _backtesting_series_name(name, *, symbol=None, symbols=None):
 def _merged_symbols(*values):
     symbols = set()
 
+    def _metadata_symbols(value):
+        local_symbols = set()
+        opts = getattr(value, '_opts', None)
+        if opts is not None:
+            local_symbols.update(_symbols_from_opts(opts))
+        if isinstance(value, (list, tuple)):
+            for item in value:
+                local_symbols.update(_metadata_symbols(item))
+        return local_symbols
+
     def _scan(value):
         if isinstance(value, dict):
             for item in value.values():
@@ -121,9 +131,7 @@ def _merged_symbols(*values):
         elif isinstance(value, pd.DataFrame):
             local_symbols = set()
             for column in value.columns:
-                opts = getattr(column, '_opts', None)
-                if opts is not None:
-                    local_symbols.update(_symbols_from_opts(opts))
+                local_symbols.update(_metadata_symbols(column))
 
             # Pandas often propagates `.attrs` from only one operand during
             # arithmetic. Treat attrs as supplemental metadata only when the
@@ -138,15 +146,10 @@ def _merged_symbols(*values):
                 }))
             symbols.update(local_symbols)
         else:
-            local_symbols = set()
-            opts = getattr(value, '_opts', None)
-            if opts is not None:
-                local_symbols.update(_symbols_from_opts(opts))
+            local_symbols = _metadata_symbols(value)
 
             name = getattr(value, 'name', None)
-            opts = getattr(name, '_opts', None)
-            if opts is not None:
-                local_symbols.update(_symbols_from_opts(opts))
+            local_symbols.update(_metadata_symbols(name))
 
             attrs = getattr(value, 'attrs', None)
             if local_symbols and attrs:
