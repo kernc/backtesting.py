@@ -48,6 +48,72 @@ from backtesting.test import GOOG
 GOOG.tail()
 
 # %% [markdown]
+# External data can be joined to the strategy data frame before it is passed to
+# `Backtest`. For example, the snippet below adds a daily sentiment column. If
+# `ADANOS_API_KEY` is set, it tries to load Reddit stock sentiment from the
+# [Adanos Market Sentiment API](https://api.adanos.org/reddit/stocks/v1/);
+# otherwise, it uses a tiny sample series so the tutorial stays runnable offline.
+#
+# The resulting `Sentiment` column is available in a strategy as
+# `self.data.Sentiment[-1]`, just like `self.data.Close[-1]`.
+
+# %%
+import json
+import os
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+
+import pandas as pd
+
+
+def adanos_daily_sentiment(index, ticker):
+    daily_index = pd.DatetimeIndex(index).normalize()
+    sample = pd.Series(
+        [.15, -.05, .22, .08, .18],
+        index=pd.to_datetime([
+            '2013-02-25',
+            '2013-02-26',
+            '2013-02-27',
+            '2013-02-28',
+            '2013-03-01',
+        ]),
+        name='Sentiment',
+    )
+
+    api_key = os.environ.get('ADANOS_API_KEY')
+    if api_key:
+        params = urlencode({
+            'from': daily_index.min().date().isoformat(),
+            'to': daily_index.max().date().isoformat(),
+        })
+        request = Request(
+            f'https://api.adanos.org/reddit/stocks/v1/stock/{ticker}?{params}',
+            headers={'X-API-Key': api_key},
+        )
+        try:
+            with urlopen(request, timeout=10) as response:
+                payload = json.load(response)
+            rows = payload.get('daily_trend') or []
+            sentiment = pd.Series(
+                {pd.Timestamp(row['date']): float(row.get('sentiment_score') or 0)
+                 for row in rows},
+                name='Sentiment',
+            )
+            if not sentiment.empty:
+                sample = sentiment
+        except (HTTPError, URLError, OSError, ValueError, KeyError):
+            pass
+
+    return sample.reindex(daily_index).ffill().fillna(0).to_numpy()
+
+
+sentiment_data = GOOG.copy()
+sentiment_data['Sentiment'] = adanos_daily_sentiment(sentiment_data.index, 'GOOG')
+sentiment_data[['Close', 'Sentiment']].tail()
+
+
+# %% [markdown]
 # ## Strategy
 #
 # Let's create our first strategy to backtest on these Google data, a simple [moving average (MA) cross-over strategy](https://en.wikipedia.org/wiki/Moving_average_crossover).
@@ -58,9 +124,6 @@ GOOG.tail()
 # but for this example, we can define a simple helper moving average function ourselves:
 
 # %%
-import pandas as pd
-
-
 def SMA(values, n):
     """
     Return simple moving average of `values`, at
@@ -160,7 +223,7 @@ class SmaCross(Strategy):
 # %%
 from backtesting import Backtest
 
-bt = Backtest(GOOG, SmaCross, cash=10_000, commission=.002)
+bt = Backtest(sentiment_data, SmaCross, cash=10_000, commission=.002)
 stats = bt.run()
 stats
 
