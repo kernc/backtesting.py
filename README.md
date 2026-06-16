@@ -51,6 +51,10 @@ stats = bt.run()
 bt.plot()
 ```
 
+In this example, `commission=.002` applies a **0.2% fee per trade**
+(fraction of traded value). See the API reference for `spread` and
+callable commission functions.
+
 Results in:
 
 ```text
