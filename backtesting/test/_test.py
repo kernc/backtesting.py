@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import unittest
+import warnings
 from concurrent.futures.process import ProcessPoolExecutor
 from contextlib import contextmanager
 from glob import glob
@@ -1177,3 +1178,908 @@ class TestRegressions(TestCase):
         trades = Backtest(SHORT_DATA, S).run()._trades
         self.assertEqual(trades['SL'].fillna(0).tolist(), [0, 99])
         self.assertEqual(trades['TP'].fillna(0).tolist(), [111, 0])
+
+
+class TestMultiAsset(TestCase):
+    @staticmethod
+    def _df(values, index=None, high=None, low=None):
+        """OHLC frame with Open == Close (== High == Low unless overridden).
+        NaN values produce all-NaN (non-traded) bars."""
+        v = pd.Series(values, index=index, dtype=float)
+        return pd.DataFrame({
+            'Open': v,
+            'High': v if high is None else pd.Series(high, index=index, dtype=float),
+            'Low': v if low is None else pd.Series(low, index=index, dtype=float),
+            'Close': v})
+
+    @staticmethod
+    def _index(n, start='2020-01-01'):
+        return pd.date_range(start, periods=n, freq='D')
+
+    @contextmanager
+    def _no_full_equity_warning(self):
+        with warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message='.*default size.*')
+            yield
+
+    # Input handling & validation ############################################
+
+    def test_dict_and_multiindex_input_equivalent(self):
+        a, b = GOOG.iloc[:60], GOOG.iloc[30:90] * 2
+        multi_df = pd.concat({'A': a, 'B': b}, axis=1)
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 40:
+                    self.buy(symbol='A', size=1)
+                    self.sell(symbol='B', size=1)
+
+        stats1 = Backtest({'A': a, 'B': b}, S, finalize_trades=True).run()
+        stats2 = Backtest(multi_df, S, finalize_trades=True).run()
+        assert_frame_equal(stats1._trades, stats2._trades)
+        np.testing.assert_array_equal(stats1._equity_curve.Equity,
+                                      stats2._equity_curve.Equity)
+        self.assertEqual(sorted(stats1._trades['Symbol']), ['A', 'B'])
+        self.assertEqual(stats1._trades.columns[0], 'Symbol')
+
+    def test_single_asset_has_no_symbol_column(self):
+        stats = Backtest(SHORT_DATA, SmaCross, finalize_trades=True).run(fast=2, slow=4)
+        self.assertNotIn('Symbol', stats._trades.columns)
+
+    def test_input_validation(self):
+        idx = self._index(4)
+        good = self._df([1, 2, 3, 4], idx)
+
+        # Non-DataFrame dict value
+        self.assertRaises(TypeError, Backtest, {'A': good.Close}, _S)
+        # Empty dict
+        self.assertRaises(ValueError, Backtest, {}, _S)
+        # Duplicate timestamps within a symbol
+        dup = good.copy()
+        dup.index = idx[[0, 1, 1, 2]]
+        self.assertRaises(ValueError, Backtest, {'A': dup}, _S)
+        # Non-string symbols
+        self.assertRaises(ValueError, Backtest, {1: good}, _S)
+        # Symbol shadowing OHLCV fields
+        self.assertRaises(ValueError, Backtest, {'Close': good}, _S)
+        # Partially-NaN OHLC bar
+        partial = good.copy()
+        partial.loc[idx[1], 'High'] = np.nan
+        self.assertRaisesRegex(ValueError, 'all be present',
+                               Backtest, {'A': good, 'B': partial}, _S)
+        # All-NaN symbol
+        self.assertRaisesRegex(ValueError, 'no OHLC',
+                               Backtest, {'A': good, 'B': good * np.nan}, _S)
+        # >2 column levels
+        deep = pd.concat({'X': pd.concat({'A': good}, axis=1)}, axis=1)
+        self.assertRaises(ValueError, Backtest, deep, _S)
+        # Mixed tz-aware and tz-naive indexes
+        tz = good.copy()
+        tz.index = tz.index.tz_localize('UTC')
+        self.assertRaises(ValueError, Backtest, {'A': good, 'B': tz}, _S)
+        # Volume is added per symbol
+        bt = Backtest({'A': good, 'B': good}, _S)
+        self.assertIn(('A', 'Volume'), bt._data.columns)
+        self.assertIn(('B', 'Volume'), bt._data.columns)
+        # Warning on prices exceeding cash
+        with self.assertWarnsRegex(UserWarning, 'larger than initial cash'):
+            Backtest({'A': good, 'B': good * 1e6}, _S)
+        # Warning on markedly different calendars
+        monthly = self._df(np.r_[1:5], pd.date_range('2020-01-01', periods=4, freq='MS'))
+        with self.assertWarnsRegex(UserWarning, 'calendars'):
+            Backtest({'A': good, 'B': monthly}, _S)
+
+    def test_symbol_validation_and_suggestions(self):
+        class BuyTypo(_S):
+            def next(self):
+                self.buy(symbol='GOOX')
+
+        bt = Backtest({'GOOG': SHORT_DATA, 'AAPL': SHORT_DATA}, BuyTypo)
+        self.assertRaisesRegex(ValueError, "Did you mean: 'GOOG'", bt.run)
+
+        class BuyNoSymbol(_S):
+            def next(self):
+                self.buy()
+
+        bt = Backtest({'GOOG': SHORT_DATA, 'AAPL': SHORT_DATA}, BuyNoSymbol)
+        self.assertRaisesRegex(ValueError, 'explicit order routing', bt.run)
+
+        class SymbolInSingle(_S):
+            def next(self):
+                self.buy(symbol='GOOG')
+
+        bt = Backtest(SHORT_DATA, SymbolInSingle)
+        self.assertRaisesRegex(ValueError, 'single-asset backtest', bt.run)
+
+        class BadIndicatorSymbol(_S):
+            def init(self):
+                self.I(SMA, self.data['GOOG'].Close, 2, symbol='NOPE')
+
+            def next(self):
+                pass
+
+        bt = Backtest({'GOOG': SHORT_DATA, 'AAPL': SHORT_DATA}, BadIndicatorSymbol)
+        self.assertRaisesRegex(ValueError, 'Unknown symbol', bt.run)
+
+    # Zero-behavior-change degeneracy ########################################
+
+    def test_degeneracy_matrix(self):
+        """`Backtest({'X': df})` must equal `Backtest(df)` bit for bit."""
+        class SmaCrossM(Strategy):
+            fast, slow = 10, 30
+
+            def init(self):
+                close = self.data['X'].Close
+                self.sma1 = self.I(SMA, close, self.fast, symbol='X')
+                self.sma2 = self.I(SMA, close, self.slow, symbol='X')
+
+            def next(self):
+                if crossover(self.sma1, self.sma2):
+                    self.positions['X'].close()
+                    self.buy(symbol='X')
+                elif crossover(self.sma2, self.sma1):
+                    self.positions['X'].close()
+                    self.sell(symbol='X')
+
+        df = GOOG.iloc[:150]
+        for kwargs in (dict(),
+                       dict(trade_on_close=True),
+                       dict(hedging=True),
+                       dict(exclusive_orders=True),
+                       dict(margin=.1, spread=.001, commission=.002),
+                       dict(finalize_trades=True),
+                       dict(finalize_trades=True, trade_on_close=True)):
+            with self.subTest(**kwargs):
+                stats1 = Backtest(df, SmaCross, **kwargs).run()
+                with self._no_full_equity_warning():
+                    stats2 = Backtest({'X': df}, SmaCrossM, **kwargs).run()
+                np.testing.assert_array_equal(stats1._equity_curve.Equity,
+                                              stats2._equity_curve.Equity)
+                trades2 = stats2._trades.drop(columns='Symbol')
+                trades1 = stats1._trades
+                # Indicator entry/exit column names differ ('X: SMA...'); compare values
+                trades2.columns = trades1.columns
+                assert_frame_equal(trades1, trades2)
+
+    # Look-ahead bias ########################################################
+
+    def test_progressive_revelation(self):
+        idx = self._index(30)
+        a = self._df(np.r_[1:31.], idx)
+        b = self._df(np.r_[[np.nan] * 10, 11:31.], idx)  # Lists 10 bars later
+        test = self
+
+        class S(_S):
+            def init(self):
+                self.a = self.data['A']  # Child view captured in init
+                self.data.df[('A', 'Extra')] = np.arange(30.)  # Mutate master df
+
+            def next(self):
+                i = len(self.data)
+                test.assertEqual(len(self.data['A']), i)
+                test.assertEqual(len(self.data['B']), i)
+                test.assertEqual(len(self.a), i)  # Captured view stays slaved
+                test.assertEqual(self.a.Close[-1], i)
+                test.assertEqual(len(self.data.df), i)
+                test.assertEqual(self.data['A'].Extra[-1], i - 1)
+                b_close = self.data['B'].Close
+                if i <= 10:
+                    test.assertTrue(np.isnan(b_close[-1]))  # Pre-listing NaN
+                else:
+                    test.assertEqual(b_close[-1], i)
+                test.assertEqual(self.data.index[-1], idx[i - 1])
+
+        Backtest({'A': a, 'B': b}, S).run()
+
+    def test_future_perturbation_does_not_change_past(self):
+        T = 100
+        rng = np.random.RandomState(0)
+
+        def perturbed(df, t):
+            df = df.copy()
+            noise = 1 + .2 * rng.random(len(df) - t)
+            for col in ('Open', 'High', 'Low', 'Close'):
+                df.iloc[t:, df.columns.get_loc(col)] *= noise
+            return df
+
+        a, b = GOOG.iloc[:150], GOOG.iloc[20:170].reset_index(drop=True).set_index(
+            GOOG.index[:150]) * 1.5
+
+        class S(Strategy):
+            def init(self):
+                self.sma = {s: self.I(SMA, self.data[s].Close, 10, symbol=s)
+                            for s in self.data.symbols}
+
+            def next(self):
+                for s in self.data.symbols:
+                    if crossover(self.data[s].Close, self.sma[s]):
+                        self.buy(symbol=s, size=.2)
+                    elif self.positions[s] and crossover(self.sma[s], self.data[s].Close):
+                        self.positions[s].close()
+
+        stats1 = Backtest({'A': a, 'B': b}, S).run()
+        stats2 = Backtest({'A': perturbed(a, T), 'B': perturbed(b, T)}, S).run()
+
+        np.testing.assert_array_equal(stats1._equity_curve.Equity[:T],
+                                      stats2._equity_curve.Equity[:T])
+        closed_before_t = [t[t.ExitBar < T] for t in (stats1._trades, stats2._trades)]
+        assert_frame_equal(*closed_before_t)
+        self.assertGreater(len(closed_before_t[0]), 0)
+
+    # NaN-gap (calendar) semantics ###########################################
+
+    def test_market_order_defers_across_gap(self):
+        idx = self._index(6)
+        a = self._df([10, 11, 12, 13, 14, 15], idx)
+        b = self._df([20, 21, np.nan, np.nan, 24, 25], idx)
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='B', size=1)
+
+        stats = Backtest({'A': a, 'B': b}, S, finalize_trades=True).run()
+        trade = stats._trades.iloc[0]
+        # Order placed on bar 1 fills at B's next traded bar's open (bar 4 @ 24),
+        # not on NaN bars 2-3, not at a stale/ffilled price
+        self.assertEqual(trade.EntryBar, 4)
+        self.assertEqual(trade.EntryPrice, 24)
+        self.assertEqual(trade.EntryTime, idx[4])
+
+    def test_contingent_orders_dormant_during_gap(self):
+        idx = self._index(7)
+        a = self._df([10, 11, 12, 13, 14, 15, 16], idx)
+        # B: trades at 20, 21, then halts (during which "prices" would have crossed
+        # any level), resumes at 15 (gapping through the stop level 18)
+        b = self._df([20, 21, np.nan, np.nan, np.nan, 15, 15], idx)
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.sell(symbol='B', size=1, stop=18)
+
+        stats = Backtest({'A': a, 'B': b}, S, finalize_trades=True).run()
+        trade = stats._trades.iloc[0]
+        # Stop not evaluated during the halt; on resume, pessimistic gap-through
+        # fill at min(open, stop) = 15
+        self.assertEqual(trade.EntryBar, 5)
+        self.assertEqual(trade.EntryPrice, 15)
+
+        class S2(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='B', size=1, sl=19)
+
+        stats2 = Backtest({'A': a, 'B': b}, S2).run()
+        trade2 = stats2._trades.iloc[0]
+        # Entry at bar 2's open is deferred to bar 5 (B halted); SL 19 then
+        # exits at min(open, sl) = 15 on B's next traded bar
+        self.assertEqual((trade2.EntryBar, trade2.EntryPrice), (5, 15))
+
+    def test_trade_on_close_across_gap(self):
+        idx = self._index(6)
+        a = self._df([10, 11, 12, 13, 14, 15], idx)
+        b = self._df([20, 21, np.nan, np.nan, 24, 25], idx)
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='A', size=1)  # Contiguous symbol
+                    self.buy(symbol='B', size=1)  # Symbol halted on next bar
+
+        with self._no_full_equity_warning():
+            stats = Backtest({'A': a, 'B': b}, S, trade_on_close=True,
+                             finalize_trades=True).run()
+        trades = stats._trades.set_index('Symbol')
+        # A fills at bar 1's close, stamped on bar 1 (standard trade_on_close)
+        self.assertEqual((trades.loc['A', 'EntryBar'], trades.loc['A', 'EntryPrice']), (1, 11))
+        # B, deferred across the gap, fills at its resume bar's open --
+        # there was no close it could have filled at
+        self.assertEqual((trades.loc['B', 'EntryBar'], trades.loc['B', 'EntryPrice']), (4, 24))
+
+    def test_mark_to_market_and_equity_during_halt(self):
+        idx = self._index(6)
+        a = self._df([10.] * 6, idx)  # Flat, to isolate B's effect
+        b = self._df([20, 21, np.nan, np.nan, 27, 28], idx)
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='B', size=2)
+
+        stats = Backtest({'A': a, 'B': b}, S, cash=1000, finalize_trades=True).run()
+        equity = stats._equity_curve.Equity
+        # Entry (ordered on bar 1) is deferred over the bar-2/3 halt to bar 4 @ 27
+        trade = stats._trades.iloc[0]
+        self.assertEqual((trade.EntryBar, trade.EntryPrice), (4, 27))
+        np.testing.assert_array_equal(equity.values, [
+            1000, 1000, 1000, 1000, 1000, 1000 + 2 * (28 - 27)])
+
+    def test_mark_to_market_stale_close(self):
+        idx = self._index(6)
+        a = self._df([10.] * 6, idx)
+        b = self._df([20, 21, 22, np.nan, np.nan, 30], idx)
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='B', size=2)
+
+        with self.assertWarnsRegex(UserWarning, 'remain open.*B'):
+            stats = Backtest({'A': a, 'B': b}, S, cash=1000).run()
+        equity = stats._equity_curve.Equity
+        # Entry bar 2 @ 22; equity marks at 22 through the bar-3/4 halt
+        np.testing.assert_array_equal(equity.values, [
+            1000, 1000, 1000, 1000, 1000, 1000 + 2 * (30 - 22)])
+
+    def test_pre_listing_orders(self):
+        idx = self._index(5)
+        a = self._df([10, 11, 12, 13, 14], idx)
+        b = self._df([np.nan, np.nan, 20, 21, 22], idx)
+
+        class MarketTooEarly(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='B', size=1)
+
+        bt = Backtest({'A': a, 'B': b}, MarketTooEarly)
+        self.assertRaisesRegex(ValueError, 'no price data', bt.run)
+
+        class LimitBeforeListing(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='B', size=1, limit=20.5)
+
+        stats = Backtest({'A': a, 'B': b}, LimitBeforeListing, finalize_trades=True).run()
+        trade = stats._trades.iloc[0]
+        # Limit order legally queues pre-listing and fills once B lists
+        self.assertEqual((trade.EntryBar, trade.EntryPrice), (2, 20))
+
+    # Netting, hedging, exclusivity, margin ##################################
+
+    def test_netting_scoped_per_symbol(self):
+        idx = self._index(6)
+        dfs = {s: self._df([10, 11, 12, 13, 14, 15], idx) for s in 'AB'}
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='A', size=5)
+                    self.buy(symbol='B', size=3)
+                elif len(self.data) == 4:
+                    self.sell(symbol='A', size=2)  # Reduces A only
+
+        stats = Backtest(dfs, S).run()
+        # The sell(2) FIFO-reduced A's own position; B untouched
+        closed, = stats._trades.itertuples(index=False)
+        self.assertEqual((closed.Symbol, closed.Size), ('A', 2))
+        remaining = {t.symbol: t.size for t in stats._strategy._broker.trades}
+        self.assertEqual(remaining, {'A': 3, 'B': 3})
+
+    def test_exclusive_orders_scoped_per_symbol(self):
+        idx = self._index(6)
+        dfs = {s: self._df([10, 11, 12, 13, 14, 15], idx) for s in 'AB'}
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='A', size=1)
+                    self.buy(symbol='B', size=1)
+                elif len(self.data) == 4:
+                    self.sell(symbol='A', size=1)  # Flips A; must not touch B
+
+        stats = Backtest(dfs, S, exclusive_orders=True).run()
+        remaining = {t.symbol: t.size for t in stats._strategy._broker.trades}
+        self.assertEqual(remaining, {'A': -1, 'B': 1})
+        closed = stats._trades
+        self.assertEqual(list(closed.Symbol), ['A'])
+
+    def test_hedging_across_symbols(self):
+        idx = self._index(4)
+        dfs = {s: self._df([10, 11, 12, 13], idx) for s in 'AB'}
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='A', size=1)
+                    self.sell(symbol='B', size=1)
+
+        stats = Backtest(dfs, S, hedging=True).run()
+        remaining = {t.symbol: t.size for t in stats._strategy._broker.trades}
+        self.assertEqual(remaining, {'A': 1, 'B': -1})
+
+    def test_shared_account_margin(self):
+        idx = self._index(4)
+        dfs = {s: self._df([100.] * 4, idx) for s in 'AB'}
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='A', size=.5)
+                    self.buy(symbol='B', size=.5)
+
+        stats = Backtest(dfs, S, cash=1000).run()
+        trades = stats._strategy._broker.trades
+        # Sequential consumption of one shared account: .5 *of remaining* each
+        self.assertEqual([(t.symbol, t.size) for t in trades], [('A', 5), ('B', 2)])
+
+        class TooBig(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='A', size=9)
+                    self.buy(symbol='B', size=9)
+
+        with self.assertWarnsRegex(UserWarning, 'insufficient margin'):
+            Backtest(dfs, TooBig, cash=1000).run()
+
+    def test_full_equity_default_size_warns_once(self):
+        idx = self._index(4)
+        dfs = {s: self._df([10, 11, 12, 13], idx) for s in 'AB'}
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='A')
+                    self.buy(symbol='B')
+
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always')
+            Backtest(dfs, S).run()
+        self.assertEqual(sum('default size' in str(x.message) for x in w), 1)
+
+    def test_bankruptcy_closes_all_positions(self):
+        idx = self._index(5)
+        a = self._df([100, 100, 50, 10, 5], idx)
+        b = self._df([100, 100, 60, 20, 10], idx)
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='A', size=12)
+                    self.buy(symbol='B', size=12)
+
+        stats = Backtest({'A': a, 'B': b}, S, cash=1000, margin=.5).run()
+        self.assertEqual(len(stats._strategy._broker.trades), 0)
+        self.assertEqual(sorted(stats._trades.Symbol), ['A', 'B'])
+        equity = stats._equity_curve.Equity
+        self.assertEqual(equity.iloc[-1], 0)
+
+    # Positions & data API ###################################################
+
+    def test_positions_api(self):
+        idx = self._index(5)
+        dfs = {s: self._df([10, 11, 12, 13, 14], idx) for s in 'AB'}
+        test = self
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='A', size=2)
+                if len(self.data) == 4:
+                    test.assertTrue(self.positions['A'])
+                    test.assertFalse(self.positions['B'])
+                    test.assertEqual(self.positions['A'].size, 2)
+                    test.assertEqual(self.positions['A'].symbol, 'A')
+                    test.assertGreater(self.positions['A'].pl, 0)
+                    test.assertRaises(RuntimeError, lambda: self.position)
+                    test.assertRaises(KeyError, lambda: self.positions['Z'])
+                    test.assertRaisesRegex(
+                        AttributeError, 'ambiguous', lambda: self.data.Close)
+                    test.assertRaisesRegex(
+                        AttributeError, 'ambiguous', lambda: self.data.pip)
+                    test.assertEqual(self.data['A'].pip, .1)
+                    self.positions['A'].close()
+
+        Backtest(dfs, S).run()
+
+    def test_portable_strategy_idiom(self):
+        class Portable(Strategy):
+            def init(self):
+                self.sma = {s: self.I(SMA, self.data[s].Close, 3, symbol=s)
+                            for s in (self.data.symbols or (None,))}
+
+            def next(self):
+                for s in (self.data.symbols or (None,)):
+                    d = self.data[s]
+                    if np.isnan(d.Close[-1]):
+                        continue
+                    if not self.positions[s] and d.Close[-1] > self.sma[s][-1]:
+                        self.buy(symbol=s, size=1)
+                    elif self.positions[s] and d.Close[-1] < self.sma[s][-1]:
+                        self.positions[s].close()
+
+        stats_single = Backtest(SHORT_DATA, Portable).run()
+        stats_multi = Backtest({'X': SHORT_DATA, 'Y': SHORT_DATA * 2}, Portable).run()
+        self.assertGreater(stats_single['# Trades'], 0)
+        self.assertGreater(stats_multi['# Trades'], 0)
+
+    def test_order_trade_symbol_attribution(self):
+        idx = self._index(5)
+        dfs = {s: self._df([10, 11, 12, 13, 14], idx) for s in 'AB'}
+        test = self
+        commission_symbols = []
+
+        def commission(order_size, price, symbol):
+            commission_symbols.append(symbol)
+            return 0.
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    order = self.buy(symbol='A', size=2, sl=5, tp=100)
+                    test.assertEqual(order.symbol, 'A')
+                    test.assertIn("symbol='A'", repr(order))
+                if len(self.data) == 4:
+                    trade, = self.trades
+                    test.assertEqual(trade.symbol, 'A')
+                    test.assertIn('symbol=A', repr(trade))
+                    test.assertEqual(trade._sl_order.symbol, 'A')
+                    test.assertEqual(trade._tp_order.symbol, 'A')
+                    test.assertIn('A', repr(self.positions['A']))
+
+        Backtest(dfs, S, commission=commission).run()
+        self.assertEqual(set(commission_symbols), {'A'})
+
+    # Indicators, containers, warmup #########################################
+
+    def test_container_indicators_sliced_progressively(self):
+        idx = self._index(20)
+        dfs = {s: self._df(np.r_[1:21.], idx) for s in 'AB'}
+        test = self
+        from collections import namedtuple
+        NT = namedtuple('NT', ['a', 'b'])
+
+        class S(_S):
+            def init(self):
+                arange = lambda: np.arange(len(self.data), dtype=float)  # noqa: E731
+                self.dct = {s: self.I(arange, name=f'{s}d', symbol=s) for s in 'AB'}
+                self.lst = [self.I(arange, name='l0'), self.I(arange, name='l1')]
+                self.tpl = (self.I(arange, name='t0'),)
+                self.nt = NT(self.I(arange, name='n0'), self.I(arange, name='n1'))
+
+            def next(self):
+                i = len(self.data) - 1
+                for s in 'AB':
+                    test.assertEqual(self.dct[s][-1], i)
+                    test.assertEqual(len(self.dct[s]), i + 1)
+                test.assertEqual(self.lst[0][-1], i)
+                test.assertEqual(self.tpl[0][-1], i)
+                test.assertEqual(self.nt.a[-1], i)
+                test.assertIsInstance(self.nt, NT)
+
+        Backtest(dfs, S).run()
+
+    def test_mixed_container_raises(self):
+        class S(_S):
+            def init(self):
+                self.mixed = {'ind': self.I(lambda: np.arange(len(self.data)), name='x'),
+                              'other': 42}
+
+            def next(self):
+                pass
+
+        bt = Backtest(SHORT_DATA, S)
+        self.assertRaisesRegex(ValueError, 'mixes indicators', bt.run)
+
+    def test_warmup_multiasset_groups(self):
+        idx = self._index(30)
+        a = self._df(np.r_[1:31.], idx)
+        b = self._df(np.r_[[np.nan] * 15, 16:31.], idx)  # Lists on bar 15
+        first_bar_seen = []
+
+        class S(Strategy):
+            def init(self):
+                self.sma = {s: self.I(SMA, self.data[s].Close, 5, symbol=s)
+                            for s in self.data.symbols}
+
+            def next(self):
+                first_bar_seen.append(len(self.data) - 1)
+
+        Backtest({'A': a, 'B': b}, S).run()
+        # A's SMA(5) is warm on bar 4; B's only on bar 19.
+        # Earliest-ready group wins (+1 for at least two entries available)
+        self.assertEqual(first_bar_seen[0], 5)
+
+        # An untagged indicator gates every group
+        first_bar_seen.clear()
+
+        class S2(S):
+            def init(self):
+                super().init()
+                self.gate = self.I(lambda: self.data['B'].Close * 1., name='gate')
+
+        Backtest({'A': a, 'B': b}, S2).run()
+        self.assertEqual(first_bar_seen[0], 16)
+
+        # A never-valid group is excluded rather than collapsing the warmup
+        first_bar_seen.clear()
+
+        class S3(S):
+            def init(self):
+                super().init()
+                self.dead = self.I(lambda: self.data['B'].Close * np.nan,
+                                   name='dead', symbol='B')
+
+        Backtest({'A': a, 'B': b}, S3).run()
+        self.assertEqual(first_bar_seen[0], 5)
+
+        # All groups never-valid => no simulation, with a warning
+        class S4(Strategy):
+            def init(self):
+                self.dead = self.I(lambda: self.data['A'].Close * np.nan, name='dead')
+
+            def next(self):
+                raise AssertionError('should never run')
+
+        with self.assertWarnsRegex(UserWarning, 'ever becomes non-NaN'):
+            stats = Backtest({'A': a, 'B': b}, S4).run()
+        self.assertEqual(stats['# Trades'], 0)
+
+    def test_indicator_master_length_enforced(self):
+        class S(_S):
+            def init(self):
+                self.I(lambda: self.data['A'].Close.s.dropna(), symbol='B', name='bad')
+
+            def next(self):
+                pass
+
+        idx = self._index(10)
+        a = self._df(np.r_[[np.nan] * 5, 6:11.], idx)
+        b = self._df(np.r_[1:11.], idx)
+        bt = Backtest({'A': a, 'B': b}, S)
+        self.assertRaisesRegex(ValueError, 'same length', bt.run)
+
+    # Stats ##################################################################
+
+    def test_multiasset_stats_and_benchmark(self):
+        idx = self._index(4)
+        a = self._df([10, 11, 12, 13], idx)                    # +10%, +9.09%, +8.33%
+        b = self._df([np.nan, 20, 22, np.nan], idx)            # lists bar 1, delists bar 3
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='A', size=1)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore')
+            stats = Backtest({'A': a, 'B': b}, S, finalize_trades=True).run()
+
+        # Equal-weight rebalanced basket:
+        # bar1: mean(10%) [B just listed, no return yet] -> hmm, B has return NaN on bar 1
+        r1 = (11 / 10 - 1)
+        r2 = np.mean([12 / 11 - 1, 22 / 20 - 1])
+        r3 = (13 / 12 - 1)  # B delisted, drops out
+        expected = (1 + r1) * (1 + r2) * (1 + r3) - 1
+        self.assertAlmostEqual(stats['Buy & Hold Return [%]'], expected * 100)
+
+        # Symbol column first, indicator masking N/A here
+        self.assertEqual(stats._trades.columns[0], 'Symbol')
+
+    def test_indicator_columns_masked_across_symbols(self):
+        idx = self._index(20)
+        dfs = {s: self._df(np.r_[1:21.], idx) for s in 'AB'}
+
+        class S(Strategy):
+            def init(self):
+                self.sma_a = self.I(SMA, self.data['A'].Close, 3, symbol='A')
+
+            def next(self):
+                if len(self.data) == 5:
+                    self.buy(symbol='A', size=1)
+                    self.buy(symbol='B', size=1)
+                if len(self.data) == 8:
+                    for trade in self.trades:
+                        trade.close()
+
+        stats = Backtest(dfs, S).run()
+        trades = stats._trades.set_index('Symbol')
+        col = [c for c in trades.columns if c.startswith('Entry_')][0]
+        self.assertFalse(np.isnan(trades.loc['A', col]))
+        self.assertTrue(np.isnan(trades.loc['B', col]))
+
+    def test_lib_compute_stats_multiasset_subset(self):
+        df = GOOG.iloc[:100]
+        with self._no_full_equity_warning():
+            stats = Backtest({'A': df, 'B': df * 2}, _PortfolioSmaCross,
+                             cash=100_000, finalize_trades=True).run()
+        trades_a = stats._trades[stats._trades.Symbol == 'A']
+        stats_a = compute_stats(stats=stats, trades=trades_a,
+                                data=pd.concat({'A': df, 'B': df * 2}, axis=1))
+        self.assertEqual(stats_a['# Trades'], len(trades_a))
+
+    # Finalization ###########################################################
+
+    def test_finalize_trades_settles_delisted_symbol(self):
+        idx = self._index(6)
+        a = self._df([10, 11, 12, 13, 14, 15], idx)
+        b = self._df([20, 21, 22, 23, np.nan, np.nan], idx)
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='A', size=1)
+                    self.buy(symbol='B', size=1)
+
+        stats = Backtest({'A': a, 'B': b}, S, finalize_trades=True).run()
+        trades = stats._trades.set_index('Symbol')
+        self.assertEqual(len(trades), 2)
+        # B settles at its last traded close, stamped on its last traded bar
+        self.assertEqual((trades.loc['B', 'ExitBar'], trades.loc['B', 'ExitPrice']), (3, 23))
+        # A closes through the regular end-of-run pipeline on the last bar
+        self.assertEqual((trades.loc['A', 'ExitBar'], trades.loc['A', 'ExitPrice']), (5, 15))
+        self.assertEqual(len(stats._strategy._broker.trades), 0)
+        self.assertEqual(len(stats._strategy.orders), 0)
+
+    # Plotting & optimization ################################################
+
+    def test_plot_multiasset(self):
+        df = GOOG.iloc[:100]
+        dfs = {'A': df, 'B': (df.iloc[30:] * 2).round(1)}
+        with self._no_full_equity_warning():
+            bt = Backtest(dfs, _PortfolioSmaCross, cash=100_000, finalize_trades=True)
+            stats = bt.run()
+        self.assertRaisesRegex(ValueError, 'Symbols', bt.plot, results=stats,
+                               open_browser=False)
+        self.assertRaisesRegex(ValueError, 'Unknown symbol', bt.plot, results=stats,
+                               symbol='Z', open_browser=False)
+        for symbol in ('A', 'B'):
+            with _tempfile() as f:
+                bt.plot(results=stats, symbol=symbol, filename=f, open_browser=False)
+                self.assertLess(100, os.path.getsize(f))
+
+        # Single-asset plot() must reject symbol=
+        bt1 = Backtest(df, SmaCross)
+        bt1.run()
+        self.assertRaisesRegex(ValueError, 'multi-asset', bt1.plot,
+                               symbol='A', open_browser=False)
+
+    def test_optimize_multiasset(self):
+        df = GOOG.iloc[:100]
+        with self._no_full_equity_warning(), warnings.catch_warnings():
+            warnings.filterwarnings('ignore', message='.*Searching for best.*')
+            bt = Backtest({'A': df, 'B': df * 2}, _PortfolioSmaCross, cash=100_000)
+            stats = bt.optimize(fast=[5, 10], slow=[15, 25])
+        self.assertGreater(stats['# Trades'], 0)
+
+    def test_shared_memory_multiindex_roundtrip(self):
+        from backtesting._util import SharedMemoryManager
+        df = pd.concat({'A': GOOG.iloc[:30], 'B': GOOG.iloc[:30] * 2}, axis=1)
+        with SharedMemoryManager(create=True) as smm:
+            shm = smm.df2shm(df)
+            df2, shms = SharedMemoryManager.shm2df(shm)
+            try:
+                self.assertIsInstance(df2.columns, pd.MultiIndex)
+                assert_frame_equal(df, df2, check_names=False)
+            finally:
+                for s in shms:
+                    s.close()
+
+    def test_fractional_backtest_rejects_multiasset(self):
+        self.assertRaises(TypeError, FractionalBacktest, {'A': GOOG}, SmaCross)
+        self.assertRaises(TypeError, FractionalBacktest,
+                          pd.concat({'A': GOOG}, axis=1), SmaCross)
+
+    # Review-driven regression tests #########################################
+
+    def test_commission_callable_signatures(self):
+        # Legacy 2-arg callable with an extra defaulted param: called with 2 args
+        def commission_defaulted(order_size, price, fee_rate=.001):
+            return abs(order_size) * price * fee_rate
+
+        class BuyOnce(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(size=1)
+
+        stats = Backtest(SHORT_DATA, BuyOnce, commission=commission_defaulted,
+                         finalize_trades=True).run()
+        self.assertGreater(stats._trades['Commission'].iloc[0], 0)
+
+        # Keyword-only `symbol` param receives the symbol in multi-asset mode
+        seen = []
+
+        def commission_kwonly(order_size, price, *, symbol=None):
+            seen.append(symbol)
+            return 0.
+
+        class BuyA(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='A', size=1)
+
+        idx = self._index(4)
+        dfs = {s: self._df([10, 11, 12, 13], idx) for s in 'AB'}
+        Backtest(dfs, BuyA, commission=commission_kwonly, finalize_trades=True).run()
+        self.assertEqual(set(seen), {'A'})
+
+        # *args callables keep the legacy 2-arg convention
+        def commission_varargs(*args):
+            assert len(args) == 2, args
+            return 0.
+
+        Backtest(SHORT_DATA, BuyOnce, commission=commission_varargs).run()
+
+    def test_settlement_equity_includes_commissions(self):
+        idx = self._index(6)
+        a = self._df([10.] * 6, idx)
+        b = self._df([20, 21, 22, 23, np.nan, np.nan], idx)
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(symbol='B', size=5)
+
+        stats = Backtest({'A': a, 'B': b}, S, cash=1000, commission=.01,
+                         finalize_trades=True).run()
+        # All trades closed => final equity must equal cash + sum of trade PnLs
+        self.assertAlmostEqual(stats['Equity Final [$]'],
+                               1000 + stats._trades.PnL.sum())
+
+    def test_finalize_leaves_last_bar_entries_open_like_upstream(self):
+        class S(_S):
+            def next(self):
+                if len(self.data) == len(SHORT_DATA):
+                    self.buy(size=1)  # Fills during the finalize re-run
+
+        stats = Backtest(SHORT_DATA, S, finalize_trades=True).run()
+        # Upstream leaves the just-opened trade open and out of stats
+        self.assertEqual(len(stats._trades), 0)
+        self.assertEqual(len(stats._strategy._broker.trades), 1)
+
+    def test_warmup_object_dtype_indicator(self):
+        first_bar_seen = []
+
+        class S(_S):
+            def init(self):
+                values = [None] * 5 + [1.] * (len(self.data) - 5)
+                self.ind = self.I(lambda: np.asarray(values, dtype=object), name='obj')
+
+            def next(self):
+                first_bar_seen.append(len(self.data) - 1)
+
+        Backtest(SHORT_DATA, S).run()
+        # Object-dtype numeric indicators still contribute their NaN warm-up
+        self.assertEqual(first_bar_seen[0], 6)
+
+    def test_unknown_symbol_subscript_suggestion(self):
+        test = self
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    test.assertRaisesRegex(
+                        AttributeError, "Did you mean: 'GOOG'",
+                        lambda: self.data['GOOX'])
+
+        Backtest({'GOOG': SHORT_DATA, 'AAPL': SHORT_DATA}, S).run()
+
+    def test_positions_mapping_read_only(self):
+        test = self
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    with test.assertRaises(TypeError):
+                        self.positions['A'] = None
+
+        Backtest({'A': SHORT_DATA}, S).run()
+
+
+class _PortfolioSmaCross(Strategy):
+    fast, slow = 10, 30
+
+    def init(self):
+        self.sma1 = {s: self.I(SMA, self.data[s].Close, self.fast, symbol=s)
+                     for s in self.data.symbols}
+        self.sma2 = {s: self.I(SMA, self.data[s].Close, self.slow, symbol=s)
+                     for s in self.data.symbols}
+
+    def next(self):
+        for s in self.data.symbols:
+            if np.isnan(self.data[s].Close[-1]):
+                continue
+            if crossover(self.sma1[s], self.sma2[s]):
+                self.buy(symbol=s, size=.3)
+            elif crossover(self.sma2[s], self.sma1[s]) and self.positions[s]:
+                self.positions[s].close()

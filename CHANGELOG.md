@@ -5,6 +5,29 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
+* **Multi-asset (portfolio) backtesting**: `Backtest(data=...)` now also accepts
+  a dict of OHLC data frames keyed by asset symbol (or a single data frame with
+  two-level `(symbol, field)` columns), trading all assets from one shared
+  cash/margin account. New API surface: `Strategy.buy/sell/I(symbol=...)`,
+  `Strategy.positions[symbol]`, `Strategy.data[symbol]` & `Strategy.data.symbols`,
+  `Order.symbol` / `Trade.symbol`, `Backtest.plot(symbol=...)`. Data is aligned
+  on the union of indexes with NaN marking non-traded bars (never forward/back-filled);
+  orders on such bars wait for the symbol's next traded bar. Single-asset behavior
+  is unchanged.
+* Indicators stored in a flat dict/list/tuple strategy attribute are now, like
+  plain indicator attributes, auto-sliced in `Strategy.next()` (a container mixing
+  indicators with other values raises an error), preventing accidental look-ahead.
+  `symbol` joins `name`/`plot`/`overlay`/`color`/`scatter` as a reserved
+  `Strategy.I()` keyword (no longer forwarded to the indicator function).
+* A `commission` callable declaring a third parameter named `symbol` (or three
+  required positional parameters) now receives the order's symbol, enabling
+  per-asset fee schedules; 2-arg callables work unchanged.
+* Bugfixes:
+  * Out-of-money liquidation and `exclusive_orders` cancellation no longer skip
+    every other trade/order (mutation-while-iterating).
+  * String/categorical indicators no longer crash the indicator warm-up
+    computation (they are excluded from it).
+
 ### 0.6.5
 (2025-07-30)
 

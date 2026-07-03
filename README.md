@@ -94,6 +94,38 @@ dtype: object
 
 Find more usage examples in the [documentation].
 
+### Multi-asset (portfolio) backtesting
+
+Pass a dict of data frames (keyed by asset symbol) to trade a whole
+portfolio from a single shared account:
+
+```python
+class SmaCrossPortfolio(Strategy):
+    def init(self):
+        self.ma1 = {s: self.I(SMA, self.data[s].Close, 10, symbol=s)
+                    for s in self.data.symbols}
+        self.ma2 = {s: self.I(SMA, self.data[s].Close, 20, symbol=s)
+                    for s in self.data.symbols}
+
+    def next(self):
+        for s in self.data.symbols:
+            if crossover(self.ma1[s], self.ma2[s]):
+                self.buy(symbol=s, size=.3)
+            elif crossover(self.ma2[s], self.ma1[s]) and self.positions[s]:
+                self.positions[s].close()
+
+
+bt = Backtest({'AAPL': aapl, 'MSFT': msft, 'GOOG': goog},
+              SmaCrossPortfolio, cash=100_000, commission=.002)
+stats = bt.run()
+bt.plot(symbol='AAPL')
+```
+
+Assets may follow different calendars (e.g. crypto vs. equities, later
+IPOs); data is aligned on the union of timestamps, prices are never
+forward-filled, and orders for an asset simply wait until the asset's
+next traded bar. See the `Backtest` documentation for details.
+
 
 Features
 --------
@@ -103,6 +135,7 @@ Features
 * Library of composable base strategies and utilities
 * Indicator-library-agnostic
 * Supports _any_ financial instrument with candlestick data
+* Multi-asset portfolio backtesting from a single account
 * Detailed results
 * Interactive visualizations
 

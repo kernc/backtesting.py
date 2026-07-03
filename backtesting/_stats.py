@@ -43,6 +43,7 @@ def compute_stats(
 ) -> pd.Series:
     assert -1 < risk_free_rate < 1
 
+    is_multiasset = isinstance(ohlc_data.columns, pd.MultiIndex)
     index = ohlc_data.index
     dd = 1 - equity / np.maximum.accumulate(equity)
     dd_dur, dd_peaks = compute_drawdown_duration_peaks(pd.Series(dd, index=index))
@@ -74,15 +75,26 @@ def compute_stats(
         })
         trades_df['Duration'] = trades_df['ExitTime'] - trades_df['EntryTime']
         trades_df['Tag'] = [t.tag for t in trades]
+        if is_multiasset:
+            trades_df.insert(0, 'Symbol', [t.symbol for t in trades])
 
         # Add indicator values
         if len(trades_df) and strategy_instance:
             for ind in strategy_instance._indicators:
+                ind_symbol = ind._opts.get('symbol')
                 ind = np.atleast_2d(ind)
                 for i, values in enumerate(ind):  # multi-d indicators
                     suffix = f'_{i}' if len(ind) > 1 else ''
-                    trades_df[f'Entry_{ind.name}{suffix}'] = values[trades_df['EntryBar'].values]
-                    trades_df[f'Exit_{ind.name}{suffix}'] = values[trades_df['ExitBar'].values]
+                    entry_values = values[trades_df['EntryBar'].values]
+                    exit_values = values[trades_df['ExitBar'].values]
+                    if ind_symbol is not None:
+                        # A symbol-associated indicator is only meaningful
+                        # on that symbol's own trades
+                        of_symbol = (trades_df['Symbol'] == ind_symbol).values
+                        entry_values = np.where(of_symbol, entry_values, np.nan)
+                        exit_values = np.where(of_symbol, exit_values, np.nan)
+                    trades_df[f'Entry_{ind.name}{suffix}'] = entry_values
+                    trades_df[f'Exit_{ind.name}{suffix}'] = exit_values
 
         commissions = sum(t._commissions for t in trades)
     del trades
@@ -112,8 +124,21 @@ def compute_stats(
     if commissions:
         s.loc['Commissions [$]'] = commissions
     s.loc['Return [%]'] = (equity[-1] - equity[0]) / equity[0] * 100
-    first_trading_bar = _indicator_warmup_nbars(strategy_instance)
-    c = ohlc_data.Close.values
+    # Min for never-warm multi-asset indicator groups, where warmup == len(index)
+    first_trading_bar = min(_indicator_warmup_nbars(strategy_instance), len(index) - 1)
+    if is_multiasset:
+        # The multi-asset benchmark (for Buy & Hold, Beta and Alpha) is an
+        # equal-weighted, per-bar-rebalanced basket index over all assets.
+        # Each asset contributes returns between its first and last traded
+        # bars; on its non-traded bars in between, its mark (and thus its
+        # contribution) is unchanged.
+        closes = ohlc_data.xs('Close', axis=1, level=1)
+        listed = closes.notna()
+        alive = listed.cummax() & listed[::-1].cummax()[::-1]
+        asset_returns = closes.ffill().pct_change().where(alive)
+        c = (1 + asset_returns.mean(axis=1).fillna(0)).cumprod().values
+    else:
+        c = ohlc_data.Close.values
     s.loc['Buy & Hold Return [%]'] = (c[-1] - c[first_trading_bar]) / c[first_trading_bar] * 100  # long-only return
 
     gmean_day_return: float = 0

@@ -4,13 +4,14 @@ import os
 import sys
 import warnings
 from contextlib import contextmanager
+from difflib import get_close_matches
 from functools import partial
 from itertools import chain
 from multiprocessing import resource_tracker as _mprt
 from multiprocessing import shared_memory as _mpshm
 from numbers import Number
 from threading import Lock
-from typing import Dict, List, Optional, Sequence, Union, cast
+from typing import Dict, List, Optional, Sequence, Tuple, Union, cast
 
 import numpy as np
 import pandas as pd
@@ -79,18 +80,99 @@ def _data_period(index) -> Union[pd.Timedelta, Number]:
 
 
 def _strategy_indicators(strategy):
-    return {attr: indicator
-            for attr, indicator in strategy.__dict__.items()
-            if isinstance(indicator, _Indicator)}.items()
+    """
+    Return `[(attr, value), ...]` of strategy attributes to auto-slice in
+    `Strategy.next()`, where each value is an `_Indicator` or a flat
+    dict/list/tuple thereof. Containers mixing indicators with other values
+    raise, lest a full-length (future-containing) array slips through.
+    """
+    def _items(value):
+        if isinstance(value, dict):
+            return list(value.values())
+        if isinstance(value, (list, tuple)):
+            return list(value)
+        return None
+
+    pairs = []
+    for attr, value in strategy.__dict__.items():
+        if attr == '_indicators':  # Strategy-internal registry of all I() results
+            continue
+        if isinstance(value, _Indicator):
+            pairs.append((attr, value))
+            continue
+        items = _items(value)
+        if not items:
+            continue
+        if all(isinstance(item, _Indicator) for item in items):
+            pairs.append((attr, value))
+        elif any(isinstance(item, _Indicator)
+                 for item in chain(items, *filter(None, map(_items, items)))):
+            raise ValueError(
+                f'Strategy attribute {attr!r} mixes indicators declared with '
+                '`Strategy.I()` with other values and cannot be safely '
+                'auto-sliced in `Strategy.next()`. Store indicators in their '
+                'own flat dict/list/tuple.')
+    return pairs
+
+
+def _as_indicators(value) -> List['_Indicator']:
+    """`_strategy_indicators` value (indicator or container) as a flat list."""
+    if isinstance(value, _Indicator):
+        return [value]
+    return list(value.values() if isinstance(value, dict) else value)
+
+
+def _indicator_sliced(value, length):
+    """`value` (an `_Indicator` or a container from `_strategy_indicators`)
+    with each indicator array revealed only up to `length` bars."""
+    if isinstance(value, _Indicator):
+        return value[..., :length]
+    if isinstance(value, dict):
+        return {key: indicator[..., :length] for key, indicator in value.items()}
+    items = (indicator[..., :length] for indicator in value)
+    cls = type(value)
+    return cls(*items) if hasattr(cls, '_fields') else cls(items)  # namedtuple or list/tuple
 
 
 def _indicator_warmup_nbars(strategy):
+    """
+    Number of leading bars to skip so the backtest starts with valid indicators.
+
+    Single-asset: the first bar on which every (non-scatter) indicator is
+    non-NaN. Multi-asset: indicators are grouped by their `Strategy.I(symbol=)`
+    tag (untagged indicators belong to every group), and the backtest starts
+    as soon as the earliest-ready symbol group is warm; not-yet-warm symbols'
+    indicators are simply still NaN in `Strategy.next()`.
+    """
     if strategy is None:
         return 0
-    nbars = max((np.isnan(indicator.astype(float)).argmin(axis=-1).max()
-                 for _, indicator in _strategy_indicators(strategy)
-                 if not indicator._opts['scatter']), default=0)
-    return nbars
+    indicators = [
+        (indicator._opts.get('symbol'), np.isnan(as_float))
+        for _, value in _strategy_indicators(strategy)
+        for indicator in _as_indicators(value)
+        if not indicator._opts['scatter'] and
+        # Skip e.g. categorical indicators, which never warm up
+        (as_float := try_(lambda: indicator.astype(float),  # noqa: B023
+                          exception=(TypeError, ValueError))) is not None]
+    symbols = tuple(getattr(strategy._data, 'symbols', ()) or ())
+    if not symbols:
+        return max((isnan.argmin(axis=-1).max()
+                    for _, isnan in indicators), default=0)
+
+    n_data = len(strategy._data)
+
+    def first_valid(isnan):
+        # An all-NaN indicator (row) never becomes valid
+        return n_data if isnan.all(axis=-1).any() else isnan.argmin(axis=-1).max()
+
+    untagged = max((first_valid(isnan) for symbol, isnan in indicators
+                    if symbol is None), default=0)
+    group_warmup = [
+        max([untagged, *(first_valid(isnan) for ind_symbol, isnan in indicators
+                         if ind_symbol == symbol)])
+        for symbol in symbols]
+    ready = [nbars for nbars in group_warmup if nbars < n_data]
+    return min(ready) if ready else n_data
 
 
 class _Array(np.ndarray):
@@ -159,9 +241,17 @@ class _Data:
     as a standard `pd.DataFrame` would, except it's not a DataFrame
     and the returned "series" are _not_ `pd.Series` but `np.ndarray`
     for performance reasons.
+
+    In multi-asset mode (two-level `(symbol, field)` DataFrame columns),
+    `data[symbol]` returns a per-symbol `_Data` view whose revealed length
+    is slaved to this parent's, and top-level field access raises.
     """
     def __init__(self, df: pd.DataFrame):
         self.__df = df
+        self.__symbols: Tuple[str, ...] = (
+            tuple(df.columns.get_level_values(0).unique())
+            if isinstance(df.columns, pd.MultiIndex) else ())
+        self.__children: Dict[str, _Data] = {}
         self.__len = len(df)  # Current length
         self.__pip: Optional[float] = None
         self.__cache: Dict[str, _Array] = {}
@@ -169,6 +259,14 @@ class _Data:
         self._update()
 
     def __getitem__(self, item):
+        if item is None and not self.__symbols:
+            return self  # data[None] is data; allows symbol-generic strategy code
+        if isinstance(item, str) and item in self.__symbols:
+            child = self.__children.get(item)
+            if child is None:
+                child = self.__children[item] = _Data(self.__df[item])
+                child._set_length(self.__len)
+            return child
         return self.__get_array(item)
 
     def __getattr__(self, item):
@@ -177,9 +275,16 @@ class _Data:
         except KeyError:
             raise AttributeError(f"Column '{item}' not in data") from None
 
+    @property
+    def symbols(self) -> Tuple[str, ...]:
+        """Asset symbols in multi-asset mode, or an empty tuple."""
+        return self.__symbols
+
     def _set_length(self, length):
         self.__len = length
         self.__cache.clear()
+        for child in self.__children.values():
+            child._set_length(length)
 
     def _update(self):
         index = self.__df.index.copy()
@@ -187,6 +292,11 @@ class _Data:
                          for col, arr in self.__df.items()}
         # Leave index as Series because pd.Timestamp nicer API to work with
         self.__arrays['__index'] = index
+        for symbol, child in self.__children.items():
+            # Refresh the child's data snapshot, but keep the child object
+            # (references captured in `Strategy.init` stay slaved to `_set_length`)
+            child.__df = self.__df[symbol]
+            child._update()
 
     def __repr__(self):
         i = min(self.__len, len(self.__df)) - 1
@@ -206,14 +316,34 @@ class _Data:
     @property
     def pip(self) -> float:
         if self.__pip is None:
+            if self.__symbols:
+                raise AttributeError(
+                    "'pip' is ambiguous in multi-asset mode; use `data[symbol].pip`. "
+                    f'Symbols: {self.__symbols}')
+            close = self.__arrays['Close']
+            close = close[close == close]  # Drop NaN of multi-asset data gaps
             self.__pip = float(10**-np.median([len(s.partition('.')[-1])
-                                               for s in self.__arrays['Close'].astype(str)]))
+                                               for s in close.astype(str)]))
         return self.__pip
 
     def __get_array(self, key) -> _Array:
         arr = self.__cache.get(key)
         if arr is None:
-            arr = self.__cache[key] = cast(_Array, self.__arrays[key][:self.__len])
+            try:
+                arr = self.__cache[key] = cast(_Array, self.__arrays[key][:self.__len])
+            except KeyError:
+                if self.__symbols:
+                    if key in ('Open', 'High', 'Low', 'Close', 'Volume', 'pip'):
+                        raise AttributeError(
+                            f'{key!r} is ambiguous in multi-asset mode; '
+                            f'use `data[symbol].{key}`. Symbols: {self.__symbols}') from None
+                    suggestions = get_close_matches(str(key), map(str, self.__symbols))
+                    hint = (f" Did you mean: {', '.join(map(repr, suggestions))}?"
+                            if suggestions else '')
+                    raise AttributeError(
+                        f'Unknown symbol or column {key!r}; '
+                        f'symbols: {self.__symbols}.{hint}') from None
+                raise
         return arr
 
     @property
@@ -329,9 +459,15 @@ class SharedMemoryManager:
     @staticmethod
     def shm2df(data_shm):
         shm = [SharedMemory(name=name, create=False, track=False) for _, name, _, _ in data_shm]
+        # NOTE: The str _DF_INDEX_COL key coexisting with any tuple column keys
+        # (multi-asset data) is what keeps this constructor from prematurely
+        # auto-building a MultiIndex
         df = pd.DataFrame({
             col: SharedMemoryManager.shm2s(shm, shape, dtype)
             for shm, (col, _, shape, dtype) in zip(shm, data_shm)})
         df.set_index(SharedMemoryManager._DF_INDEX_COL, drop=True, inplace=True)
         df.index.name = None
+        if len(df.columns) and all(isinstance(col, tuple) for col in df.columns):
+            # Restore multi-asset (symbol, field) columns flattened by the dict above
+            df.columns = pd.MultiIndex.from_tuples(df.columns, names=('Symbol', None))
         return df, shm

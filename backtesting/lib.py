@@ -376,6 +376,7 @@ class SignalStrategy(Strategy):
     """
     A simple helper strategy that operates on position entry/exit signals.
     This makes the backtest of the strategy simulate a [vectorized backtest].
+    Single-asset only.
     See [tutorials] for usage examples.
 
     [vectorized backtest]: https://www.google.com/search?q=vectorized+backtest
@@ -449,7 +450,7 @@ class TrailingStrategy(Strategy):
     A strategy with automatic trailing stop-loss, trailing the current
     price at distance of some multiple of average true range (ATR). Call
     `TrailingStrategy.set_trailing_sl()` to set said multiple
-    (`6` by default). See [tutorials] for usage examples.
+    (`6` by default). Single-asset only. See [tutorials] for usage examples.
 
     [tutorials]: index.html#tutorials
 
@@ -527,6 +528,8 @@ class FractionalBacktest(Backtest):
                  *args,
                  fractional_unit=1 / 100e6,
                  **kwargs):
+        if isinstance(data, dict) or isinstance(getattr(data, 'columns', None), pd.MultiIndex):
+            raise TypeError('FractionalBacktest is single-asset only')
         if 'satoshi' in kwargs:
             warnings.warn(
                 'Parameter `FractionalBacktest(..., satoshi=)` is deprecated. '
@@ -571,7 +574,10 @@ class MultiBacktest:
 
     Run supplied `backtesting.backtesting.Strategy` on several instruments,
     in parallel.  Used for comparing strategy runs across many instruments
-    or classes of instruments. Example:
+    or classes of instruments. Note, these are **independent single-asset
+    backtests**, each with its own account; for trading a portfolio of
+    assets from one shared account, pass a dict of data frames to
+    `backtesting.backtesting.Backtest` instead. Example:
 
         from backtesting.test import EURUSD, BTCUSD, SmaCross
         btm = MultiBacktest([EURUSD, BTCUSD], SmaCross)

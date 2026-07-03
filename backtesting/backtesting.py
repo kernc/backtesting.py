@@ -14,10 +14,12 @@ from abc import ABCMeta, abstractmethod
 from copy import copy
 from difflib import get_close_matches
 from functools import lru_cache, partial
+from inspect import Parameter, signature
 from itertools import chain, product, repeat
 from math import copysign
 from numbers import Number
-from typing import Callable, List, Optional, Sequence, Tuple, Type, Union
+from types import MappingProxyType
+from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
@@ -26,8 +28,8 @@ from numpy.random import default_rng
 from ._plotting import plot  # noqa: I001
 from ._stats import compute_stats, dummy_stats
 from ._util import (
-    SharedMemoryManager, _as_str, _Indicator, _Data, _batch, _indicator_warmup_nbars,
-    _strategy_indicators, patch, try_, _tqdm,
+    SharedMemoryManager, _as_str, _Indicator, _Data, _batch, _data_period,
+    _indicator_sliced, _indicator_warmup_nbars, _strategy_indicators, patch, try_, _tqdm,
 )
 
 __pdoc__ = {
@@ -77,6 +79,7 @@ class Strategy(metaclass=ABCMeta):
     def I(self,  # noqa: E743
           func: Callable, *args,
           name=None, plot=True, overlay=None, color=None, scatter=False,
+          symbol: Optional[str] = None,
           **kwargs) -> np.ndarray:
         """
         Declare an indicator. An indicator is just an array of values
@@ -109,6 +112,16 @@ class Strategy(metaclass=ABCMeta):
         If `scatter` is `True`, the plotted indicator marker will be a
         circle instead of a connected line segment (default).
 
+        In a multi-asset backtest (see `backtesting.backtesting.Backtest`),
+        pass `symbol` to associate the indicator with one of the assets.
+        The association is used for plotting (`Backtest.plot(symbol=...)`)
+        and for computing the warm-up period below: the backtest begins as
+        soon as the indicators of the earliest-ready symbol (together with
+        all unassociated indicators) are non-NaN, so indicators of other,
+        later-starting symbols may still be NaN in
+        `backtesting.backtesting.Strategy.next`. NaN comparisons are always
+        `False`, i.e. no signal.
+
         Additional `*args` and `**kwargs` are passed to `func` and can
         be used for parameters.
 
@@ -124,6 +137,8 @@ class Strategy(metaclass=ABCMeta):
             strategy that uses a 200-bar MA).
             This can affect results.
         """
+        symbol = self._resolve_symbol(symbol)
+
         def _format_name(name: str) -> str:
             return name.format(*map(_as_str, args),
                                **dict(zip(kwargs.keys(), map(_as_str, kwargs.values()))))
@@ -132,6 +147,8 @@ class Strategy(metaclass=ABCMeta):
             params = ','.join(filter(None, map(_as_str, chain(args, kwargs.values()))))
             func_name = _as_str(func)
             name = (f'{func_name}({params})' if params else f'{func_name}')
+            if symbol is not None:
+                name = f'{symbol}: {name}'
         elif isinstance(name, str):
             name = _format_name(name)
         elif try_(lambda: all(isinstance(item, str) for item in name), False):
@@ -161,21 +178,24 @@ class Strategy(metaclass=ABCMeta):
                 f'Length of `name=` ({len(name)}) must agree with the number '
                 f'of arrays the indicator returns ({value.shape[0]}).')
 
-        if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data.Close):
+        if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data):
             raise ValueError(
                 'Indicators must return (optionally a tuple of) numpy.arrays of same '
-                f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}" '
+                f'length as `data` (data length: {len(self._data)}; indicator "{name}" '
                 f'shape: {getattr(value, "shape", "")}, returned value: {value})')
 
         if overlay is None and np.issubdtype(value.dtype, np.number):
-            x = value / self._data.Close
-            # By default, overlay if strong majority of indicator values
-            # is within 30% of Close
-            with np.errstate(invalid='ignore'):
-                overlay = ((x < 1.4) & (x > .6)).mean() > .6
+            if self._data.symbols and symbol is None:
+                overlay = False  # No single price series to overlay onto
+            else:
+                x = value / self._data[symbol].Close
+                # By default, overlay if strong majority of indicator values
+                # is within 30% of Close
+                with np.errstate(invalid='ignore'):
+                    overlay = ((x < 1.4) & (x > .6)).mean() > .6
 
         value = _Indicator(value, name=name, plot=plot, overlay=overlay,
-                           color=color, scatter=scatter,
+                           color=color, scatter=scatter, symbol=symbol,
                            # _Indicator.s Series accessor uses this:
                            index=self.data.index)
         self._indicators.append(value)
@@ -222,14 +242,19 @@ class Strategy(metaclass=ABCMeta):
             stop: Optional[float] = None,
             sl: Optional[float] = None,
             tp: Optional[float] = None,
-            tag: object = None) -> 'Order':
+            tag: object = None,
+            symbol: Optional[str] = None) -> 'Order':
         """
         Place a new long order and return it. For explanation of parameters, see `Order`
         and its properties.
         Unless you're running `Backtest(..., trade_on_close=True)`,
-        market orders are filled on next bar's open,
+        market orders are filled on next bar's open (in a multi-asset backtest,
+        on the next bar _on which the symbol trades_),
         whereas other order types (limit, stop-limit, stop-market) are filled when
         the respective conditions are met.
+
+        In a multi-asset backtest, `symbol` is required and routes the order
+        to one of the `Strategy.data` symbols.
 
         See `Position.close()` and `Trade.close()` for closing existing positions.
 
@@ -237,7 +262,9 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size >= 1, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(size, limit, stop, sl, tp, tag)
+        symbol = self._resolve_symbol(symbol, required=True)
+        self.__warn_multiasset_full_equity(size)
+        return self._broker.new_order(size, limit, stop, sl, tp, tag, symbol=symbol)
 
     def sell(self, *,
              size: float = _FULL_EQUITY,
@@ -245,10 +272,14 @@ class Strategy(metaclass=ABCMeta):
              stop: Optional[float] = None,
              sl: Optional[float] = None,
              tp: Optional[float] = None,
-             tag: object = None) -> 'Order':
+             tag: object = None,
+             symbol: Optional[str] = None) -> 'Order':
         """
         Place a new short order and return it. For explanation of parameters, see `Order`
         and its properties.
+
+        In a multi-asset backtest, `symbol` is required and routes the order
+        to one of the `Strategy.data` symbols.
 
         .. caution::
             Keep in mind that `self.sell(size=.1)` doesn't close existing `self.buy(size=.1)`
@@ -268,7 +299,40 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size >= 1, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(-size, limit, stop, sl, tp, tag)
+        symbol = self._resolve_symbol(symbol, required=True)
+        self.__warn_multiasset_full_equity(size)
+        return self._broker.new_order(-size, limit, stop, sl, tp, tag, symbol=symbol)
+
+    def _resolve_symbol(self, symbol: Optional[str], *, required: bool = False) -> Optional[str]:
+        symbols = self._data.symbols
+        if not symbols:
+            if symbol is not None:
+                raise ValueError(
+                    f'symbol={symbol!r} passed, but this is a single-asset backtest. '
+                    'For multi-asset mode, pass `Backtest(data={...}, ...)` '
+                    'a dict of data frames.')
+            return None
+        if symbol is None:
+            if required:
+                raise ValueError(
+                    'Multi-asset mode requires explicit order routing, e.g. '
+                    f'`self.buy(symbol={symbols[0]!r}, ...)`. Symbols: {symbols}')
+            return None
+        if symbol not in symbols:
+            suggestions = get_close_matches(str(symbol), map(str, symbols))
+            hint = f" Did you mean: {', '.join(map(repr, suggestions))}?" if suggestions else ''
+            raise ValueError(f'Unknown symbol {symbol!r}; symbols: {symbols}.' + hint)
+        return symbol
+
+    def __warn_multiasset_full_equity(self, size):
+        broker = self._broker
+        if size is self._FULL_EQUITY and broker._symbols and not broker._warned_full_equity:
+            broker._warned_full_equity = True
+            warnings.warn(
+                'Order placed with default size= uses ~all available margin, '
+                'leaving none for the other assets. In a multi-asset backtest, '
+                'you likely want an explicit fractional size (e.g. `size=.2`) '
+                'or a number of units per order.', category=UserWarning, stacklevel=3)
 
     @property
     def equity(self) -> float:
@@ -301,13 +365,38 @@ class Strategy(metaclass=ABCMeta):
           **Pandas series**, you can call their `.s` accessor
           (e.g. `data.Close.s`). If you need the whole of data
           as a **DataFrame**, use `.df` accessor (i.e. `data.df`).
+
+        In a multi-asset backtest (see `backtesting.backtesting.Backtest`),
+        the per-asset series are accessed as `data[symbol].Close` etc.,
+        with available symbols listed in `data.symbols` (an empty tuple in
+        single-asset mode). The arrays span the **union** of all assets'
+        timestamps; bars on which an asset didn't trade hold NaN.
         """
         return self._data
 
     @property
     def position(self) -> 'Position':
-        """Instance of `backtesting.backtesting.Position`."""
+        """
+        Instance of `backtesting.backtesting.Position`.
+
+        In a multi-asset backtest, an aggregate position is ambiguous;
+        use `Strategy.positions` instead.
+        """
+        if self._data.symbols:
+            raise RuntimeError(
+                '`self.position` is ambiguous in multi-asset mode; '
+                'use `self.positions[symbol]`')
         return self._broker.position
+
+    @property
+    def positions(self) -> 'Mapping[Optional[str], Position]':
+        """
+        Read-only mapping of symbol → `backtesting.backtesting.Position`.
+        In single-asset mode, the sole `Position` is keyed by `None`,
+        so `self.positions[symbol]` works in strategies generic over
+        `for symbol in (self.data.symbols or (None,)): ...`.
+        """
+        return MappingProxyType(self._broker.positions)
 
     @property
     def orders(self) -> 'Tuple[Order, ...]':
@@ -335,26 +424,36 @@ class Position:
         if self.position:
             ...  # we have a position, either long or short
     """
-    def __init__(self, broker: '_Broker'):
+    def __init__(self, broker: '_Broker', symbol: Optional[str] = None):
         self.__broker = broker
+        self.__symbol = symbol
+
+    def __trades(self) -> 'List[Trade]':
+        return [trade for trade in self.__broker.trades
+                if self.__symbol is None or trade.symbol == self.__symbol]
 
     def __bool__(self):
         return self.size != 0
 
     @property
+    def symbol(self) -> Optional[str]:
+        """Symbol this position pertains to, or None in single-asset mode."""
+        return self.__symbol
+
+    @property
     def size(self) -> float:
         """Position size in units of asset. Negative if position is short."""
-        return sum(trade.size for trade in self.__broker.trades)
+        return sum(trade.size for trade in self.__trades())
 
     @property
     def pl(self) -> float:
         """Profit (positive) or loss (negative) of the current position in cash units."""
-        return sum(trade.pl for trade in self.__broker.trades)
+        return sum(trade.pl for trade in self.__trades())
 
     @property
     def pl_pct(self) -> float:
         """Profit (positive) or loss (negative) of the current position in percent."""
-        total_invested = sum(trade.entry_price * abs(trade.size) for trade in self.__broker.trades)
+        total_invested = sum(trade.entry_price * abs(trade.size) for trade in self.__trades())
         return (self.pl / total_invested) * 100 if total_invested else 0
 
     @property
@@ -371,15 +470,24 @@ class Position:
         """
         Close portion of position by closing `portion` of each active trade. See `Trade.close`.
         """
-        for trade in self.__broker.trades:
+        for trade in self.__trades():
             trade.close(portion)
 
     def __repr__(self):
-        return f'<Position: {self.size} ({len(self.__broker.trades)} trades)>'
+        symbol = f' {self.__symbol}' if self.__symbol is not None else ''
+        return f'<Position{symbol}: {self.size} ({len(self.__trades())} trades)>'
 
 
 class _OutOfMoneyError(Exception):
     pass
+
+
+class _Positions(dict):
+    """Mapping of symbol → `Position` with helpful `KeyError`s."""
+    def __missing__(self, key):
+        suggestions = get_close_matches(str(key), map(str, self))
+        hint = f" Did you mean: {', '.join(map(repr, suggestions))}?" if suggestions else ''
+        raise KeyError(f'Unknown symbol {key!r}; symbols: {tuple(self)}.{hint}')
 
 
 class Order:
@@ -404,7 +512,9 @@ class Order:
                  sl_price: Optional[float] = None,
                  tp_price: Optional[float] = None,
                  parent_trade: Optional['Trade'] = None,
-                 tag: object = None):
+                 tag: object = None,
+                 *,
+                 symbol: Optional[str] = None):
         self.__broker = broker
         assert size != 0
         self.__size = size
@@ -414,6 +524,7 @@ class Order:
         self.__tp_price = tp_price
         self.__parent_trade = parent_trade
         self.__tag = tag
+        self.__symbol = symbol
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
@@ -423,6 +534,7 @@ class Order:
     def __repr__(self):
         return '<Order {}>'.format(', '.join(f'{param}={try_(lambda: round(value, 5), value)!r}'
                                              for param, value in (
+                                                 ('symbol', self.__symbol),
                                                  ('size', self.__size),
                                                  ('limit', self.__limit_price),
                                                  ('stop', self.__stop_price),
@@ -501,6 +613,14 @@ class Order:
         return self.__parent_trade
 
     @property
+    def symbol(self) -> Optional[str]:
+        """
+        Symbol the order is routed to in a multi-asset backtest
+        (see `backtesting.backtesting.Backtest`), or None in single-asset mode.
+        """
+        return self.__symbol
+
+    @property
     def tag(self):
         """
         Arbitrary value (such as a string) which, if set, enables tracking
@@ -544,7 +664,8 @@ class Trade:
     When an `Order` is filled, it results in an active `Trade`.
     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
     """
-    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar, tag):
+    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar, tag, *,
+                 symbol: Optional[str] = None):
         self.__broker = broker
         self.__size = size
         self.__entry_price = entry_price
@@ -554,10 +675,13 @@ class Trade:
         self.__sl_order: Optional[Order] = None
         self.__tp_order: Optional[Order] = None
         self.__tag = tag
+        self.__symbol = symbol
         self._commissions = 0
 
     def __repr__(self):
-        return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
+        return f'<Trade ' \
+               f'{"symbol=" + str(self.__symbol) + " " if self.__symbol is not None else ""}' \
+               f'size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
                f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}' \
                f'{" tag=" + str(self.__tag) if self.__tag is not None else ""}>'
 
@@ -574,7 +698,8 @@ class Trade:
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
         # Ensure size is an int to avoid rounding errors on 32-bit OS
         size = copysign(max(1, int(round(abs(self.__size) * portion))), -self.__size)
-        order = Order(self.__broker, size, parent_trade=self, tag=self.__tag)
+        order = Order(self.__broker, size, parent_trade=self, tag=self.__tag,
+                      symbol=self.__symbol)
         self.__broker.orders.insert(0, order)
 
     # Fields getters
@@ -606,6 +731,14 @@ class Trade:
         (or None if the trade is still active).
         """
         return self.__exit_bar
+
+    @property
+    def symbol(self) -> Optional[str]:
+        """
+        Symbol the trade is in, in a multi-asset backtest
+        (see `backtesting.backtesting.Backtest`), or None in single-asset mode.
+        """
+        return self.__symbol
 
     @property
     def tag(self):
@@ -658,13 +791,13 @@ class Trade:
         Trade profit (positive) or loss (negative) in cash units.
         Commissions are reflected only after the Trade is closed.
         """
-        price = self.__exit_price or self.__broker.last_price
+        price = self.__exit_price or self.__broker._last_price(self.__symbol)
         return (self.__size * (price - self.__entry_price)) - self._commissions
 
     @property
     def pl_pct(self):
         """Trade profit (positive) or loss (negative) in percent relative to trade entry price."""
-        price = self.__exit_price or self.__broker.last_price
+        price = self.__exit_price or self.__broker._last_price(self.__symbol)
         gross_pl_pct = copysign(1, self.__size) * (price / self.__entry_price - 1)
 
         # Total commission across the entire trade size to individual units
@@ -674,7 +807,7 @@ class Trade:
     @property
     def value(self):
         """Trade total value in cash (volume × price)."""
-        price = self.__exit_price or self.__broker.last_price
+        price = self.__exit_price or self.__broker._last_price(self.__symbol)
         return abs(self.__size) * price
 
     # SL/TP management API
@@ -728,10 +861,12 @@ class _Broker:
         assert cash > 0, f"cash should be > 0, is {cash}"
         assert 0 < margin <= 1, f"margin should be between 0 and 1, is {margin}"
         self._data: _Data = data
+        symbols = getattr(data, 'symbols', ())  # `data` is a raw df in `dummy_stats()`
+        self._symbols: Tuple[str, ...] = symbols if isinstance(symbols, tuple) else ()
         self._cash = cash
 
         if callable(commission):
-            self._commission = commission
+            self._commission = self._symbol_aware(commission)
         else:
             try:
                 self._commission_fixed, self._commission_relative = commission
@@ -753,10 +888,43 @@ class _Broker:
         self.orders: List[Order] = []
         self.trades: List[Trade] = []
         self.position = Position(self)
+        self.positions: Mapping[Optional[str], Position] = _Positions(
+            {symbol: Position(self, symbol) for symbol in self._symbols}
+            if self._symbols else {None: self.position})
         self.closed_trades: List[Trade] = []
+        # Per-symbol last valid (non-NaN) close ≤ the current bar,
+        # for marking to market across multi-asset data gaps
+        self._last_close: Dict[Optional[str], float] = {}
+        self._warned_full_equity = False
 
-    def _commission_func(self, order_size, price):
+    def _commission_func(self, order_size, price, symbol=None):
         return self._commission_fixed + abs(order_size) * price * self._commission_relative
+
+    @staticmethod
+    def _symbol_aware(commission_func):
+        """
+        Adapt a user `commission` callable to a uniform 3-arg
+        `func(order_size, price, symbol)` call convention. The symbol is only
+        passed to callables that explicitly accept it — a third _required_
+        positional parameter or a parameter named 'symbol' — so legacy 2-arg
+        callables (even with extra defaulted parameters) work unchanged.
+        """
+        try:
+            params = list(signature(commission_func).parameters.values())
+        except (TypeError, ValueError):
+            params = None
+        if params is not None:
+            positional = [p for p in params
+                          if p.kind in (Parameter.POSITIONAL_ONLY,
+                                        Parameter.POSITIONAL_OR_KEYWORD)]
+            if (sum(p.default is Parameter.empty for p in positional) >= 3 or
+                    any(p.name == 'symbol' for p in positional[2:])):
+                return commission_func
+            if any(p.name == 'symbol' and p.kind is Parameter.KEYWORD_ONLY
+                   for p in params):
+                return lambda order_size, price, symbol=None: \
+                    commission_func(order_size, price, symbol=symbol)
+        return lambda order_size, price, symbol=None: commission_func(order_size, price)
 
     def __repr__(self):
         return f'<Broker: {self._cash:.0f}{self.position.pl:+.1f} ({len(self.trades)} trades)>'
@@ -769,7 +937,8 @@ class _Broker:
                   tp: Optional[float] = None,
                   tag: object = None,
                   *,
-                  trade: Optional[Trade] = None) -> Order:
+                  trade: Optional[Trade] = None,
+                  symbol: Optional[str] = None) -> Order:
         """
         Argument size indicates whether the order is long or short
         """
@@ -779,9 +948,18 @@ class _Broker:
         sl = sl and float(sl)
         tp = tp and float(tp)
 
+        if trade is not None:
+            symbol = trade.symbol
+
         is_long = size > 0
         assert size != 0, size
-        adjusted_price = self._adjusted_price(size)
+        last_price = self._last_price(symbol)
+        if np.isnan(last_price) and not (limit or stop):
+            # Only reachable in multi-asset mode, before the symbol's first bar
+            raise ValueError(
+                f'Cannot place a market order in {symbol!r}: no price data (yet) '
+                f'at {self._data.index[-1]}. A limit/stop order can be placed instead.')
+        adjusted_price = self._adjusted_price(size, last_price)
 
         if is_long:
             if not (sl or -np.inf) < (limit or stop or adjusted_price) < (tp or np.inf):
@@ -794,17 +972,19 @@ class _Broker:
                     "Short orders require: "
                     f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})")
 
-        order = Order(self, size, limit, stop, sl, tp, trade, tag)
+        order = Order(self, size, limit, stop, sl, tp, trade, tag, symbol=symbol)
 
         if not trade:
             # If exclusive orders (each new order auto-closes previous orders/position),
-            # cancel all non-contingent orders and close all open trades beforehand
+            # cancel all non-contingent orders and close all open trades beforehand.
+            # In multi-asset mode, exclusivity applies per symbol.
             if self._exclusive_orders:
-                for o in self.orders:
-                    if not o.is_contingent:
+                for o in list(self.orders):
+                    if not o.is_contingent and o.symbol == symbol:
                         o.cancel()
-                for t in self.trades:
-                    t.close()
+                for t in list(self.trades):
+                    if t.symbol == symbol:
+                        t.close()
 
         # Put the new order in the order queue, Ensure SL orders are processed first
         self.orders.insert(0 if trade and stop else len(self.orders), order)
@@ -814,7 +994,16 @@ class _Broker:
     @property
     def last_price(self) -> float:
         """ Price at the last (current) close. """
-        return self._data.Close[-1]
+        return self._last_price(None)
+
+    def _last_price(self, symbol: Optional[str]) -> float:
+        """
+        `symbol`'s last valid close up to and including the current bar
+        (stale during multi-asset data gaps; NaN before the symbol's first bar).
+        """
+        if not self._symbols:
+            return self._data.Close[-1]
+        return self._last_close.get(symbol, np.nan)
 
     def _adjusted_price(self, size=None, price=None) -> float:
         """
@@ -835,6 +1024,10 @@ class _Broker:
 
     def next(self):
         i = self._i = len(self._data) - 1
+        for symbol in self._symbols:
+            close = self._data[symbol].Close[-1]
+            if close == close:  # Not NaN, i.e. the symbol trades on this bar
+                self._last_close[symbol] = close
         self._process_orders()
 
         # Log account equity for the equity curve
@@ -844,15 +1037,14 @@ class _Broker:
         # If equity is negative, set all to 0 and stop the simulation
         if equity <= 0:
             assert self.margin_available <= 0
-            for trade in self.trades:
-                self._close_trade(trade, self._data.Close[-1], i)
+            for trade in list(self.trades):
+                self._close_trade(trade, self._last_price(trade.symbol), i)
             self._cash = 0
             self._equity[i:] = 0
             raise _OutOfMoneyError
 
     def _process_orders(self):
         data = self._data
-        open, high, low = data.Open[-1], data.High[-1], data.Low[-1]
         reprocess_orders = False
 
         # Process orders
@@ -860,6 +1052,15 @@ class _Broker:
 
             # Related SL/TP order was already removed
             if order not in self.orders:
+                continue
+
+            # `data[None] is data`, so this is zero-cost in single-asset mode
+            d = data[order.symbol]
+            open, high, low = d.Open[-1], d.High[-1], d.Low[-1]
+            if np.isnan(open):
+                # No market in this symbol on this bar (multi-asset data gap).
+                # Order remains queued (Good 'Til Canceled) and can only fill
+                # at a price the symbol actually trades at.
                 continue
 
             # Check if stop condition was hit
@@ -890,20 +1091,24 @@ class _Broker:
                 price = (min(stop_price or open, order.limit)
                          if order.is_long else
                          max(stop_price or open, order.limit))
+                trade_on_prev_close = False
             else:
                 # Market-if-touched / market order
                 # Contingent orders always on next open
-                prev_close = data.Close[-2]
-                price = prev_close if self._trade_on_close and not order.is_contingent else open
+                prev_close = d.Close[-2]
+                # NaN prev_close means the order was deferred across a multi-asset
+                # data gap. Market orders never fill at prices the symbol isn't
+                # currently trading at, so fall back to filling at this
+                # (the symbol's first tradable) bar's open
+                trade_on_prev_close = (self._trade_on_close and not order.is_contingent and
+                                       not np.isnan(prev_close))
+                price = prev_close if trade_on_prev_close else open
                 if stop_price:
                     price = max(price, stop_price) if order.is_long else min(price, stop_price)
 
             # Determine entry/exit bar index
             is_market_order = not order.limit and not stop_price
-            time_index = (
-                (self._i - 1)
-                if is_market_order and self._trade_on_close and not order.is_contingent else
-                self._i)
+            time_index = (self._i - 1) if is_market_order and trade_on_prev_close else self._i
 
             # If order is a SL/TP order, it should close an existing trade it was contingent upon
             if order.parent_trade:
@@ -935,7 +1140,7 @@ class _Broker:
             # In long positions, the adjusted price is a fraction higher, and vice versa.
             adjusted_price = self._adjusted_price(order.size, price)
             adjusted_price_plus_commission = \
-                adjusted_price + self._commission(order.size, price) / abs(order.size)
+                adjusted_price + self._commission(order.size, price, order.symbol) / abs(order.size)
 
             # If order size was specified proportionally,
             # precompute true size in units, accounting for margin and spread/commissions
@@ -956,11 +1161,12 @@ class _Broker:
             need_size = int(size)
 
             if not self._hedging:
-                # Fill position by FIFO closing/reducing existing opposite-facing trades.
+                # Fill position by FIFO closing/reducing existing opposite-facing trades
+                # in the same symbol.
                 # Existing trades are closed at unadjusted price, because the adjustment
                 # was already made when buying.
                 for trade in list(self.trades):
-                    if trade.is_long == order.is_long:
+                    if trade.is_long == order.is_long or trade.symbol != order.symbol:
                         continue
                     assert trade.size * order.size < 0
 
@@ -995,7 +1201,8 @@ class _Broker:
                                  order.sl,
                                  order.tp,
                                  time_index,
-                                 order.tag)
+                                 order.tag,
+                                 order.symbol)
 
                 # We need to reprocess the SL/TP orders newly added to the queue.
                 # This allows e.g. SL hitting in the same bar the order was open.
@@ -1050,6 +1257,8 @@ class _Broker:
         self._close_trade(close_trade, price, time_index)
 
     def _close_trade(self, trade: Trade, price: float, time_index: int):
+        if price != price:  # Can't happen by construction; a NaN fill would poison the account
+            raise RuntimeError(f'Trade {trade} would close at a NaN price')
         self.trades.remove(trade)
         if trade._sl_order:
             self.orders.remove(trade._sl_order)
@@ -1059,25 +1268,100 @@ class _Broker:
         closed_trade = trade._replace(exit_price=price, exit_bar=time_index)
         self.closed_trades.append(closed_trade)
         # Apply commission one more time at trade exit
-        commission = self._commission(trade.size, price)
+        commission = self._commission(trade.size, price, trade.symbol)
         self._cash += trade.pl - commission
         # Save commissions on Trade instance for stats
-        trade_open_commission = self._commission(closed_trade.size, closed_trade.entry_price)
+        trade_open_commission = self._commission(
+            closed_trade.size, closed_trade.entry_price, trade.symbol)
         # applied here instead of on Trade open because size could have changed
         # by way of _reduce_trade()
         closed_trade._commissions = commission + trade_open_commission
 
     def _open_trade(self, price: float, size: int,
-                    sl: Optional[float], tp: Optional[float], time_index: int, tag):
-        trade = Trade(self, size, price, time_index, tag)
+                    sl: Optional[float], tp: Optional[float], time_index: int, tag,
+                    symbol: Optional[str] = None):
+        if price != price:  # Can't happen by construction; a NaN fill would poison the account
+            raise RuntimeError(f'Order in {symbol!r} would fill at a NaN price')
+        trade = Trade(self, size, price, time_index, tag, symbol=symbol)
         self.trades.append(trade)
         # Apply broker commission at trade open
-        self._cash -= self._commission(size, price)
+        self._cash -= self._commission(size, price, symbol)
         # Create SL/TP (bracket) orders.
         if tp:
             trade.tp = tp
         if sl:
             trade.sl = sl
+
+
+def _multiasset_df(data: Dict[str, pd.DataFrame]) -> pd.DataFrame:
+    """
+    Canonicalize a dict of per-symbol OHLC data frames into a single
+    two-level-column `(symbol, field)` data frame on the union of the
+    frames' indexes. Bars on which a symbol didn't trade become NaN rows
+    for that symbol; prices are never forward- or back-filled.
+    """
+    if not data:
+        raise ValueError('OHLC `data` is empty')
+    for symbol, df in data.items():
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError(f'data[{symbol!r}] must be a pandas.DataFrame with columns')
+        if not df.index.is_unique:
+            raise ValueError(f'data[{symbol!r}] index contains duplicate entries')
+    try:
+        return pd.concat(dict(data), axis=1)
+    except Exception as e:
+        raise ValueError(f'Failed to align `data` frames onto a union index: {e}') from e
+
+
+def _validate_multiasset_data(data: pd.DataFrame, cash: float) -> pd.DataFrame:
+    if data.columns.nlevels != 2:
+        raise ValueError('Multi-asset `data` columns must have exactly '
+                         'two levels: (symbol, field)')
+    data.columns = pd.MultiIndex.from_tuples(data.columns, names=('Symbol', None))
+    symbols = tuple(data.columns.get_level_values(0).unique())
+    if any(not isinstance(symbol, str) for symbol in symbols):
+        raise ValueError(f'Asset symbols must be strings; got: {symbols}')
+    shadowing = set(symbols) & {'Open', 'High', 'Low', 'Close', 'Volume'}
+    if shadowing:
+        raise ValueError(f'Asset symbols {sorted(shadowing)} would shadow '
+                         'OHLCV fields; rename them')
+    if len(data) == 0:
+        raise ValueError('OHLC `data` is empty')
+    if not data.index.is_unique:
+        raise ValueError('Data index contains duplicate entries')
+    if (data.index.dtype == object and
+            any(isinstance(value, pd.Timestamp) for value in data.index[:100])):
+        raise ValueError('Incompatible data indexes across symbols '
+                         '(mixing tz-aware and tz-naive timestamps?)')
+    for symbol in symbols:
+        missing = {'Open', 'High', 'Low', 'Close'} - set(data[symbol].columns)
+        if missing:
+            raise ValueError(f'data[{symbol!r}] is missing columns: {sorted(missing)}')
+        if (symbol, 'Volume') not in data.columns:
+            data[(symbol, 'Volume')] = np.nan
+        isna = data[symbol][['Open', 'High', 'Low', 'Close']].isnull()
+        if isna.values.all():
+            raise ValueError(f'data[{symbol!r}] contains no OHLC values')
+        partial = (isna.any(axis=1) & ~isna.all(axis=1)).values
+        if partial.any():
+            raise ValueError(
+                f'data[{symbol!r}] has bars with only some OHLC values missing (NaN), '
+                f'e.g. at {data.index[partial.argmax()]}. On each bar, a symbol\'s OHLC '
+                'values must either all be present (the symbol trades on that bar) '
+                'or all be missing (it does not).')
+    if np.any(data.xs('Close', axis=1, level=1) > cash):
+        warnings.warn('Some prices are larger than initial cash value. Note that fractional '
+                      'trading is not supported. If you want to trade Bitcoin, '
+                      'increase initial cash, or trade μBTC or satoshis instead.',
+                      stacklevel=3)
+    periods: List = [_data_period(data[symbol]['Close'].dropna().index)
+                     for symbol in symbols]
+    if try_(lambda: max(periods) / min(periods) > 2, False):
+        warnings.warn('Assets appear to trade on markedly different calendars/frequencies '
+                      f'(bar periods: {dict(zip(symbols, periods))}). Annualized statistics '
+                      'and Exposure Time are computed on the union of all timestamps '
+                      'and may be distorted.', stacklevel=3)
+    return data
 
 
 class Backtest:
@@ -1103,6 +1387,39 @@ class Backtest:
     DataFrame index can be either a datetime index (timestamps)
     or a monotonic range index (i.e. a sequence of periods).
 
+    .. tip:: Multi-asset (portfolio) backtesting
+        `data` can also be a **dict of such data frames, keyed by asset
+        symbol** (or, equivalently, one data frame with two-level
+        `(symbol, field)` columns), in which case the strategy trades a
+        portfolio of assets from a single account:
+
+            Backtest({'AAPL': aapl_df, 'MSFT': msft_df}, MyStrategy, cash=100_000)
+
+        In multi-asset mode:
+
+        * `Strategy.data` is accessed per symbol: `self.data[symbol].Close`,
+          with symbols listed in `self.data.symbols`. The data spans the
+          **union** of all assets' timestamps; bars on which an asset didn't
+          trade (a different calendar, a halt, or before/after its listing)
+          hold NaN, and prices are never forward- or back-filled.
+        * Orders are routed with `Strategy.buy(symbol=...)` /
+          `Strategy.sell(symbol=...)` and positions are queried with
+          `Strategy.positions[symbol]`. On bars where a symbol doesn't trade,
+          its pending orders simply wait (Good 'Til Canceled): market orders
+          fill at the symbol's next traded bar's open, and limit/stop/SL/TP
+          conditions are only ever evaluated against traded bars.
+        * Cash, equity and margin form a **single shared account**;
+          open trades are marked to market at each symbol's most recent
+          traded close. `hedging` and `exclusive_orders` apply per symbol.
+        * `Strategy.I` indicators can be associated with a symbol via
+          `self.I(..., symbol=...)`, which groups them for warm-up
+          (the backtest starts when the earliest-ready symbol's indicators
+          are non-NaN) and attributes them to that symbol's chart in
+          `Backtest.plot(symbol=...)`.
+        * In computed statistics, 'Buy & Hold Return [%]' and the Alpha/Beta
+          benchmark refer to an equal-weighted, per-bar-rebalanced basket
+          of all assets, and `stats['_trades']` gains a 'Symbol' column.
+
     `strategy` is a `backtesting.backtesting.Strategy`
     _subclass_ (not an instance).
 
@@ -1122,6 +1439,10 @@ class Backtest:
     `func(order_size: int, price: float) -> float`
     (note, order size is negative for short orders),
     which can be used to model more complex commission structures.
+    In a multi-asset backtest, a callable that declares a third
+    parameter named `symbol` (or three required positional parameters)
+    is called as `func(order_size, price, symbol)`, allowing
+    per-asset fee schedules.
     Negative commission values are interpreted as market-maker's rebates.
 
     .. note::
@@ -1155,7 +1476,10 @@ class Backtest:
 
     If `finalize_trades` is `True`, the trades that are still
     [active and ongoing] at the end of the backtest will be closed on
-    the last bar and will contribute to the computed backtest statistics.
+    the last bar and will contribute to the computed backtest statistics
+    (in a multi-asset backtest, trades in a symbol with no bar on the final
+    timestamp are instead settled at the symbol's own last traded close,
+    on its last traded bar).
 
     .. tip:: Fractional trading
         See also `backtesting.lib.FractionalBacktest` if you want to trade
@@ -1179,8 +1503,11 @@ class Backtest:
                  ):
         if not (isinstance(strategy, type) and issubclass(strategy, Strategy)):
             raise TypeError('`strategy` must be a Strategy sub-type')
+        if isinstance(data, dict):
+            data = _multiasset_df(data)
         if not isinstance(data, pd.DataFrame):
-            raise TypeError("`data` must be a pandas.DataFrame with columns")
+            raise TypeError("`data` must be a pandas.DataFrame with columns, "
+                            "or a dict of such data frames keyed by asset symbol")
         if not isinstance(spread, Number):
             raise TypeError('`spread` must be a float value, percent of '
                             'entry order price')
@@ -1203,24 +1530,27 @@ class Backtest:
             except ValueError:
                 pass
 
-        if 'Volume' not in data:
-            data['Volume'] = np.nan
+        if isinstance(data.columns, pd.MultiIndex):
+            data = _validate_multiasset_data(data, cash)
+        else:
+            if 'Volume' not in data:
+                data['Volume'] = np.nan
 
-        if len(data) == 0:
-            raise ValueError('OHLC `data` is empty')
-        if len(data.columns.intersection({'Open', 'High', 'Low', 'Close', 'Volume'})) != 5:
-            raise ValueError("`data` must be a pandas.DataFrame with columns "
-                             "'Open', 'High', 'Low', 'Close', and (optionally) 'Volume'")
-        if data[['Open', 'High', 'Low', 'Close']].isnull().values.any():
-            raise ValueError('Some OHLC values are missing (NaN). '
-                             'Please strip those lines with `df.dropna()` or '
-                             'fill them in with `df.interpolate()` or whatever.')
-        if np.any(data['Close'] > cash):
-            warnings.warn('Some prices are larger than initial cash value. Note that fractional '
-                          'trading is not supported by this class. If you want to trade Bitcoin, '
-                          'increase initial cash, or trade μBTC or satoshis instead (see e.g. class '
-                          '`backtesting.lib.FractionalBacktest`.',
-                          stacklevel=2)
+            if len(data) == 0:
+                raise ValueError('OHLC `data` is empty')
+            if len(data.columns.intersection({'Open', 'High', 'Low', 'Close', 'Volume'})) != 5:
+                raise ValueError("`data` must be a pandas.DataFrame with columns "
+                                 "'Open', 'High', 'Low', 'Close', and (optionally) 'Volume'")
+            if data[['Open', 'High', 'Low', 'Close']].isnull().values.any():
+                raise ValueError('Some OHLC values are missing (NaN). '
+                                 'Please strip those lines with `df.dropna()` or '
+                                 'fill them in with `df.interpolate()` or whatever.')
+            if np.any(data['Close'] > cash):
+                warnings.warn('Some prices are larger than initial cash value. Note that fractional '
+                              'trading is not supported by this class. If you want to trade Bitcoin, '
+                              'increase initial cash, or trade μBTC or satoshis instead (see e.g. class '
+                              '`backtesting.lib.FractionalBacktest`.',
+                              stacklevel=2)
         if not data.index.is_monotonic_increasing:
             warnings.warn('Data index is not sorted in ascending order. Sorting.',
                           stacklevel=2)
@@ -1294,27 +1624,32 @@ class Backtest:
         broker: _Broker = self._broker(data=data)
         strategy: Strategy = self._strategy(broker, data, kwargs)
 
-        strategy.init()
-        data._update()  # Strategy.init might have changed/added to data.df
-
-        # Indicators used in Strategy.next()
-        indicator_attrs = _strategy_indicators(strategy)
-
-        # Skip first few candles where indicators are still "warming up"
-        # +1 to have at least two entries available
-        start = 1 + _indicator_warmup_nbars(strategy)
-
         # Disable "invalid value encountered in ..." warnings. Comparison
         # np.nan >= 3 is not invalid; it's False.
         with np.errstate(invalid='ignore'):
+
+            strategy.init()
+            data._update()  # Strategy.init might have changed/added to data.df
+
+            # Indicators used in Strategy.next()
+            indicator_attrs = _strategy_indicators(strategy)
+
+            # Skip first few candles where indicators are still "warming up"
+            # +1 to have at least two entries available
+            start = 1 + _indicator_warmup_nbars(strategy)
+            if start > len(self._data):
+                # Only reachable in multi-asset mode (all-NaN indicators)
+                warnings.warn(
+                    'No indicator (symbol group) ever becomes non-NaN; '
+                    'no trading will be simulated.', stacklevel=2)
 
             for i in _tqdm(range(start, len(self._data)), desc=self.run.__qualname__,
                            unit='bar', mininterval=2, miniters=100):
                 # Prepare data and indicators for `next` call
                 data._set_length(i + 1)
                 for attr, indicator in indicator_attrs:
-                    # Slice indicator on the last dimension (case of 2d indicator)
-                    setattr(strategy, attr, indicator[..., :i + 1])
+                    # Slice indicator(s) on the last dimension (case of 2d indicator)
+                    setattr(strategy, attr, _indicator_sliced(indicator, i + 1))
 
                 # Handle orders processing and broker stuff
                 try:
@@ -1334,11 +1669,34 @@ class Backtest:
                     #  strategy iteration. Use the same OHLC values as in the last broker iteration.
                     if start < len(self._data):
                         try_(broker.next, exception=_OutOfMoneyError)
+
+                    # In multi-asset mode, trades whose symbol has no bar on the final
+                    # (union) timestamp can't close through the order pipeline above;
+                    # settle them at the symbol's last traded close, on its last traded bar
+                    settled = [trade for trade in broker.trades
+                               if np.isnan(data[trade.symbol].Close[-1])]
+                    for trade in settled:
+                        close = np.asarray(data[trade.symbol].Close, dtype=float)
+                        exit_bar = int(np.flatnonzero(~np.isnan(close))[-1])
+                        broker._close_trade(trade, broker._last_price(trade.symbol), exit_bar)
+                    if settled:
+                        settled_set = set(map(id, settled))
+                        broker.orders[:] = [
+                            order for order in broker.orders
+                            if id(order.parent_trade) not in settled_set]
+                        # Settlement commissions hit cash after the last equity
+                        # sample was recorded; restate it
+                        broker._equity[len(self._data) - 1] = broker.equity
                 elif len(broker.trades):
+                    open_symbols = sorted(
+                        symbol for symbol in {t.symbol for t in broker.trades}
+                        if symbol is not None)
                     warnings.warn(
                         'Some trades remain open at the end of backtest. Use '
                         '`Backtest(..., finalize_trades=True)` to close them and '
-                        'include them in stats.', stacklevel=2)
+                        'include them in stats.' +
+                        (f' Open trades in symbols: {open_symbols}.' if open_symbols else ''),
+                        stacklevel=2)
 
             # Set data back to full length
             # for future `indicator._opts['data'].index` calls to work
@@ -1633,7 +1991,8 @@ class Backtest:
              smooth_equity=False, relative_equity=True,
              superimpose: Union[bool, str] = True,
              resample=True, reverse_indicators=False,
-             show_legend=True, open_browser=True):
+             show_legend=True, open_browser=True,
+             symbol: Optional[str] = None):
         """
         Plot the progression of the last backtest run.
 
@@ -1642,6 +2001,12 @@ class Backtest:
         `backtesting.backtesting.Backtest.run` or
         `backtesting.backtesting.Backtest.optimize`, otherwise the last
         run's results are used.
+
+        In a multi-asset backtest, `symbol` selects which asset's chart
+        to plot (candlesticks on the bars the symbol actually traded,
+        along with the symbol's trades and associated indicators).
+        The equity/drawdown sections show the whole account, sampled at
+        the symbol's bars; refer to the stats for exact account extremes.
 
         `filename` is the path to save the interactive HTML plot to.
         By default, a strategy/parameter-dependent file is created in the
@@ -1718,10 +2083,46 @@ class Backtest:
                 raise RuntimeError('First issue `backtest.run()` to obtain results.')
             results = self._results
 
+        df = self._data
+        indicators = results._strategy._indicators
+        if not isinstance(df.columns, pd.MultiIndex):
+            if symbol is not None:
+                raise ValueError('`symbol=` is only valid in multi-asset mode')
+        else:
+            symbols = tuple(df.columns.get_level_values(0).unique())
+            if symbol is None:
+                raise ValueError(f'Multi-asset backtest: pass `plot(symbol=...)` '
+                                 f'to select the chart to plot. Symbols: {symbols}')
+            if symbol not in symbols:
+                raise ValueError(f'Unknown symbol {symbol!r}; symbols: {symbols}')
+            # Project results onto the bars the symbol actually traded
+            mask = df[(symbol, 'Close')].notna().values
+            valid = np.flatnonzero(mask)
+            df = df[symbol][mask]
+            trades = results['_trades']
+            trades = trades[trades['Symbol'] == symbol].copy()
+            # Every fill lands on a traded bar of its symbol by construction;
+            # `side='right') - 1` also clamps the one exception (bankruptcy
+            # liquidation during a data gap) to the symbol's last prior bar
+            trades[['EntryBar', 'ExitBar']] = (
+                np.searchsorted(valid, trades[['EntryBar', 'ExitBar']], side='right') - 1)
+            results = results.copy()
+            results['_trades'] = trades
+            results['_equity_curve'] = results['_equity_curve'][mask]
+            indicators = [_Indicator(np.asarray(indicator)[..., mask],
+                                     **dict(indicator._opts, name=indicator.name,
+                                            index=df.index))
+                          for indicator in indicators
+                          if indicator._opts.get('symbol') in (None, symbol)]
+            if not filename:
+                from ._plotting import IS_JUPYTER_NOTEBOOK, _windos_safe_filename
+                if not IS_JUPYTER_NOTEBOOK:
+                    filename = _windos_safe_filename(f'{results._strategy}-{symbol}')
+
         return plot(
             results=results,
-            df=self._data,
-            indicators=results._strategy._indicators,
+            df=df,
+            indicators=indicators,
             filename=filename,
             plot_width=plot_width,
             plot_equity=plot_equity,
