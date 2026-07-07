@@ -15,6 +15,7 @@ and advisable to go through all of them. They are short.
 * [Multiple Time Frames](../examples/Multiple Time Frames.html)
 * [**Parameter Heatmap & Optimization**](../examples/Parameter Heatmap &amp; Optimization.html)
 * [Trading with Machine Learning](../examples/Trading with Machine Learning.html)
+* [FXMacroData Forex Data](../examples/FXMacroData Forex Data.html)
 
 These tutorials are also available as live Jupyter notebooks:
 [![Binder](https://mybinder.org/badge_logo.svg)][binder]
