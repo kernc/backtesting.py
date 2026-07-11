@@ -916,8 +916,11 @@ class _Broker:
                 if trade in self.trades:
                     self._reduce_trade(trade, price, size, time_index)
                     assert order.size != -_prev_size or trade not in self.trades
-                    if price == stop_price:
+                    if order is trade._sl_order:
                         # Set SL back on the order for stats._trades["SL"]
+                        # (it was cleared above when the stop was hit). Restore it
+                        # even when the SL was gapped through and the fill price is
+                        # worse than the stop price (i.e. `price != stop_price`).
                         trade._sl_order._replace(stop_price=stop_price)
                 if order in (trade._sl_order,
                              trade._tp_order):

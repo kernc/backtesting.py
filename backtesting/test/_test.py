@@ -1177,3 +1177,21 @@ class TestRegressions(TestCase):
         trades = Backtest(SHORT_DATA, S).run()._trades
         self.assertEqual(trades['SL'].fillna(0).tolist(), [0, 99])
         self.assertEqual(trades['TP'].fillna(0).tolist(), [111, 0])
+
+    def test_sl_value_in_trades_df_when_gapped_through(self):
+        # An SL that is gapped through (the bar opens beyond the stop, so the
+        # fill price is worse than the stop price) must still be recorded in
+        # stats._trades["SL"]. See GH issue #1340.
+        class S(_S):
+            def next(self):
+                if len(self.data.index) == 9:
+                    self.buy(size=1, sl=99.5)
+
+        trades = Backtest(SHORT_DATA, S).run()._trades
+        self.assertEqual(len(trades), 1)
+        trade = trades.iloc[0]
+        # The long SL (99.5) is gapped through on the next bar's open (99.19),
+        # so the exit price is below the stop price ...
+        self.assertLess(trade['ExitPrice'], 99.5)
+        # ... yet the SL value must be preserved in the trades data frame.
+        self.assertEqual(trade['SL'], 99.5)
