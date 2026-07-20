@@ -395,7 +395,7 @@ class Order:
     All placed orders are [Good 'Til Canceled].
 
     [filled]: https://www.investopedia.com/terms/f/fill.asp
-    [Good 'Til Canceled]: https://www.investopedia.com/terms/g/gtc.asp
+    [Good 'Til Canceled]: https://en.wikipedia.org/wiki/Order_(exchange)#Time_in_force
     """
     def __init__(self, broker: '_Broker',
                  size: float,
@@ -463,8 +463,8 @@ class Order:
         Order limit price for [limit orders], or None for [market orders],
         which are filled at next available price.
 
-        [limit orders]: https://www.investopedia.com/terms/l/limitorder.asp
-        [market orders]: https://www.investopedia.com/terms/m/marketorder.asp
+        [limit orders]: https://en.wikipedia.org/wiki/Order_(exchange)#Limit_order
+        [market orders]: https://en.wikipedia.org/wiki/Order_(exchange)#Market_order
         """
         return self.__limit_price
 
@@ -474,7 +474,7 @@ class Order:
         Order stop price for [stop-limit/stop-market][_] order,
         otherwise None if no stop was set, or the stop price has already been hit.
 
-        [_]: https://www.investopedia.com/terms/s/stoporder.asp
+        [_]: https://en.wikipedia.org/wiki/Order_(exchange)#Stop_orders
         """
         return self.__stop_price
 
@@ -532,7 +532,7 @@ class Order:
         You can modify contingent orders through `Trade.sl` and `Trade.tp`.
 
         [contingent]: https://www.investopedia.com/terms/c/contingentorder.asp
-        [OCO]: https://www.investopedia.com/terms/o/oco.asp
+        [OCO]: https://en.wikipedia.org/wiki/Order_(exchange)#One_cancels_other_orders
         """
         return bool((parent := self.__parent_trade) and
                     (self is parent._sl_order or
@@ -1374,7 +1374,7 @@ class Backtest:
         `backtesting.backtesting.Backtest.run`-returned results series,
         or a function that accepts this series object and returns a number;
         the higher the better. By default, the method maximizes
-        Van Tharp's [System Quality Number](https://google.com/search?q=System+Quality+Number).
+        Van Tharp's [System Quality Number](https://altpower.app/?q=System+Quality+Number).
 
         `method` is the optimization method. Currently two methods are supported:
 
