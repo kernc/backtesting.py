@@ -1254,8 +1254,8 @@ class TestRegressions(TestCase):
         trades = Backtest(SHORT_DATA, S).run()._trades
         self.assertEqual(len(trades), 1)
         trade = trades.iloc[0]
-        # The long SL (99.5) is gapped through on the next bar's open (99.19),
-        # so the exit price is below the stop price ...
-        self.assertLess(trade['ExitPrice'], 99.5)
+        # The long SL (99.5) is gapped through on the next bar's open, so the
+        # trade exits at that worse market price rather than at the stop price.
+        self.assertEqual(trade['ExitPrice'], 99.19)
         # ... yet the SL value must be preserved in the trades data frame.
         self.assertEqual(trade['SL'], 99.5)
