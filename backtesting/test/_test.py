@@ -6,6 +6,7 @@ import time
 import unittest
 from concurrent.futures.process import ProcessPoolExecutor
 from contextlib import contextmanager
+from functools import partial
 from glob import glob
 from runpy import run_path
 from tempfile import NamedTemporaryFile, gettempdir
@@ -15,7 +16,7 @@ import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal
 
-from backtesting import Backtest, Strategy
+from backtesting import Backtest as _Backtest, Strategy
 from backtesting._stats import compute_drawdown_duration_peaks
 from backtesting._util import _Array, _as_str, _Indicator, patch, try_
 from backtesting.lib import (
@@ -34,6 +35,9 @@ from backtesting.lib import (
 from backtesting.test import BTCUSD, EURUSD, GOOG, SMA
 
 SHORT_DATA = GOOG.iloc[:20]  # Short data for fast tests with no indicator lag
+
+# Avoid the 'Some trades remain open' warning in many tests
+Backtest = partial(_Backtest, finalize_trades=True)
 
 
 @contextmanager
@@ -591,7 +595,7 @@ class TestOptimize(TestCase):
         res = bt.optimize(**OPT_PARAMS)
         self.assertIsInstance(res, pd.Series)
 
-        default_maximize = inspect.signature(Backtest.optimize).parameters['maximize'].default
+        default_maximize = inspect.signature(bt.optimize).parameters['maximize'].default
         res2 = bt.optimize(**OPT_PARAMS, maximize=lambda s: s[default_maximize])
         self.assertDictEqual(res.filter(regex='^[^_]').fillna(-1).to_dict(),
                              res2.filter(regex='^[^_]').fillna(-1).to_dict())
@@ -999,7 +1003,8 @@ class TestLib(TestCase):
                 self.set_signal(self.data.Close > sma,
                                 self.data.Close < sma)
 
-        stats = Backtest(GOOG, S).run()
+        with self.assertWarnsRegex(UserWarning, 'margin'):
+            stats = Backtest(GOOG, S).run()
         self.assertIn(stats['# Trades'], (1179, 1180))  # varies on different archs?
 
     def test_TrailingStrategy(self):
@@ -1020,7 +1025,9 @@ class TestLib(TestCase):
         self.assertEqual(stats['# Trades'], 56)
 
     def test_FractionalBacktest(self):
-        ubtc_bt = FractionalBacktest(BTCUSD['2015':], SmaCross, fractional_unit=1 / 1e6, cash=100)
+        ubtc_bt = FractionalBacktest(
+            BTCUSD['2015':], SmaCross, fractional_unit=1 / 1e6, cash=100,
+            finalize_trades=True)
         stats = ubtc_bt.run(fast=2, slow=3)
         self.assertEqual(stats['# Trades'], 41)
         trades = stats['_trades']
@@ -1036,7 +1043,8 @@ class TestLib(TestCase):
             with self.subTest(start_method=start_method), \
                     patch(backtesting, 'Pool', mp.get_context(start_method).Pool):
                 start_time = time.monotonic()
-                btm = MultiBacktest([GOOG, EURUSD, BTCUSD], SmaCross, cash=100_000)
+                btm = MultiBacktest([GOOG, EURUSD, BTCUSD], SmaCross, cash=100_000,
+                                    finalize_trades=True)
                 res = btm.run(fast=2)
                 self.assertIsInstance(res, pd.DataFrame)
                 self.assertEqual(res.columns.tolist(), [0, 1, 2])
@@ -1096,7 +1104,7 @@ class TestUtil(TestCase):
     def test_indicators_picklable(self):
         bt = Backtest(SHORT_DATA, SmaCross)
         with ProcessPoolExecutor() as executor:
-            stats = executor.submit(Backtest.run, bt).result()
+            stats = executor.submit(_Backtest.run, bt).result()
         assert stats._strategy._indicators[0]._opts, '._opts and .name were not unpickled'
         bt.plot(results=stats, resample='2D', open_browser=False)
 
@@ -1111,7 +1119,8 @@ class TestDocs(TestCase):
         examples = glob(os.path.join(self.DOCS_DIR, 'examples', '*.py'))
         self.assertGreaterEqual(len(examples), 4)
         with chdir(gettempdir()), \
-                patch(backtesting, 'Pool', mp.get_context('fork').Pool):
+                patch(backtesting, 'Pool', mp.get_context('fork').Pool), \
+                self.assertWarnsRegex(UserWarning, 'finalize_trades=True'):
             for file in examples:
                 with self.subTest(example=os.path.basename(file)):
                     run_path(file)
@@ -1119,7 +1128,7 @@ class TestDocs(TestCase):
     def test_backtest_run_docstring_contains_stats_keys(self):
         stats = Backtest(SHORT_DATA, SmaCross).run()
         for key in stats.index:
-            self.assertIn(key, Backtest.run.__doc__)
+            self.assertIn(key, _Backtest.run.__doc__)
 
     def test_readme_contains_stats_keys(self):
         with open(os.path.join(os.path.dirname(__file__),
@@ -1141,7 +1150,8 @@ class TestRegressions(TestCase):
         df = pd.DataFrame({'Open': arr, 'High': arr, 'Low': arr, 'Close': arr})
         with self.assertWarnsRegex(UserWarning, 'index is not datetime'):
             bt = Backtest(df, S, cash=100, trade_on_close=True)
-        self.assertEqual(bt.run()._trades['ExitPrice'][0], 50)
+        with self.assertWarnsRegex(UserWarning, 'margin'):
+            self.assertEqual(bt.run()._trades['ExitPrice'][0], 50)
 
     def test_stats_annualized(self):
         stats = Backtest(GOOG.resample('W').agg(OHLCV_AGG), SmaCross).run()
