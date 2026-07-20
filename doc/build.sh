@@ -69,7 +69,13 @@ echo 'Testing for broken links'
 echo
 problematic_urls='
 https://www.gnu.org/licenses/agpl-3.0.html
+https://www.investopedia.com/terms/c/contingentorder.asp
+https://www.investopedia.com/terms/n/nfa-compliance-rule-2-43b.asp
+https://www.investopedia.com/terms/b/backtesting.asp
+https://altpower.app/?q=vectorized+backtest
+https://altpower.app/?q=System+Quality+Number
 '
+user_agent='Mozilla/5.0 (X11; Linux x86_64; rv:152.0) Gecko/20100101 Firefox/152.0'
 pushd "$BUILDROOT" >/dev/null
 WEBSITE='https://kernc\.github\.io/backtesting\.py'
 grep -PR '<a .*?href=' |
@@ -100,7 +106,7 @@ print(html.unescape(unquote(sys.argv[-1])))' "$url")"
             url="${url// /%20}"
             echo "$url"
             curl --silent --fail --retry 2 --retry-delay 2 --connect-timeout 10 \
-                    --user-agent 'Mozilla/5.0 Firefox 128' "$url" >/dev/null 2>&1 ||
+                    --user-agent "$user_agent" "$url" >/dev/null 2>&1 ||
                 grep -qF "$url" <(echo "$problematic_urls") ||
                 die "broken link in $file:  $url"
         done
