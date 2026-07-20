@@ -249,9 +249,9 @@ class TestBacktest(TestCase):
         ORDER_BAR = 2
         stats = Backtest(SHORT_DATA, S, cash=CASH, spread=SPREAD, commission=COMMISSION).run()
         trade_open_price = SHORT_DATA['Open'].iloc[ORDER_BAR]
-        self.assertEqual(stats['_trades']['EntryPrice'].iloc[0], trade_open_price * (1 + SPREAD))
+        self.assertEqual(stats['_trades']['EntryPrice'].iloc[0], trade_open_price * (1 + SPREAD / 2))
         self.assertEqual(stats['_equity_curve']['Equity'].iloc[2:4].round(2).tolist(),
-                         [9685.31, 9749.33])
+                         [9734.52, 9750.10])
 
         stats = Backtest(SHORT_DATA, S, cash=CASH, commission=(100, COMMISSION)).run()
         self.assertEqual(stats['_equity_curve']['Equity'].iloc[2:4].round(2).tolist(),
@@ -261,6 +261,163 @@ class TestBacktest(TestCase):
         stats = Backtest(SHORT_DATA, S, cash=CASH, commission=commission_func).run()
         self.assertEqual(stats['_equity_curve']['Equity'].iloc[2:4].round(2).tolist(),
                          [9781.28, 9846.04])
+
+    def test_spread_is_split_between_entry_and_exit(self):
+        class Long(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(size=10)
+                elif self.position:
+                    self.position.close()
+
+        class Short(Long):
+            def next(self):
+                if len(self.data) == 2:
+                    self.sell(size=10)
+                elif self.position:
+                    self.position.close()
+
+        index = pd.date_range('2020', periods=5)
+        data = pd.DataFrame({column: 100. for column in ('Open', 'High', 'Low', 'Close')},
+                            index=index)
+
+        long_trade = Backtest(data, Long, spread=.02).run()._trades.iloc[0]
+        short_trade = Backtest(data, Short, spread=.02).run()._trades.iloc[0]
+
+        self.assertEqual((long_trade.EntryPrice, long_trade.ExitPrice), (101., 99.))
+        self.assertEqual((short_trade.EntryPrice, short_trade.ExitPrice), (99., 101.))
+        self.assertEqual((long_trade.PnL, short_trade.PnL), (-20., -20.))
+
+    def test_open_trade_pl_includes_entry_commission(self):
+        class S(Strategy):
+            def init(self):
+                self.open_pl = self.open_pl_pct = None
+                self.position_pl = self.position_pl_pct = None
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(size=10)
+                elif self.position:
+                    trade = self.trades[0]
+                    self.open_pl = trade.pl
+                    self.open_pl_pct = trade.pl_pct
+                    self.position_pl = self.position.pl
+                    self.position_pl_pct = self.position.pl_pct
+                    self.position.close()
+
+        index = pd.date_range('2020', periods=5)
+        data = pd.DataFrame({column: 100. for column in ('Open', 'High', 'Low', 'Close')},
+                            index=index)
+        stats = Backtest(data, S, cash=10_000, commission=(5, .01)).run()
+
+        self.assertEqual(stats._strategy.open_pl, -15.)
+        self.assertEqual(stats._strategy.open_pl_pct, -.015)
+        self.assertEqual(stats._strategy.position_pl, -15.)
+        self.assertEqual(stats._strategy.position_pl_pct, -1.5)
+        self.assertEqual(stats._trades.Commission.iloc[0], 30.)
+        self.assertEqual(stats._trades.PnL.iloc[0], -30.)
+
+    def test_partial_close_allocates_entry_commission(self):
+        class S(Strategy):
+            def init(self):
+                self.remaining_pl = None
+                self.accounting_delta = None
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(size=10)
+                elif len(self.data) == 3:
+                    self.position.close(.4)
+                elif self.position:
+                    self.remaining_pl = self.trades[0].pl
+                    self.accounting_delta = (
+                        self.closed_trades[0].pl + self.trades[0].pl,
+                        self.equity - 10_000,
+                    )
+                    self.position.close()
+
+        index = pd.date_range('2020', periods=6)
+        data = pd.DataFrame({column: 100. for column in ('Open', 'High', 'Low', 'Close')},
+                            index=index)
+        stats = Backtest(data, S, cash=10_000, commission=(5, .01)).run()
+
+        self.assertEqual(stats._strategy.remaining_pl, -9.)
+        self.assertEqual(stats._strategy.accounting_delta, (-24., -24.))
+        self.assertEqual(stats['Commissions [$]'], 35.)
+        self.assertEqual(stats._trades.Commission.tolist(), [15., 20.])
+        self.assertEqual(stats._trades.PnL.tolist(), [-15., -20.])
+
+    def test_callable_entry_commission_is_not_recomputed_at_close(self):
+        class Commission:
+            def __init__(self):
+                self.calls = []
+
+            def __call__(self, size, price):
+                self.calls.append((size, price))
+                return len(self.calls)
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(size=10)
+                elif self.position:
+                    self.position.close()
+
+        commission = Commission()
+        index = pd.date_range('2020', periods=5)
+        data = pd.DataFrame({column: 100. for column in ('Open', 'High', 'Low', 'Close')},
+                            index=index)
+        stats = Backtest(data, S, cash=10_000, commission=commission).run()
+
+        self.assertEqual(len(commission.calls), 3)
+        self.assertEqual(stats._trades.Commission.iloc[0], 5.)
+        self.assertEqual(stats._trades.PnL.iloc[0], -5.)
+
+    def test_reversal_applies_half_spread_once_per_fill(self):
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(size=10)
+                elif len(self.data) == 3:
+                    self.sell(size=15)
+                elif self.position:
+                    self.position.close()
+
+        index = pd.date_range('2020', periods=6)
+        data = pd.DataFrame({column: 100. for column in ('Open', 'High', 'Low', 'Close')},
+                            index=index)
+        trades = Backtest(data, S, spread=.02).run()._trades
+
+        self.assertEqual(trades[['Size', 'EntryPrice', 'ExitPrice']].values.tolist(),
+                         [[10., 101., 99.], [-5., 99., 101.]])
+        self.assertEqual(trades.PnL.tolist(), [-20., -10.])
+
+    def test_stop_exit_pays_half_spread(self):
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(size=10, sl=95)
+
+        data = pd.DataFrame({
+            'Open': [100.] * 5,
+            'High': [100.] * 5,
+            'Low': [100., 100., 100., 94., 100.],
+            'Close': [100.] * 5,
+        }, index=pd.date_range('2020', periods=5))
+        trade = Backtest(data, S, spread=.02).run()._trades.iloc[0]
+
+        self.assertEqual(trade.EntryPrice, 101.)
+        self.assertEqual(trade.SL, 95.)
+        self.assertEqual(trade.ExitPrice, 94.05)
 
     def test_commissions(self):
         class S(_S):
