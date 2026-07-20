@@ -670,8 +670,8 @@ return this.labels[index] || "";
 
     set_tooltips(fig_ohlc, ohlc_tooltips, vline=True, renderers=[ohlc_bars])
 
-    source.add(ohlc_extreme_values.min(1), 'ohlc_low')
-    source.add(ohlc_extreme_values.max(1), 'ohlc_high')
+    source.add(ohlc_extreme_values.min(axis=1), 'ohlc_low')
+    source.add(ohlc_extreme_values.max(axis=1), 'ohlc_high')
 
     custom_js_args = dict(ohlc_range=fig_ohlc.y_range,
                           source=source)

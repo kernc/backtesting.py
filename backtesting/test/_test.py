@@ -1098,7 +1098,7 @@ class TestUtil(TestCase):
         with ProcessPoolExecutor() as executor:
             stats = executor.submit(Backtest.run, bt).result()
         assert stats._strategy._indicators[0]._opts, '._opts and .name were not unpickled'
-        bt.plot(results=stats, resample='2d', open_browser=False)
+        bt.plot(results=stats, resample='2D', open_browser=False)
 
 
 class TestDocs(TestCase):
