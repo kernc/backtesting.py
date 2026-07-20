@@ -153,7 +153,8 @@ def compute_stats(
         s['Sortino Ratio'] = (annualized_return - risk_free_rate) / (np.sqrt(np.mean(day_returns.clip(-np.inf, 0)**2)) * np.sqrt(annual_trading_days))  # noqa: E501
     max_dd = -np.nan_to_num(dd.max())
     s['Calmar Ratio'] = annualized_return / (-max_dd or np.nan)
-    equity_log_returns = np.log(equity[1:] / equity[:-1])
+    with np.errstate(divide='ignore'):  # Equity can be >= 0
+        equity_log_returns = np.log(equity[1:] / equity[:-1])
     market_log_returns = np.log(c[1:] / c[:-1])
     beta = np.nan
     if len(equity_log_returns) > 1 and len(market_log_returns) > 1:
