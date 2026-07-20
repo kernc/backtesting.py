@@ -102,14 +102,17 @@ Find more usage examples in the [documentation].
 
 Features
 --------
-* Simple, well-documented API
+* Simple, [well-documented API](https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html)
 * Blazing fast execution
-* Built-in optimizer
-* Library of composable base strategies and utilities
-* Indicator-library-agnostic
-* Supports _any_ financial instrument with candlestick data
-* Detailed results
-* Interactive visualizations
+* Built-in [optimizer](https://kernc.github.io/backtesting.py/doc/examples/Quick%20Start%20User%20Guide.html#Optimization)
+  based on [SAMBO](https://sambo-optimization.github.io)
+* [Library of composable base strategies](https://kernc.github.io/backtesting.py/doc/examples/Strategies%20Library.html)
+  and related utilities
+* Indicator-library-agnostic (BYO)
+* Supports _any_ financial instrument with OHLC(V) candlestick data
+* [Detailed trade results](https://kernc.github.io/backtesting.py/doc/examples/Quick%20Start%20User%20Guide.html#Trade-data)
+  provided as simple Series/DataFrame objects
+* [Interactive visualizations](https://kernc.github.io/backtesting.py/#example)
 
 ![xkcd.com/1570](https://imgs.xkcd.com/comics/engineer_syllogism.png)
 
@@ -119,7 +122,8 @@ Bugs
 Before reporting bugs or posting to the
 [discussion board](https://github.com/kernc/backtesting.py/discussions),
 please read [contributing guidelines](CONTRIBUTING.md), particularly the section
-about crafting useful bug reports and ```` ``` ````-fencing your code. We thank you!
+about crafting useful bug reports and ```` ``` ````-fencing your code.
+The maintainers thank you!
 
 
 Alternatives
