@@ -5,45 +5,34 @@ you can't rely on execution correctness, and you risk losing your house.
 In addition, everyone has their own preconveived ideas about how a mechanical
 trading strategy should be conducted, so everyone (and their brother)
 just rolls their own backtesting frameworks.
+Nowaday, that even means close to zero effort expended.
 
 If after reviewing the docs and examples perchance you find
 [_Backtesting.py_](https://kernc.github.io/backtesting.py) not your cup of tea,
-kindly have a look at some similar alternative Python backtesting frameworks:
+welcome to have a look at some similar alternative Python backtesting frameworks
+as proposed by the wider community:
 
--  [AutoTrader](https://github.com/kieran-mackle/AutoTrader) -
-  an automated trading framework with an emphasis on cryptocurrency markets
-  that includes a [robust backtesting API](https://github.com/kieran-mackle/AutoTrader/blob/main/docs/source/tutorials/backtesting.md)
+- [AwesomeQuant](https://github.com/wilsonfreitas/awesome-quant#trading--backtesting) -
+  A somewhat curated list of libraries, packages, and resources for quants.
+- [QTradeX](https://github.com/squidKid-deluxe/QTradeX-Algo-Trading-SDK) -
+  A powerful and flexible Python framework for designing, backtesting,
+  optimizing, and deploying algotrading bots.
 - [bt](http://pmorissette.github.io/bt/) -
   a framework based on reusable and flexible blocks of
   strategy logic that support multiple instruments and
   output detailed statistics and useful charts.
 - [vectorbt](https://polakowo.io/vectorbt/) -
   a pandas-based library for quickly analyzing trading strategies at scale.
-- [Backtrader](https://www.backtrader.com/) -
-  a pure-python feature-rich framework for backtesting
-  and live algotrading with a few brokers.
-- [PyAlgoTrade](https://gbeced.github.io/pyalgotrade/) -
-  event-driven algorithmic trading library with focus on
-  backtesting and support for live trading.
-- [Pinkfish](http://fja05680.github.io/pinkfish/) -
+- [Basana](https://basana.readthedocs.io) -
+  A fork of PyAlgoTrade; async and event driven framework with focus on cryptos.
+- [Pinkfish](https://github.com/fja05680/pinkfish) -
   a lightweight backtester for intraday strategies on daily data.
 - [finmarketpy](https://github.com/cuemacro/finmarketpy) -
   a library for analyzing financial market data.
-- [QuantStart QSTrader](https://github.com/mhallsmoore/qstrader/) -
-  a modular schedule-driven backtesting framework for long-short equities
-  and ETF-based systematic trading strategies.
 - [pysystemtrade](https://github.com/robcarver17/pysystemtrade) -
   the open-source version of Robert Carver's backtesting engine that
   implements systems according to his book _Systematic Trading:
   A unique new method for designing trading and investing systems_.
-- [QTPyLib](https://github.com/ranaroussi/qtpylib) -
-  a versatile, event-driven algorithmic trading library.
-- [Quantdom](https://github.com/constverum/Quantdom) -
-  a Qt-based framework that lets you focus on modeling financial strategies,
-  portfolio management, and analyzing backtests.
-- [Clairvoyant](https://github.com/anfederico/Clairvoyant) -
-  software for identifying and monitoring social / historical cues
-  for short-term stock movement.
 - [optopsy](https://github.com/michaelchu/optopsy) -
   a nimble backtesting library for options trading.
 - [RQalpha](https://github.com/ricequant/rqalpha) -
@@ -52,25 +41,29 @@ kindly have a look at some similar alternative Python backtesting frameworks:
   to mere data analysis. Documentation in Chinese.
 - [zvt](https://github.com/zvtvz/zvt) -
   a quant trading platform which includes data recorder, factor calculation,
-  stock picking, backtesting, and unified visualization. Documentation in Chinese.
-- [AwesomeQuant](https://github.com/wilsonfreitas/awesome-quant#trading--backtesting) -
-  A somewhat curated list of libraries, packages, and resources for quants.
+  stock picking, backtesting, and unified visualization. Documentation partly in Chinese.
 - [Nautilus Trader](https://github.com/nautechsystems/nautilus_trader) -
   high-performance, production-grade algorithmic trading platform written in Rust/Python,
   with event-driven engine to backtest portfolios of automated trading strategies,
   and also deploy those same strategies live, with no code changes.
-- [LiuAlgoTrader](https://amor71.github.io/LiuAlgoTrader/) -
-  A scalable, multi-process ML-ready framework for effective algorithmic trading.
 
 
-#### Obsolete / Unmaintained
+#### Obsolete / Unmaintained / Hall of Fame
 
 The following projects are mainly old, stale, incomplete, incompatible,
-abandoned, and here for posterity reference only:
+build-failing, abandoned, and here for posterity reference mostly:
 
+- [Backtrader](https://www.backtrader.com/) -
+  a pure-python feature-rich framework for backtesting
+  and live algotrading with a few brokers.
 - [Zipline](https://www.zipline.io/) -
   the backtesting and live-trading engine powering Quantopian — the
   community-centered, hosted platform for building and executing strategies.
+- [PyAlgoTrade](https://gbeced.github.io/pyalgotrade/) -
+  event-driven algorithmic trading library with focus on
+  backtesting and support for live trading.
+- [QTPyLib](https://github.com/ranaroussi/qtpylib) -
+  a versatile, event-driven algorithmic trading library.
 - [AlephNull](https://github.com/CarterBain/AlephNull) -
   extends the features of Zipline, for use within an institutional environment.
 - [ProfitPy](https://code.google.com/p/profitpy/) -
@@ -90,6 +83,9 @@ abandoned, and here for posterity reference only:
 - [QuantStart QSForex](https://github.com/mhallsmoore/qsforex) -
   an event-driven backtesting and live-trading platform for use in
   the foreign exchange markets,
+- [QuantStart QSTrader](https://github.com/mhallsmoore/qstrader/) -
+  a modular schedule-driven backtesting framework for long-short equities
+  and ETF-based systematic trading strategies.
 - [tia: Toolkit for integration and analysis](https://github.com/PaulMest/tia/) -
   a toolkit providing Bloomberg data access, PDF generation,
   technical analysis and backtesting functionality.
@@ -101,5 +97,16 @@ abandoned, and here for posterity reference only:
   a library to construct, backtest, analyze, and evaluate portfolios
   and their benchmarks, with comprehensive documentation illustrating
   all underlying methodologies and statistics.
+- [Quantdom](https://github.com/constverum/Quantdom) -
+  a Qt-based framework that lets you focus on modeling financial strategies,
+  portfolio management, and analyzing backtests.
+- [Clairvoyant](https://github.com/anfederico/Clairvoyant) -
+  software for identifying and monitoring social / historical cues
+  for short-term stock movement.
 - [Gemini](https://github.com/anfederico/Gemini) -
   a backtester namely focusing on cryptocurrency markets.
+- [AutoTrader](https://github.com/kieran-mackle/AutoTrader) -
+  an automated trading framework with an emphasis on cryptocurrency markets
+  that includes a [robust backtesting API](https://github.com/kieran-mackle/AutoTrader/blob/main/docs/source/tutorials/backtesting.md)
+- [LiuAlgoTrader](https://amor71.github.io/LiuAlgoTrader/) -
+  A scalable, multi-process ML-ready framework for effective algorithmic trading.

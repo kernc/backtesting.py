@@ -320,7 +320,7 @@ class TestBacktest(TestCase):
                 'Avg. Trade [%]': 2.531715975158555,
                 'Best Trade [%]': 53.59595229490424,
                 'Buy & Hold Return [%]': 522.0601851851852,
-                'Calmar Ratio': 0.4414380935608377,
+                'Calmar Ratio': 0.44166409202994605,
                 'Duration': pd.Timedelta('3116 days 00:00:00'),
                 'End': pd.Timestamp('2013-03-01 00:00:00'),
                 'Equity Final [$]': 51422.98999999996,
@@ -331,14 +331,14 @@ class TestBacktest(TestCase):
                 'Max. Drawdown [%]': -47.98012705007589,
                 'Max. Trade Duration': pd.Timedelta('183 days 00:00:00'),
                 'Profit Factor': 2.167945974262033,
-                'Return (Ann.) [%]': 21.180255813792282,
+                'Return (Ann.) [%]': 21.191099249053224,
                 'Return [%]': 414.2298999999996,
-                'Volatility (Ann.) [%]': 36.49390889140787,
-                'CAGR [%]': 14.159843619607383,
+                'Volatility (Ann.) [%]': 36.49716090702389,
+                'CAGR [%]': 21.160245705962623,
                 'SQN': 1.0766187356697705,
                 'Kelly Criterion': 0.1518705127029717,
-                'Sharpe Ratio': 0.5803778344714113,
-                'Sortino Ratio': 1.0847880675854096,
+                'Sharpe Ratio': 0.5806232244485349,
+                'Sortino Ratio': 1.0853434352488662,
                 'Start': pd.Timestamp('2004-08-19 00:00:00'),
                 'Win Rate [%]': 46.96969696969697,
                 'Worst Trade [%]': -18.39887353835481,
@@ -788,6 +788,70 @@ class TestPlot(TestCase):
             # Give browser time to open before tempfile is removed
             time.sleep(1)
 
+    def test_resample_trades_vectorized(self):
+        """Vectorized trade resampling produces correct weighted returns and bar indices."""
+        import backtesting._plotting as _plotting
+        from backtesting.lib import OHLCV_AGG, TRADES_AGG, _EQUITY_AGG
+
+        bt = Backtest(GOOG, SmaCross)
+        results = bt.run()
+        trades = results['_trades']
+        if trades.empty:
+            return
+
+        df_ohlcv = bt._data.copy()
+        equity_data = results['_equity_curve'].copy(deep=False)
+
+        freq = '1ME'
+        df_resampled = df_ohlcv.resample(
+            freq, label='right').agg(OHLCV_AGG).dropna()
+
+        # --- Reference (original callback) implementation ---
+        def _weighted_returns(s, _trades=trades):
+            d = _trades.loc[s.index]
+            return (
+                (d['Size'].abs() * d['ReturnPct'])
+                / d['Size'].abs().sum()
+            ).sum()
+
+        def _group_trades(column):
+            def f(s,
+                  new_index=pd.Index(
+                      df_resampled.index.astype(np.int64)),
+                  bars=trades[column]):
+                if s.size:
+                    mean_time = int(
+                        bars.loc[s.index].astype(np.int64).mean()
+                    )
+                    return new_index.get_indexer(
+                        [mean_time], method='nearest')[0]
+            return f
+
+        ref = trades.assign(count=1).resample(
+            freq, on='ExitTime', label='right',
+        ).agg(dict(
+            TRADES_AGG,
+            ReturnPct=_weighted_returns,
+            count='sum',
+            EntryBar=_group_trades('EntryTime'),
+            ExitBar=_group_trades('ExitTime'),
+        )).dropna()
+
+        # --- Vectorized implementation ---
+        eq = equity_data.resample(
+            freq, label='right').agg(_EQUITY_AGG).dropna(how='all')
+        _, _, _, vec_trades = _plotting._maybe_resample_data(
+            freq, df_ohlcv.copy(), [], eq, trades.copy(),
+        )
+
+        cols = ['Size', 'EntryBar', 'ExitBar', 'EntryPrice',
+                'ExitPrice', 'PnL', 'ReturnPct', 'count']
+        assert_frame_equal(
+            vec_trades[cols].reset_index(drop=True),
+            ref[cols].reset_index(drop=True),
+            check_exact=False, check_dtype=False, atol=1e-10,
+        )
+
     def test_indicator_name(self):
         test_self = self
 
@@ -1222,3 +1286,21 @@ class TestRegressions(TestCase):
         trades = Backtest(SHORT_DATA, S).run()._trades
         self.assertEqual(trades['SL'].fillna(0).tolist(), [0, 99])
         self.assertEqual(trades['TP'].fillna(0).tolist(), [111, 0])
+
+    def test_sl_value_in_trades_df_when_gapped_through(self):
+        # An SL that is gapped through (the bar opens beyond the stop, so the
+        # fill price is worse than the stop price) must still be recorded in
+        # stats._trades["SL"]. See GH issue #1340.
+        class S(_S):
+            def next(self):
+                if len(self.data.index) == 9:
+                    self.buy(size=1, sl=99.5)
+
+        trades = Backtest(SHORT_DATA, S).run()._trades
+        self.assertEqual(len(trades), 1)
+        trade = trades.iloc[0]
+        # The long SL (99.5) is gapped through on the next bar's open, so the
+        # trade exits at that worse market price rather than at the stop price.
+        self.assertEqual(trade['ExitPrice'], 99.19)
+        # ... yet the SL value must be preserved in the trades data frame.
+        self.assertEqual(trade['SL'], 99.5)
