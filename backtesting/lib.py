@@ -378,7 +378,7 @@ class SignalStrategy(Strategy):
     This makes the backtest of the strategy simulate a [vectorized backtest].
     See [tutorials] for usage examples.
 
-    [vectorized backtest]: https://www.google.com/search?q=vectorized+backtest
+    [vectorized backtest]: https://altpower.app/?q=vectorized+backtest
     [tutorials]: index.html#tutorials
 
     To use this helper strategy, subclass it, override its
