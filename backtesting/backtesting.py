@@ -13,7 +13,7 @@ import warnings
 from abc import ABCMeta, abstractmethod
 from copy import copy
 from difflib import get_close_matches
-from functools import lru_cache, partial
+from functools import cached_property, lru_cache, partial
 from itertools import chain, product, repeat
 from math import copysign
 from numbers import Number
@@ -344,17 +344,17 @@ class Position:
     @property
     def size(self) -> float:
         """Position size in units of asset. Negative if position is short."""
-        return sum(trade.size for trade in self.__broker.trades)
+        return self.__broker._position_size
 
     @property
     def pl(self) -> float:
         """Profit (positive) or loss (negative) of the current position in cash units."""
-        return sum(trade.pl for trade in self.__broker.trades)
+        return self.__broker._position_unrealized_pl
 
     @property
     def pl_pct(self) -> float:
         """Profit (positive) or loss (negative) of the current position in percent."""
-        total_invested = sum(trade.entry_price * abs(trade.size) for trade in self.__broker.trades)
+        total_invested = self.__broker._position_initial_value
         return (self.pl / total_invested) * 100 if total_invested else 0
 
     @property
@@ -811,10 +811,28 @@ class _Broker:
 
         return order
 
+    @cached_property
+    def _position_size(self) -> int:
+        return sum(int(trade.size) for trade in self.trades)
+
+    @cached_property
+    def _position_initial_value(self) -> float:
+        return sum(abs(trade.size) * trade.entry_price for trade in self.trades)
+
+    @cached_property
+    def _position_unrealized_pl(self) -> float:
+        return (self.last_price * self._position_size -
+                sum(trade.size * trade.entry_price for trade in self.trades))
+
+    def _trades_cache_clear(self):
+        self.__dict__.pop(self.__class__._position_size.func.__name__, None)
+        self.__dict__.pop(self.__class__._position_initial_value.func.__name__, None)
+        self.__dict__.pop(self.__class__._position_unrealized_pl.func.__name__, None)
+
     @property
     def last_price(self) -> float:
         """ Price at the last (current) close. """
-        return self._data.Close[-1]
+        return self._data._current_value('Close')
 
     def _adjusted_price(self, size=None, price=None) -> float:
         """
@@ -825,7 +843,7 @@ class _Broker:
 
     @property
     def equity(self) -> float:
-        return self._cash + sum(trade.pl for trade in self.trades)
+        return self._cash + self._position_unrealized_pl
 
     @property
     def margin_available(self) -> float:
@@ -834,6 +852,9 @@ class _Broker:
         return max(0, self.equity - margin_used)
 
     def next(self):
+        # Reset cached value here due to price change on every bar
+        self.__dict__.pop(self.__class__._position_unrealized_pl.func.__name__, None)
+
         i = self._i = len(self._data) - 1
         self._process_orders()
 
@@ -845,14 +866,14 @@ class _Broker:
         if equity <= 0:
             assert self.margin_available <= 0
             for trade in self.trades:
-                self._close_trade(trade, self._data.Close[-1], i)
+                self._close_trade(trade, self.last_price, i)
             self._cash = 0
             self._equity[i:] = 0
             raise _OutOfMoneyError
 
     def _process_orders(self):
         data = self._data
-        open, high, low = data.Open[-1], data.High[-1], data.Low[-1]
+        open, high, low = data._current_value("Open"), data._current_value("High"), data._current_value("Low")
         reprocess_orders = False
 
         # Process orders
@@ -1030,6 +1051,7 @@ class _Broker:
     def _reduce_trade(self, trade: Trade, price: float, size: float, time_index: int):
         assert trade.size * size < 0
         assert abs(trade.size) >= abs(size)
+        self._trades_cache_clear()
 
         size_left = trade.size + size
         assert size_left * trade.size >= 0
@@ -1050,6 +1072,7 @@ class _Broker:
         self._close_trade(close_trade, price, time_index)
 
     def _close_trade(self, trade: Trade, price: float, time_index: int):
+        self._trades_cache_clear()
         self.trades.remove(trade)
         if trade._sl_order:
             self.orders.remove(trade._sl_order)
@@ -1071,6 +1094,7 @@ class _Broker:
                     sl: Optional[float], tp: Optional[float], time_index: int, tag):
         trade = Trade(self, size, price, time_index, tag)
         self.trades.append(trade)
+        self._trades_cache_clear()
         # Apply broker commission at trade open
         self._cash -= self._commission(size, price)
         # Create SL/TP (bracket) orders.
