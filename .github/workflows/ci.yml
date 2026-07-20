@@ -5,7 +5,7 @@ on:
   schedule: [ cron: '2 2 1 * *' ]
 
 env:
-  TQDM_MININTERVAL: 10
+  TQDM_DISABLE: 1
   PYTHONWARNINGS: always::FutureWarning,always::DeprecationWarning
 jobs:
   lint:
