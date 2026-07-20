@@ -424,6 +424,23 @@ class TestBacktest(TestCase):
         with self.assertWarns(UserWarning):
             self.assertEqual(Backtest(GOOG, S).run()._trades.iloc[0].ExitPrice, 705.58)
 
+    def test_stop_order_gaps_with_trade_on_close(self):
+        class S(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(stop=105)
+
+        prices = [100, 100, 110, 111]
+        data = pd.DataFrame({
+            'Open': prices,
+            'High': [100, 100, 112, 112],
+            'Low': prices,
+            'Close': prices,
+        }, index=pd.date_range('2026-01-01', periods=4))
+        stats = Backtest(data, S, trade_on_close=True, finalize_trades=True).run()
+
+        self.assertEqual(stats._trades.iloc[0].EntryPrice, 110)
+
     def test_stop_price_between_sl_tp(self):
         class S(_S):
             def next(self):

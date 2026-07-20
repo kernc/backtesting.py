@@ -894,7 +894,9 @@ class _Broker:
                 # Market-if-touched / market order
                 # Contingent orders always on next open
                 prev_close = data.Close[-2]
-                price = prev_close if self._trade_on_close and not order.is_contingent else open
+                price = (prev_close
+                         if self._trade_on_close and not order.is_contingent and not stop_price
+                         else open)
                 if stop_price:
                     price = max(price, stop_price) if order.is_long else min(price, stop_price)
 
