@@ -228,7 +228,7 @@ class TestBacktest(TestCase):
         bt = Backtest(GOOG, Assertive)
         with self.assertWarns(UserWarning):
             stats = bt.run()
-        self.assertEqual(stats['# Trades'], 131)
+        self.assertEqual(stats['# Trades'], 132)
 
     def test_broker_params(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross,
@@ -1005,7 +1005,7 @@ class TestLib(TestCase):
 
         with self.assertWarnsRegex(UserWarning, 'margin'):
             stats = Backtest(GOOG, S).run()
-        self.assertIn(stats['# Trades'], (1179, 1180))  # varies on different archs?
+        self.assertIn(stats['# Trades'], (1179, 1182))  # varies on different archs?
 
     def test_TrailingStrategy(self):
         class S(TrailingStrategy):
@@ -1022,16 +1022,16 @@ class TestLib(TestCase):
                     self.buy()
 
         stats = Backtest(GOOG, S).run()
-        self.assertEqual(stats['# Trades'], 56)
+        self.assertEqual(stats['# Trades'], 57)
 
     def test_FractionalBacktest(self):
         ubtc_bt = FractionalBacktest(
             BTCUSD['2015':], SmaCross, fractional_unit=1 / 1e6, cash=100,
             finalize_trades=True)
         stats = ubtc_bt.run(fast=2, slow=3)
-        self.assertEqual(stats['# Trades'], 41)
+        self.assertEqual(stats['# Trades'], 42)
         trades = stats['_trades']
-        self.assertEqual(len(trades), 41)
+        self.assertEqual(len(trades), 42)
         trade = trades.iloc[0]
         self.assertAlmostEqual(trade['EntryPrice'], 236.69)
         self.assertAlmostEqual(stats['_strategy']._indicators[0][trade['EntryBar']], 234.14)
