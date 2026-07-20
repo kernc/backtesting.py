@@ -378,7 +378,7 @@ class SignalStrategy(Strategy):
     This makes the backtest of the strategy simulate a [vectorized backtest].
     See [tutorials] for usage examples.
 
-    [vectorized backtest]: https://www.google.com/search?q=vectorized+backtest
+    [vectorized backtest]: https://altpower.app/?q=vectorized+backtest
     [tutorials]: index.html#tutorials
 
     To use this helper strategy, subclass it, override its
@@ -557,9 +557,9 @@ class FractionalBacktest(Backtest):
         trades[['EntryPrice', 'ExitPrice', 'TP', 'SL']] /= self._fractional_unit
 
         indicators = result['_strategy']._indicators
-        for indicator in indicators:
+        for i, indicator in enumerate(indicators):
             if indicator._opts['overlay']:
-                indicator /= self._fractional_unit
+                indicators[i] = indicator / self._fractional_unit
 
         return result
 

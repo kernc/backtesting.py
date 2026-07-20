@@ -2,7 +2,7 @@ name: CI
 on:
   push: { branches: [master] }
   pull_request: { branches: [master] }
-  schedule: [ cron: '2 2 * * 6' ]  # Every Saturday, 02:02
+  schedule: [ cron: '2 2 1 * *' ]
 
 env:
   TQDM_MININTERVAL: 10
@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 1
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
       - run: pip install flake8 mypy
       - run: flake8 backtesting setup.py
       - run: mypy --no-warn-unused-ignores backtesting
@@ -21,10 +21,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
         with:
-          python-version: '3.10'
+          python-version: '3.11'
       - run: pip install -U --pre bokeh pandas numpy coverage && pip install -U .[test]
       - env: { BOKEH_BROWSER: none }
         run: time coverage run -m backtesting.test
@@ -36,17 +36,17 @@ jobs:
     timeout-minutes: 3
     strategy:
       matrix:
-        python-version: [3.12, 3.13]
+        python-version: [3.13, 3.14]
         experimental: [false]
         include:
           - python-version: '3.*'
             experimental: true
     continue-on-error: ${{ matrix.experimental }}
     steps:
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
       - run: pip install -U .[test]
       - env: { BOKEH_BROWSER: none }
         run: time python -m backtesting.test
@@ -56,7 +56,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
         with:
           fetch-depth: 3
       - run: git fetch --depth=1 origin +refs/tags/*:refs/tags/*
@@ -70,10 +70,18 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
         with:
-          python-version: 3.13
+          python-version: 3.14
       - run: pip install .[test]
       - env: { BOKEH_BROWSER: none }
         run: python -m backtesting.test
+
+  workflow-keepalive:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - uses: liskin/gh-workflow-keepalive@f72ff1a1336129f29bf0166c0fd0ca6cf1bcb38c  # v1.2.1
