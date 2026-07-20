@@ -6,6 +6,7 @@ on:
 
 env:
   TQDM_MININTERVAL: 10
+  PYTHONWARNINGS: always::FutureWarning,always::DeprecationWarning
 jobs:
   lint:
     runs-on: ubuntu-latest
