@@ -129,7 +129,7 @@ def compute_stats(
             1 if freq_days == 365 else
             (365 if have_weekends else 252))
         freq = {7: 'W', 31: 'ME', 365: 'YE'}.get(freq_days, 'D')
-        day_returns = equity_df['Equity'].resample(freq).last().dropna().pct_change()
+        day_returns = equity_df['Equity'].resample(freq).last().dropna().pct_change().dropna()
         gmean_day_return = geometric_mean(day_returns)
 
     # Annualized return and risk metrics are computed based on the (mostly correct)
@@ -142,7 +142,7 @@ def compute_stats(
     # d['Return (Ann.) [%]'] = gmean_day_return * annual_trading_days * 100
     # d['Risk (Ann.) [%]'] = day_returns.std(ddof=1) * np.sqrt(annual_trading_days) * 100
     if is_datetime_index:
-        time_in_years = (s['Duration'].days + s['Duration'].seconds / 86400) / annual_trading_days
+        time_in_years = (s['Duration'].days + s['Duration'].seconds / 86400) / 365.25
         s['CAGR [%]'] = ((s['Equity Final [$]'] / equity[0])**(1 / time_in_years) - 1) * 100 if time_in_years else np.nan  # noqa: E501
 
     # Our Sharpe mismatches `empyrical.sharpe_ratio()` because they use arithmetic mean return
