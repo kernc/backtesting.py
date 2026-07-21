@@ -7,6 +7,7 @@ on:
 env:
   TQDM_DISABLE: 1
   PYTHONWARNINGS: always::FutureWarning,always::DeprecationWarning
+  BOKEH_BROWSER: none
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -27,8 +28,7 @@ jobs:
         with:
           python-version: '3.11'
       - run: pip install -U --pre bokeh pandas numpy coverage && pip install -U .[test]
-      - env: { BOKEH_BROWSER: none }
-        run: time coverage run -m backtesting.test
+      - run: time coverage run -m backtesting.test
       - run: coverage combine && coverage report
 
   build:
@@ -37,7 +37,7 @@ jobs:
     timeout-minutes: 3
     strategy:
       matrix:
-        python-version: [3.13, 3.14]
+        python-version: [3.12]
         experimental: [false]
         include:
           - python-version: '3.*'
@@ -49,8 +49,20 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
       - run: pip install -U .[test]
-      - env: { BOKEH_BROWSER: none }
-        run: time python -m backtesting.test
+      - run: time python -m backtesting.test
+
+  deps_prereleases:
+    needs: lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    continue-on-error: true
+    steps:
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1  # v6
+        with:
+          python-version: 3.13
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5
+      - run: pip install --pre -U .[test]
+      - run: time python -m backtesting.test
 
   docs:
     needs: lint
@@ -76,8 +88,7 @@ jobs:
         with:
           python-version: 3.14
       - run: pip install .[test]
-      - env: { BOKEH_BROWSER: none }
-        run: python -m backtesting.test
+      - run: python -m backtesting.test
 
   workflow-keepalive:
     if: github.event_name == 'schedule'
