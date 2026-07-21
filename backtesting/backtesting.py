@@ -452,7 +452,8 @@ class Order:
         Order size (negative for short orders).
 
         If size is a value between 0 and 1, it is interpreted as a fraction of current
-        available liquidity (cash plus `Position.pl` minus used margin).
+        available liquidity (cash plus `Position.pl` minus used margin) to allocate
+        to the order (not the maximum account risk if the order's stop-loss is hit).
         A value greater than or equal to 1 indicates an absolute number of units.
         """
         return self.__size
