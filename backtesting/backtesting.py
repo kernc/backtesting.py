@@ -349,7 +349,7 @@ class Position:
     @property
     def pl(self) -> float:
         """Profit (positive) or loss (negative) of the current position in cash units."""
-        return sum(trade.pl for trade in self.__broker.trades)
+        return self.__broker._position_unrealized_pl
 
     @property
     def pl_pct(self) -> float:
@@ -656,7 +656,7 @@ class Trade:
     def pl(self):
         """
         Trade profit (positive) or loss (negative) in cash units.
-        Commissions already incurred are reflected.
+        Commissions are reflected only after the Trade is closed.
         """
         price = self.__exit_price or self.__broker.last_price
         return (self.__size * (price - self.__entry_price)) - self._commissions
@@ -821,8 +821,6 @@ class _Broker:
 
     @cached_property
     def _position_unrealized_pl(self) -> float:
-        # Entry commissions are already reflected in cash. Keep this value gross
-        # so equity does not count those commissions twice.
         return (self.last_price * self._position_size -
                 sum(trade.size * trade.entry_price for trade in self.trades))
 
@@ -838,10 +836,10 @@ class _Broker:
 
     def _adjusted_price(self, size=None, price=None) -> float:
         """
-        Long/short `price`, adjusted for half the bid-ask spread.
+        Long/short `price`, adjusted for spread.
         In long positions, the adjusted price is a fraction higher, and vice versa.
         """
-        return (price or self.last_price) * (1 + copysign(self._spread / 2, size))
+        return (price or self.last_price) * (1 + copysign(self._spread, size))
 
     @property
     def equity(self) -> float:
@@ -957,7 +955,8 @@ class _Broker:
 
             # Else this is a stand-alone trade
 
-            # Adjust the entry price for half the bid-ask spread.
+            # Adjust price to include commission (or bid-ask spread).
+            # In long positions, the adjusted price is a fraction higher, and vice versa.
             adjusted_price = self._adjusted_price(order.size, price)
             adjusted_price_plus_commission = \
                 adjusted_price + self._commission(order.size, price) / abs(order.size)
@@ -1057,26 +1056,20 @@ class _Broker:
         assert abs(trade.size) >= abs(size)
         self._trades_cache_clear()
 
-        original_size = trade.size
         size_left = trade.size + size
         assert size_left * trade.size >= 0
         if not size_left:
             close_trade = trade
         else:
-            # Allocate already-paid entry commission proportionally before
-            # reducing the active trade. This is especially important for
-            # fixed commissions, which must not be recreated per fragment.
-            close_trade = trade._copy(size=-size, sl_order=None, tp_order=None)
-            close_trade._commissions = \
-                trade._commissions * abs(size) / abs(original_size)
-            trade._commissions -= close_trade._commissions
-
             # Reduce existing trade ...
             trade._replace(size=size_left)
             if trade._sl_order:
                 trade._sl_order._replace(size=-trade.size)
             if trade._tp_order:
                 trade._tp_order._replace(size=-trade.size)
+
+            # ... by closing a reduced copy of it
+            close_trade = trade._copy(size=-size, sl_order=None, tp_order=None)
             self.trades.append(close_trade)
 
         self._close_trade(close_trade, price, time_index)
@@ -1089,15 +1082,18 @@ class _Broker:
         if trade._tp_order:
             self.orders.remove(trade._tp_order)
 
-        # Apply the remaining half of the bid-ask spread at exit.
+        # Crossing the spread affects both transactions: entry and exit.
         price = self._adjusted_price(-trade.size, price)
         closed_trade = trade._replace(exit_price=price, exit_bar=time_index)
         self.closed_trades.append(closed_trade)
-        # Entry commission was already debited and stored when the trade opened.
-        # Realize gross P/L here so it is not subtracted from cash twice.
+        # Apply commission one more time at trade exit
         commission = self._commission(trade.size, price)
-        self._cash += trade.size * (price - trade.entry_price) - commission
-        closed_trade._commissions += commission
+        self._cash += trade.pl - commission
+        # Save commissions on Trade instance for stats
+        trade_open_commission = self._commission(closed_trade.size, closed_trade.entry_price)
+        # applied here instead of on Trade open because size could have changed
+        # by way of _reduce_trade()
+        closed_trade._commissions = commission + trade_open_commission
 
     def _open_trade(self, price: float, size: int,
                     sl: Optional[float], tp: Optional[float], time_index: int, tag):
@@ -1105,9 +1101,7 @@ class _Broker:
         self.trades.append(trade)
         self._trades_cache_clear()
         # Apply broker commission at trade open
-        commission = self._commission(size, price)
-        self._cash -= commission
-        trade._commissions = commission
+        self._cash -= self._commission(size, price)
         # Create SL/TP (bracket) orders.
         if tp:
             trade.tp = tp
@@ -1144,7 +1138,7 @@ class Backtest:
     `cash` is the initial cash to start with.
 
     `spread` is the constant bid-ask spread rate (relative to the price).
-    Half the spread is applied at trade entry and the other half at trade exit.
+    The spread is applied when entering and exiting a trade.
     E.g. set it to `0.0002` for commission-less forex
     trading where the average spread is roughly 0.2‰ of the asking price.
 
@@ -1161,8 +1155,15 @@ class Backtest:
     Negative commission values are interpreted as market-maker's rebates.
 
     .. note::
-        Before v0.4.0, the commission was only applied once, like `spread` is now.
-        If you want to keep the old behavior, simply set `spread` instead.
+        Before v0.4.0, the commission was only applied once per trade.
+
+    .. note::
+        With nonzero `commission`, long and short orders will be placed
+        at an adjusted price that is slightly higher or lower (respectively)
+        than the current price. See e.g.
+        [#153](https://github.com/kernc/backtesting.py/issues/153),
+        [#538](https://github.com/kernc/backtesting.py/issues/538),
+        [#633](https://github.com/kernc/backtesting.py/issues/633).
 
     `margin` is the required margin (ratio) of a leveraged account.
     No difference is made between initial and maintenance margins.
