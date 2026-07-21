@@ -153,7 +153,7 @@ class Strategy(metaclass=ABCMeta):
         is_arraylike = bool(value is not None and value.shape)
 
         # Optionally flip the array if the user returned e.g. `df.values`
-        if is_arraylike and np.argmax(value.shape) == 0:
+        if is_arraylike and value.shape[0] == len(self._data):
             value = value.T
 
         if isinstance(name, list) and (np.atleast_2d(value).shape[0] != len(name)):
@@ -161,7 +161,7 @@ class Strategy(metaclass=ABCMeta):
                 f'Length of `name=` ({len(name)}) must agree with the number '
                 f'of arrays the indicator returns ({value.shape[0]}).')
 
-        if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data.Close):
+        if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data):
             raise ValueError(
                 'Indicators must return (optionally a tuple of) numpy.arrays of same '
                 f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}" '
