@@ -539,8 +539,8 @@ class FractionalBacktest(Backtest):
             self.__data[col] = self.__data[col] * self._fractional_unit
         for col in ('Volume',):
             self.__data[col] = self.__data[col] / self._fractional_unit
-        with warnings.catch_warnings(record=True):
-            warnings.filterwarnings(action='ignore', message='frac')
+        with warnings.catch_warnings():
+            warnings.filterwarnings(action='ignore', message='.*?fraction')
             super().__init__(data, *args, **kwargs)
 
     def run(self, **kwargs) -> pd.Series:
