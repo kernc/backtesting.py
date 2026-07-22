@@ -231,6 +231,19 @@ class TestBacktest(TestCase):
                       cash=1000, spread=.01, margin=.1, trade_on_close=True)
         bt.run()
 
+    def test_absolute_size_order_warns_on_insufficient_margin(self):
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                self.buy(size=10_000)
+
+        bt = Backtest(GOOG.iloc[:3], S, cash=1000)
+        with self.assertWarnsRegex(UserWarning, 'insufficient margin'):
+            stats = bt.run()
+        self.assertEqual(stats['# Trades'], 0)
+
     def test_spread_commission(self):
         class S(Strategy):
             def init(self):
