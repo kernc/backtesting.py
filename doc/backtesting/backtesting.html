@@ -88,7 +88,7 @@ or a monotonic range index (i.e. a sequence of periods).</p>
 <p><code>strategy</code> is a <code><a title="backtesting.backtesting.Strategy" href="#backtesting.backtesting.Strategy">Strategy</a></code>
 <em>subclass</em> (not an instance).</p>
 <p><code>cash</code> is the initial cash to start with.</p>
-<p><code>spread</code> is the the constant bid-ask spread rate (relative to the price).
+<p><code>spread</code> is the constant bid-ask spread rate (relative to the price).
 E.g. set it to <code>0.0002</code> for commission-less forex
 trading where the average spread is roughly 0.2‰ of the asking price.</p>
 <p><code>commission</code> is the commission rate. E.g. if your broker's commission
@@ -118,7 +118,7 @@ than the current price. See e.g.
 </div>
 <p><code>margin</code> is the required margin (ratio) of a leveraged account.
 No difference is made between initial and maintenance margins.
-To run the backtest using e.g. 50:1 leverge that your broker allows,
+To run the backtest using e.g. 50:1 leverage that your broker allows,
 set margin to <code>0.02</code> (1 / leverage).</p>
 <p>If <code>trade_on_close</code> is <code>True</code>, market orders will be filled
 with respect to the current bar's closing price instead of the
@@ -153,7 +153,7 @@ Returns result <code>pd.Series</code> of the best run.</p>
 <code><a title="backtesting.backtesting.Backtest.run" href="#backtesting.backtesting.Backtest.run">Backtest.run()</a></code>-returned results series,
 or a function that accepts this series object and returns a number;
 the higher the better. By default, the method maximizes
-Van Tharp's <a href="https://google.com/search?q=System+Quality+Number">System Quality Number</a>.</p>
+Van Tharp's <a href="https://altpower.app/?q=System+Quality+Number">System Quality Number</a>.</p>
 <p><code>method</code> is the optimization method. Currently two methods are supported:</p>
 <ul>
 <li><code>"grid"</code> which does an exhaustive (or randomized) search over the
@@ -315,12 +315,12 @@ Query existing orders through <code><a title="backtesting.backtesting.Strategy.o
 <p>When an order is executed or <a href="https://www.investopedia.com/terms/f/fill.asp">filled</a>, it results in a <code><a title="backtesting.backtesting.Trade" href="#backtesting.backtesting.Trade">Trade</a></code>.</p>
 <p>If you wish to modify aspects of a placed but not yet filled order,
 cancel it and place a new one instead.</p>
-<p>All placed orders are <a href="https://www.investopedia.com/terms/g/gtc.asp">Good 'Til Canceled</a>.</p></div>
+<p>All placed orders are <a href="https://en.wikipedia.org/wiki/Order_(exchange)#Time_in_force">Good 'Til Canceled</a>.</p></div>
 <h3>Instance variables</h3>
 <dl>
 <dt id="backtesting.backtesting.Order.is_contingent"><code class="name">prop <span class="ident">is_contingent</span></code></dt>
 <dd>
-<div class="desc"><p>True for <a href="https://www.investopedia.com/terms/c/contingentorder.asp">contingent</a> orders, i.e. <a href="https://www.investopedia.com/terms/o/oco.asp">OCO</a> stop-loss and take-profit bracket orders
+<div class="desc"><p>True for <a href="https://www.investopedia.com/terms/c/contingentorder.asp">contingent</a> orders, i.e. <a href="https://en.wikipedia.org/wiki/Order_(exchange)#One_cancels_other_orders">OCO</a> stop-loss and take-profit bracket orders
 placed upon an active trade. Remaining contingent orders are canceled when
 their parent <code><a title="backtesting.backtesting.Trade" href="#backtesting.backtesting.Trade">Trade</a></code> is closed.</p>
 <p>You can modify contingent orders through <code><a title="backtesting.backtesting.Trade.sl" href="#backtesting.backtesting.Trade.sl">Trade.sl</a></code> and <code><a title="backtesting.backtesting.Trade.tp" href="#backtesting.backtesting.Trade.tp">Trade.tp</a></code>.</p></div>
@@ -335,14 +335,15 @@ their parent <code><a title="backtesting.backtesting.Trade" href="#backtesting.b
 </dd>
 <dt id="backtesting.backtesting.Order.limit"><code class="name">prop <span class="ident">limit</span></code></dt>
 <dd>
-<div class="desc"><p>Order limit price for <a href="https://www.investopedia.com/terms/l/limitorder.asp">limit orders</a>, or None for <a href="https://www.investopedia.com/terms/m/marketorder.asp">market orders</a>,
+<div class="desc"><p>Order limit price for <a href="https://en.wikipedia.org/wiki/Order_(exchange)#Limit_order">limit orders</a>, or None for <a href="https://en.wikipedia.org/wiki/Order_(exchange)#Market_order">market orders</a>,
 which are filled at next available price.</p></div>
 </dd>
 <dt id="backtesting.backtesting.Order.size"><code class="name">prop <span class="ident">size</span></code></dt>
 <dd>
 <div class="desc"><p>Order size (negative for short orders).</p>
 <p>If size is a value between 0 and 1, it is interpreted as a fraction of current
-available liquidity (cash plus <code><a title="backtesting.backtesting.Position.pl" href="#backtesting.backtesting.Position.pl">Position.pl</a></code> minus used margin).
+available liquidity (cash plus <code><a title="backtesting.backtesting.Position.pl" href="#backtesting.backtesting.Position.pl">Position.pl</a></code> minus used margin) to allocate
+to the order (not the maximum account risk if the order's stop-loss is hit).
 A value greater than or equal to 1 indicates an absolute number of units.</p></div>
 </dd>
 <dt id="backtesting.backtesting.Order.sl"><code class="name">prop <span class="ident">sl</span></code></dt>
@@ -353,7 +354,7 @@ See also <code><a title="backtesting.backtesting.Trade.sl" href="#backtesting.ba
 </dd>
 <dt id="backtesting.backtesting.Order.stop"><code class="name">prop <span class="ident">stop</span></code></dt>
 <dd>
-<div class="desc"><p>Order stop price for <a href="https://www.investopedia.com/terms/s/stoporder.asp">stop-limit/stop-market</a> order,
+<div class="desc"><p>Order stop price for <a href="https://en.wikipedia.org/wiki/Order_(exchange)#Stop_orders">stop-limit/stop-market</a> order,
 otherwise None if no stop was set, or the stop price has already been hit.</p></div>
 </dd>
 <dt id="backtesting.backtesting.Order.tag"><code class="name">prop <span class="ident">tag</span></code></dt>
@@ -646,7 +647,7 @@ Commissions are reflected only after the Trade is closed.</p></div>
 </dd>
 <dt id="backtesting.backtesting.Trade.pl_pct"><code class="name">prop <span class="ident">pl_pct</span></code></dt>
 <dd>
-<div class="desc"><p>Trade profit (positive) or loss (negative) in percent.</p></div>
+<div class="desc"><p>Trade profit (positive) or loss (negative) in percent relative to trade entry price.</p></div>
 </dd>
 <dt id="backtesting.backtesting.Trade.size"><code class="name">prop <span class="ident">size</span></code></dt>
 <dd>
@@ -791,7 +792,7 @@ data-gaCategoryParameter="backtesting.backtesting">
 </main>
 <footer id="footer">
 <p>
-<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.6.5</a>
+<a href="https://kernc.github.io/backtesting.py/"><cite>backtesting</cite> 0.6.6</a>
 <span style="color:#ddd">&#21328;</span>
 </p>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
