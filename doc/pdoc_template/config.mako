@@ -6,11 +6,7 @@
     sort_identifiers = True
     show_type_annotations = False
     show_source_code = False
-    google_search_query = '''
-        inurl:kernc.github.io/backtesting.py
-        inurl:github.com/kernc/backtesting.py
-    '''
-
+    lunr_search = {'fuzziness': 1, 'index_docstrings': True}
 
     from pdoc.html_helpers import glimpse as _glimpse
 
