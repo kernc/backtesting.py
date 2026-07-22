@@ -470,7 +470,7 @@ class TrailingStrategy(Strategy):
         """
         hi, lo, c_prev = self.data.High, self.data.Low, pd.Series(self.data.Close).shift(1)
         tr = np.max([hi - lo, (c_prev - hi).abs(), (c_prev - lo).abs()], axis=0)
-        atr = pd.Series(tr).rolling(periods).mean().bfill().values
+        atr = pd.Series(tr).rolling(periods).mean().values
         self.__atr = atr
 
     def set_trailing_sl(self, n_atr: float = 6):
@@ -490,20 +490,25 @@ class TrailingStrategy(Strategy):
             with `mean(Close * pct / atr)` and set with `set_trailing_sl`.
         """
         assert 0 < pct < 1, 'Need pct= as rate, i.e. 5% == 0.05'
-        pct_in_atr = np.mean(self.data.Close * pct / self.__atr)  # type: ignore
+        ratios = self.data.Close * pct / self.__atr  # type: ignore
+        ratios = ratios[np.isfinite(ratios)]
+        pct_in_atr = np.mean(ratios) if len(ratios) else np.nan
         self.set_trailing_sl(pct_in_atr)
 
     def next(self):
         super().next()
         # Can't use index=-1 because self.__atr is not an Indicator type
         index = len(self.data) - 1
+        atr = self.__atr[index]
+        if not np.isfinite(atr):
+            return
         for trade in self.trades:
             if trade.is_long:
                 trade.sl = max(trade.sl or -np.inf,
-                               self.data.Close[index] - self.__atr[index] * self.__n_atr)
+                               self.data.Close[index] - atr * self.__n_atr)
             else:
                 trade.sl = min(trade.sl or np.inf,
-                               self.data.Close[index] + self.__atr[index] * self.__n_atr)
+                               self.data.Close[index] + atr * self.__n_atr)
 
 
 class FractionalBacktest(Backtest):

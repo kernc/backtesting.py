@@ -1037,6 +1037,34 @@ class TestLib(TestCase):
         stats = Backtest(GOOG, S).run()
         self.assertEqual(stats['# Trades'], 57)
 
+    def test_TrailingStrategy_does_not_backfill_atr(self):
+        class S(TrailingStrategy):
+            sl_by_bar = {}
+
+            def init(self):
+                super().init()
+                self.set_atr_periods(3)
+                self.set_trailing_sl(1)
+
+            def next(self):
+                super().next()
+                if not self.position:
+                    self.buy()
+                if self.trades:
+                    S.sl_by_bar[len(self.data) - 1] = self.trades[0].sl
+
+        data = pd.DataFrame({
+            'Open': [10] * 8,
+            'High': [12] * 8,
+            'Low': [8] * 8,
+            'Close': [10] * 8,
+        }, index=pd.date_range('2020', periods=8))
+
+        Backtest(data, S, cash=10_000, trade_on_close=True).run()
+
+        self.assertIsNone(S.sl_by_bar[2])
+        self.assertEqual(S.sl_by_bar[3], 6)
+
     def test_FractionalBacktest(self):
         ubtc_bt = FractionalBacktest(
             BTCUSD['2015':], SmaCross, fractional_unit=1 / 1e6, cash=100,
