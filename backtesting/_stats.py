@@ -196,9 +196,11 @@ class _Stats(pd.Series):
             'display.max_colwidth', 20,  # Prevent expansion due to _equity and _trades dfs
             'display.max_rows', len(self),  # Reveal self whole
             'display.precision', 5,  # Enough for my eyes at least
-            # 'format.na_rep', '--',  # TODO: Enable once it works
         ):
-            return super().__repr__()
+            # XXX: .fillna(nan) to replace None which aren't na_rep'd otherwise (pandas 3.0).
+            #   Replace with proper na_rep option when that becomes available.
+            #   https://github.com/pandas-dev/pandas/issues/66407
+            return super().fillna(np.nan).to_string(na_rep='--', dtype=True)
 
 
 def dummy_stats():
