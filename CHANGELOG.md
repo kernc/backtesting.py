@@ -5,11 +5,31 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
+### 0.6.6
+(2026-07-22)
+
+* Bug fixes:
+  * Fix read-only array error in `FractionalBacktest` with Pandas 3.0
+  * Fix CAGR and annualized return calculations (#1346)
+  * Preserve stop-loss value in `stats._trades` when SL is gapped through (#1369)
+  * Fix inactive filterwarnings filter in `FractionalBacktest`
+  * Fix "Indicators must return ... same length as data" ValueError in some edge cases
+  * Fix `MultiBacktest` error with some runs making no trades (#1366)
+* Perfomance improvements:
+  * Keep multiprocessing start method "fork" on GNU/Linux
+  * Vectorize trade resampling in plot() for ~9x speedup (#1350)
+    (Note, one always needs to account for [Amdahl's law](https://en.wikipedia.org/wiki/Amdahl%27s_law).)
+  * Speed Enhancements by influencer [Chad Thackray](https://www.youtube.com/c/ChadThackray) 🤘 (#1330)
+* Minor enhancement:
+  * Format NaN fields as "--" in `stats` series
+* Various other small fixes and documentation improvements.
+
+
 ### 0.6.5
 (2025-07-30)
 
 * Include 'Commission' column in `stats._trades` DataFrame (#1277), thanks to Abhirath Mahipal.
-* Bugfixes:
+* Bug fixes:
   * Fix computing commissions when specified with relative amount.
   * Fix sometimes cleared SL value in `stats._trades` data frame
   * Ensure order size is integer to avoid weird rounding errors.
