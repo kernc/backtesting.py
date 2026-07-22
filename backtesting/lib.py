@@ -608,7 +608,7 @@ class MultiBacktest:
         data_shm, strategy, bt_kwargs, run_kwargs = args
         dfs, shms = zip(*(SharedMemoryManager.shm2df(i) for i in data_shm))
         try:
-            return [stats.filter(regex='^[^_]') if stats['# Trades'] else None
+            return [stats.filter(regex='^[^_]')
                     for stats in (Backtest(df, strategy, **bt_kwargs).run(**run_kwargs)
                                   for df in dfs)]
         finally:

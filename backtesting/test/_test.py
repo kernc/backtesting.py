@@ -1067,6 +1067,25 @@ class TestLib(TestCase):
                 print(start_method, time.monotonic() - start_time)
         plot_heatmaps(heatmap.mean(axis=1), open_browser=False)
 
+    class SometimesNoTrade(Strategy):
+        def init(self):
+            self._will_trade = len(self.data) == 20
+
+        def next(self):
+            if not self._will_trade:
+                return
+            if self.position:
+                self.position.close()
+            elif not self.closed_trades:
+                self.buy()
+
+    def test_MultiBacktest_handles_mixed_no_trade_results(self):
+        btm = MultiBacktest([GOOG.iloc[:20], GOOG.iloc[:21], GOOG.iloc[:22]],
+                            self.SometimesNoTrade, cash=100_000)
+        res = btm.run()
+        self.assertEqual(res.loc['# Trades'].tolist(), [1, 0, 0])
+        self.assertNotIsInstance(res.iloc[0, 0], pd.Series)
+
 
 class TestUtil(TestCase):
     def test_as_str(self):
