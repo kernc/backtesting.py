@@ -46,6 +46,10 @@ as proposed by the wider community:
   high-performance, production-grade algorithmic trading platform written in Rust/Python,
   with event-driven engine to backtest portfolios of automated trading strategies,
   and also deploy those same strategies live, with no code changes.
+- [Manifold-BT](https://github.com/manifoldbt/manifoldbt) -
+  a Rust-powered engine with a fluent Python DSL; strategies compile to a
+  vectorized expression graph, then a sequential pass simulates fills, fees,
+  slippage and funding, with Monte Carlo, walk-forward and parameter sweeps.
 
 
 #### Obsolete / Unmaintained / Hall of Fame
