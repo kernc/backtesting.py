@@ -473,9 +473,27 @@ class TestBacktest(TestCase):
                 elif len(self.data) == len(SHORT_DATA):
                     self.position.close()
 
-        with self.assertWarnsRegex(UserWarning, 'finalize_trades'):
-            self.assertTrue(Backtest(SHORT_DATA, S, finalize_trades=False).run()._trades.empty)
+        self.assertFalse(Backtest(SHORT_DATA, S, finalize_trades=False).run()._trades.empty)
         self.assertFalse(Backtest(SHORT_DATA, S, finalize_trades=True).run()._trades.empty)
+
+    def test_open_orders_from_last_strategy_iteration(self):
+        class S(_S):
+            def init(self):
+                self.price = self.I(lambda values: values, self.data.Close, name='Price')
+
+            def next(self):
+                if len(self.data) == len(SHORT_DATA):
+                    self.buy()
+
+        with self.assertWarnsRegex(UserWarning, 'finalize_trades'):
+            stats = Backtest(SHORT_DATA, S, finalize_trades=False).run()
+
+        trade = stats._trades.iloc[0]
+        self.assertEqual(trade.EntryBar, len(SHORT_DATA) - 1)
+        self.assertTrue(np.isnan(trade.ExitBar))
+        self.assertTrue(np.isnan(trade.ExitPrice))
+        self.assertTrue(np.isnan(trade.Exit_Price))
+        self.assertTrue(pd.isna(trade.ExitTime))
 
     def test_check_adjusted_price_when_placing_order(self):
         class S(_S):
@@ -1018,7 +1036,7 @@ class TestLib(TestCase):
 
         with self.assertWarnsRegex(UserWarning, 'margin'):
             stats = Backtest(GOOG, S).run()
-        self.assertIn(stats['# Trades'], (1179, 1182))  # varies on different archs?
+        self.assertIn(stats['# Trades'], (1180, 1183))  # varies on different archs?
 
     def test_TrailingStrategy(self):
         class S(TrailingStrategy):

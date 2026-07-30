@@ -61,9 +61,9 @@ def compute_stats(
         trades_df = pd.DataFrame({
             'Size': [t.size for t in trades],
             'EntryBar': [t.entry_bar for t in trades],
-            'ExitBar': [t.exit_bar for t in trades],
+            'ExitBar': [t.exit_bar if t.exit_bar is not None else np.nan for t in trades],
             'EntryPrice': [t.entry_price for t in trades],
-            'ExitPrice': [t.exit_price for t in trades],
+            'ExitPrice': [t.exit_price if t.exit_price is not None else np.nan for t in trades],
             'SL': [t.sl for t in trades],
             'TP': [t.tp for t in trades],
             'PnL': [t.pl for t in trades],
@@ -72,7 +72,10 @@ def compute_stats(
             'EntryTime': [t.entry_time for t in trades],
             'ExitTime': [t.exit_time for t in trades],
         })
-        trades_df['Duration'] = trades_df['ExitTime'] - trades_df['EntryTime']
+        trades_df['Duration'] = [
+            exit_time - entry_time if pd.notna(exit_time) else pd.NaT
+            for entry_time, exit_time in zip(trades_df['EntryTime'], trades_df['ExitTime'])
+        ]
         trades_df['Tag'] = [t.tag for t in trades]
 
         # Add indicator values
@@ -82,7 +85,10 @@ def compute_stats(
                 for i, values in enumerate(ind):  # multi-d indicators
                     suffix = f'_{i}' if len(ind) > 1 else ''
                     trades_df[f'Entry_{ind.name}{suffix}'] = values[trades_df['EntryBar'].values]
-                    trades_df[f'Exit_{ind.name}{suffix}'] = values[trades_df['ExitBar'].values]
+                    trades_df[f'Exit_{ind.name}{suffix}'] = [
+                        values[int(exit_bar)] if pd.notna(exit_bar) else np.nan
+                        for exit_bar in trades_df['ExitBar']
+                    ]
 
         commissions = sum(t._commissions for t in trades)
     del trades
@@ -104,7 +110,8 @@ def compute_stats(
 
     have_position = np.repeat(0, len(index))
     for t in trades_df[['EntryBar', 'ExitBar']].itertuples(index=False):
-        have_position[t.EntryBar:t.ExitBar + 1] = 1
+        exit_bar = len(index) - 1 if pd.isna(t.ExitBar) else int(t.ExitBar)
+        have_position[t.EntryBar:exit_bar + 1] = 1
 
     s['Exposure Time [%]'] = have_position.mean() * 100  # In "n bars" time, not index time
     s['Equity Final [$]'] = equity[-1]
