@@ -387,7 +387,7 @@ class TestBacktest(TestCase):
             sorted(stats['_trades'].columns),
             sorted(['Size', 'EntryBar', 'ExitBar', 'EntryPrice', 'ExitPrice',
                     'SL', 'TP', 'PnL', 'ReturnPct', 'EntryTime', 'ExitTime',
-                    'Duration', 'Tag', 'Commission',
+                    'Duration', 'Tag', 'ExitTag', 'Commission',
                     *indicator_columns]))
 
     def test_compute_stats_bordercase(self):
@@ -590,6 +590,37 @@ class TestStrategy(TestCase):
 
         stats = self._Backtest(coroutine).run()
         self.assertEqual(list(stats._trades.Tag), [1, 1, 2])
+
+    def test_trade_exit_tag(self):
+        def coroutine(self):
+            yield self.buy(size=2, tag='in')
+            yield self.position.close(tag='out')
+
+            yield self.buy(size=1, tag='in2')
+            yield self.trades[-1].close()  # No tag; inherits the trade's own
+
+        stats = self._Backtest(coroutine).run()
+        self.assertEqual(list(stats._trades.Tag), ['in', 'in2'])
+        self.assertEqual(list(stats._trades.ExitTag), ['out', 'in2'])
+
+    def test_trade_exit_tag_partial_close(self):
+        def coroutine(self):
+            yield self.buy(size=4, tag='in')
+            yield self.trades[-1].close(.5, tag='half')
+            yield self.trades[-1].close(tag='rest')
+
+        stats = self._Backtest(coroutine).run()
+        self.assertEqual(list(stats._trades.Size), [2, 2])
+        self.assertEqual(list(stats._trades.ExitTag), ['half', 'rest'])
+
+    def test_trade_exit_tag_opposite_order(self):
+        def coroutine(self):
+            yield self.buy(size=2, tag='long')
+            yield self.sell(size=2, tag='flip')
+
+        stats = self._Backtest(coroutine).run()
+        self.assertEqual(list(stats._trades.Tag), ['long'])
+        self.assertEqual(list(stats._trades.ExitTag), ['flip'])
 
 
 class TestOptimize(TestCase):
