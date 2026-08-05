@@ -1083,6 +1083,8 @@ class _Broker:
         if trade._tp_order:
             self.orders.remove(trade._tp_order)
 
+        # Crossing the spread affects both transactions: entry and exit.
+        price = self._adjusted_price(-trade.size, price)
         closed_trade = trade._replace(exit_price=price, exit_bar=time_index)
         self.closed_trades.append(closed_trade)
         # Apply commission one more time at trade exit
@@ -1137,6 +1139,7 @@ class Backtest:
     `cash` is the initial cash to start with.
 
     `spread` is the constant bid-ask spread rate (relative to the price).
+    The spread is applied when entering and exiting a trade.
     E.g. set it to `0.0002` for commission-less forex
     trading where the average spread is roughly 0.2‰ of the asking price.
 
@@ -1153,8 +1156,7 @@ class Backtest:
     Negative commission values are interpreted as market-maker's rebates.
 
     .. note::
-        Before v0.4.0, the commission was only applied once, like `spread` is now.
-        If you want to keep the old behavior, simply set `spread` instead.
+        Before v0.4.0, the commission was only applied once per trade.
 
     .. note::
         With nonzero `commission`, long and short orders will be placed
