@@ -1184,6 +1184,8 @@ class Backtest:
     If `finalize_trades` is `True`, the trades that are still
     [active and ongoing] at the end of the backtest will be closed on
     the last bar and will contribute to the computed backtest statistics.
+    Otherwise, they remain open and are included in the trade history with
+    missing exit values.
 
     .. tip:: Fractional trading
         See also `backtesting.lib.FractionalBacktest` if you want to trade
@@ -1353,20 +1355,23 @@ class Backtest:
                 # Next tick, a moment before bar close
                 strategy.next()
             else:
+                # HACK: Re-run broker one last time to handle orders placed in the last
+                # strategy iteration. Use the same OHLC values as in the last broker iteration.
+                if start < len(self._data):
+                    try_(broker.next, exception=_OutOfMoneyError)
+
                 if self._finalize_trades is True:
                     # Close any remaining open trades so they produce some stats
                     for trade in reversed(broker.trades):
                         trade.close()
 
-                    # HACK: Re-run broker one last time to handle close orders placed in the last
-                    #  strategy iteration. Use the same OHLC values as in the last broker iteration.
                     if start < len(self._data):
                         try_(broker.next, exception=_OutOfMoneyError)
                 elif len(broker.trades):
                     warnings.warn(
                         'Some trades remain open at the end of backtest. Use '
-                        '`Backtest(..., finalize_trades=True)` to close them and '
-                        'include them in stats.', stacklevel=2)
+                        '`Backtest(..., finalize_trades=True)` to close them.',
+                        stacklevel=2)
 
             # Set data back to full length
             # for future `indicator._opts['data'].index` calls to work
@@ -1374,7 +1379,7 @@ class Backtest:
 
             equity = pd.Series(broker._equity).bfill().fillna(broker._cash).values
             self._results = compute_stats(
-                trades=broker.closed_trades,
+                trades=[*broker.closed_trades, *broker.trades],
                 equity=equity,
                 ohlc_data=self._data,
                 risk_free_rate=0.0,
