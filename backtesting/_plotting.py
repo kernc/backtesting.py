@@ -438,7 +438,15 @@ return this.labels[index] || "";
         fig = new_indicator_figure(y_axis_label="Profit / Loss", height=80)
         fig.add_layout(Span(location=0, dimension='width', line_color='#666666',
                             line_dash='dashed', level='underlay', line_width=1))
-        trade_source.add(trades['ReturnPct'], 'returns')
+        if relative_equity:
+            pl = trades['ReturnPct']
+            pl_tooltip = '@returns{+0.[000]%}'
+            pl_format = '0.[00]%'
+        else:
+            pl = trades['PnL']
+            pl_tooltip = '@returns{$ 0,0}'
+            pl_format = '$ 0.0 a'
+        trade_source.add(pl, 'returns')
         size = trades['Size'].abs()
         size = np.interp(size, (size.min(), size.max()), (8, 20))
         trade_source.add(size, 'marker_size')
@@ -455,9 +463,9 @@ return this.labels[index] || "";
         tooltips = [("Size", "@size{0,0}")]
         if 'count' in trades:
             tooltips.append(("Count", "@count{0,0}"))
-        set_tooltips(fig, tooltips + [("P/L", "@returns{+0.[000]%}")],
+        set_tooltips(fig, tooltips + [("P/L", pl_tooltip)],
                      vline=False, renderers=[r1])
-        fig.yaxis.formatter = NumeralTickFormatter(format="0.[00]%")
+        fig.yaxis.formatter = NumeralTickFormatter(format=pl_format)
         return fig
 
     def _plot_volume_section():
