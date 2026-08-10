@@ -439,7 +439,7 @@ class TestBacktest(TestCase):
                     self.buy(stop=758, sl=720)
 
         with self.assertWarns(UserWarning):
-            self.assertEqual(Backtest(GOOG, S).run()._trades.iloc[0].ExitPrice, 705.58)
+            self.assertEqual(Backtest(GOOG, S).run()._trades.iloc[0].ExitPrice, 720)
 
     def test_stop_price_between_sl_tp(self):
         class S(_S):
@@ -518,6 +518,31 @@ class TestStrategy(TestCase):
             assert not self.position.pl_pct
 
         self._Backtest(coroutine).run()
+
+    def test_pl_pct_with_zero_entry_price(self):
+        data = pd.DataFrame({
+            'Open': [1, 1, 0, 1],
+            'High': [1, 1, 1, 1],
+            'Low': [0, 0, 0, 0],
+            'Close': [1, 1, 0, 1],
+        })
+
+        class S(Strategy):
+            trade_pl_pct = position_pl_pct = None
+
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(size=1)
+                elif len(self.data) == 3:
+                    type(self).trade_pl_pct = self.trades[0].pl_pct
+                    type(self).position_pl_pct = self.position.pl_pct
+
+        Backtest(data, S).run()
+        self.assertEqual(S.trade_pl_pct, 0)
+        self.assertEqual(S.position_pl_pct, 0)
 
     def test_broker_hedging(self):
         def coroutine(self):
