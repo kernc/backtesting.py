@@ -355,7 +355,9 @@ class Position:
     def pl_pct(self) -> float:
         """Profit (positive) or loss (negative) of the current position in percent."""
         total_invested = self.__broker._position_initial_value
-        return (self.pl / total_invested) * 100 if total_invested else 0
+        if not np.isfinite(total_invested) or total_invested == 0:
+            return 0
+        return (self.pl / total_invested) * 100
 
     @property
     def is_long(self) -> bool:
@@ -666,10 +668,13 @@ class Trade:
     def pl_pct(self):
         """Trade profit (positive) or loss (negative) in percent relative to trade entry price."""
         price = self.__exit_price or self.__broker.last_price
+        total_invested = abs(self.__size) * self.__entry_price
+        if not np.isfinite(total_invested) or total_invested == 0:
+            return 0
         gross_pl_pct = copysign(1, self.__size) * (price / self.__entry_price - 1)
 
         # Total commission across the entire trade size to individual units
-        commission_pct = self._commissions / (abs(self.__size) * self.__entry_price)
+        commission_pct = self._commissions / total_invested
         return gross_pl_pct - commission_pct
 
     @property
@@ -1040,11 +1045,11 @@ class _Broker:
                             f"({data.index[-1]}) A contingent SL/TP order would execute in the "
                             "same bar its parent stop/limit order was turned into a trade. "
                             "Since we can't assert the precise intra-candle "
-                            "price movement, the affected SL/TP order will instead be executed on "
-                            "the next (matching) price/bar, making the result (of this trade) "
-                            "somewhat dubious. "
+                            "price movement, the affected SL/TP order will be executed "
+                            "pessimistically within the same bar. "
                             "See https://github.com/kernc/backtesting.py/issues/119",
                             UserWarning)
+                        reprocess_orders = True
 
             # Order processed
             self.orders.remove(order)
