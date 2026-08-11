@@ -34,6 +34,25 @@ def geometric_mean(returns: pd.Series) -> float:
     return np.exp(np.log(returns).sum() / (len(returns) or np.nan)) - 1
 
 
+def periodic_returns(equity: pd.Series) -> tuple[pd.Series, int]:
+    """
+    Resample `equity` (datetime-indexed) to mostly-daily periods and
+    return the periodic returns along with the annualization factor.
+    """
+    index = equity.index
+    assert isinstance(index, pd.DatetimeIndex)
+    freq_days = cast(pd.Timedelta, _data_period(index)).days
+    have_weekends = index.dayofweek.to_series().between(5, 6).mean() > 2 / 7 * .6
+    annual_trading_days = (
+        52 if freq_days == 7 else
+        12 if freq_days == 31 else
+        1 if freq_days == 365 else
+        (365 if have_weekends else 252))
+    freq = {7: 'W', 31: 'ME', 365: 'YE'}.get(freq_days, 'D')
+    day_returns = equity.resample(freq).last().dropna().pct_change().dropna()
+    return day_returns, annual_trading_days
+
+
 def compute_stats(
         trades: Union[List['Trade'], pd.DataFrame],
         equity: np.ndarray,
@@ -121,15 +140,7 @@ def compute_stats(
     annual_trading_days = np.nan
     is_datetime_index = isinstance(index, pd.DatetimeIndex)
     if is_datetime_index:
-        freq_days = cast(pd.Timedelta, _data_period(index)).days
-        have_weekends = index.dayofweek.to_series().between(5, 6).mean() > 2 / 7 * .6
-        annual_trading_days = (
-            52 if freq_days == 7 else
-            12 if freq_days == 31 else
-            1 if freq_days == 365 else
-            (365 if have_weekends else 252))
-        freq = {7: 'W', 31: 'ME', 365: 'YE'}.get(freq_days, 'D')
-        day_returns = equity_df['Equity'].resample(freq).last().dropna().pct_change().dropna()
+        day_returns, annual_trading_days = periodic_returns(equity_df['Equity'])
         gmean_day_return = geometric_mean(day_returns)
 
     # Annualized return and risk metrics are computed based on the (mostly correct)
