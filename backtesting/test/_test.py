@@ -976,6 +976,35 @@ class TestLib(TestCase):
         res3 = resample_apply('D', lambda df: (df.Close, df.Close), EURUSD)
         self.assertIsInstance(res3, pd.DataFrame)
 
+    def test_resample_apply_multiple_series(self):
+        data = EURUSD.iloc[:500]
+
+        def atr(high, low, close, periods):
+            self.assertTrue(high.index.equals(low.index))
+            self.assertTrue(high.index.equals(close.index))
+            previous_close = close.shift(1)
+            true_range = pd.concat([
+                high - low,
+                (high - previous_close).abs(),
+                (low - previous_close).abs(),
+            ], axis=1).max(axis=1)
+            return true_range.rolling(periods).mean()
+
+        class MultiInputStrategy(Strategy):
+            def init(self):
+                self.atr = resample_apply(
+                    'D', atr, self.data.High, self.data.Low, self.data.Close, 3)
+
+            def next(self):
+                pass
+
+        strategy = Backtest(data, MultiInputStrategy).run()._strategy
+        daily = data.resample('D', label='right').agg(OHLCV_AGG).dropna()
+        expected = atr(daily.High, daily.Low, daily.Close, 3)
+        expected = expected.reindex(
+            data.index.union(daily.index), method='ffill').reindex(data.index)
+        np.testing.assert_allclose(strategy.atr, expected, equal_nan=True)
+
     def test_plot_heatmaps(self):
         bt = Backtest(GOOG, SmaCross)
         stats, heatmap = bt.optimize(fast=range(2, 7, 2),

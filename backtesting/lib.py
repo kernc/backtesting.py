@@ -239,9 +239,12 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
     which is suitable for closing prices,
     but you might prefer another (e.g. `"max"` for peaks, or similar).
 
-    Finally, any `*args` and `**kwargs` that are not already eaten by
-    implicit `backtesting.backtesting.Strategy.I` call
-    are passed to `func`.
+    Additional `*args` that are pandas objects or
+    `backtesting.backtesting.Strategy.data` arrays sharing `series`' index
+    are resampled alongside `series`, using the default `OHLCV_AGG` rule for
+    each input. Other `*args` and any `**kwargs` that are not already eaten by
+    implicit `backtesting.backtesting.Strategy.I` call are passed to `func`
+    unchanged.
 
     For example, if we have a typical moving average function
     `SMA(values, lookback_period)`, _hourly_ data source, and need to
@@ -292,13 +295,29 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
             'or a `Strategy.data.*` array'
         series = series.s
 
-    if agg is None:
-        agg = OHLCV_AGG.get(getattr(series, 'name', ''), 'last')
-        if isinstance(series, pd.DataFrame):
-            agg = {column: OHLCV_AGG.get(column, 'last')
-                   for column in series.columns}
+    def _default_agg(data):
+        if isinstance(data, pd.DataFrame):
+            return {column: OHLCV_AGG.get(column, 'last')
+                    for column in data.columns}
+        return OHLCV_AGG.get(getattr(data, 'name', ''), 'last')
 
-    resampled = series.resample(rule, label='right').agg(agg).dropna()
+    resampled_args = list(args)
+    indexed_args = []
+    for i, arg in enumerate(args):
+        data = arg.s if isinstance(arg, _Array) else arg
+        if (isinstance(data, (pd.Series, pd.DataFrame)) and
+                data.index.equals(series.index)):
+            indexed_args.append((i, data.resample(rule, label='right').agg(
+                _default_agg(data))))
+
+    resampled = series.resample(rule, label='right').agg(
+        _default_agg(series) if agg is None else agg)
+    valid_index = resampled.dropna().index
+    for _, data in indexed_args:
+        valid_index = valid_index[valid_index.isin(data.dropna().index)]
+    resampled = resampled.loc[valid_index]
+    for i, data in indexed_args:
+        resampled_args[i] = data.loc[valid_index]
     resampled.name = _as_str(series) + '[' + rule + ']'
 
     # Check first few stack frames if we are being called from
@@ -331,7 +350,7 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
 
     wrap_func.__name__ = func.__name__
 
-    array = strategy_I(wrap_func, resampled, *args, **kwargs)
+    array = strategy_I(wrap_func, resampled, *resampled_args, **kwargs)
     return array
 
 
