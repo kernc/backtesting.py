@@ -254,9 +254,9 @@ class Strategy(metaclass=ABCMeta):
             Keep in mind that `self.sell(size=.1)` doesn't close existing `self.buy(size=.1)`
             trade unless:
 
-            * the backtest was run with `exclusive_orders=True`,
-            * the underlying asset price is equal in both cases and
-              the backtest was run with `spread = commission = 0`.
+            * the backtest was run with `exclusive_orders=True`, or
+            * the underlying asset price is equal in both cases,
+              _and_ the backtest was run with `spread = commission = 0`.
 
             Use `Trade.close()` or `Position.close()` to explicitly exit trades.
 
@@ -355,7 +355,9 @@ class Position:
     def pl_pct(self) -> float:
         """Profit (positive) or loss (negative) of the current position in percent."""
         total_invested = self.__broker._position_initial_value
-        return (self.pl / total_invested) * 100 if total_invested else 0
+        if not np.isfinite(total_invested) or total_invested == 0:
+            return 0
+        return (self.pl / total_invested) * 100
 
     @property
     def is_long(self) -> bool:
@@ -571,7 +573,14 @@ class Trade:
         return copy(self)._replace(**kwargs)
 
     def close(self, portion: float = 1.):
-        """Place new `Order` to close `portion` of the trade at next market price."""
+        """
+        Place new `Order` to close `portion` of the trade at next market price.
+
+        Since order size is quantized to a whole number of units, `portion`
+        of a small trade may round up to _at least one unit_, so it can end
+        up closing more of the trade than requested (in the extreme, the
+        entire trade for `portion` values that would otherwise round to zero units).
+        """
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
         # Ensure size is an int to avoid rounding errors on 32-bit OS
         size = copysign(max(1, int(round(abs(self.__size) * portion))), -self.__size)
@@ -666,10 +675,13 @@ class Trade:
     def pl_pct(self):
         """Trade profit (positive) or loss (negative) in percent relative to trade entry price."""
         price = self.__exit_price or self.__broker.last_price
+        total_invested = abs(self.__size) * self.__entry_price
+        if not np.isfinite(total_invested) or total_invested == 0:
+            return 0
         gross_pl_pct = copysign(1, self.__size) * (price / self.__entry_price - 1)
 
         # Total commission across the entire trade size to individual units
-        commission_pct = self._commissions / (abs(self.__size) * self.__entry_price)
+        commission_pct = self._commissions / total_invested
         return gross_pl_pct - commission_pct
 
     @property
@@ -1040,11 +1052,11 @@ class _Broker:
                             f"({data.index[-1]}) A contingent SL/TP order would execute in the "
                             "same bar its parent stop/limit order was turned into a trade. "
                             "Since we can't assert the precise intra-candle "
-                            "price movement, the affected SL/TP order will instead be executed on "
-                            "the next (matching) price/bar, making the result (of this trade) "
-                            "somewhat dubious. "
+                            "price movement, the affected SL/TP order will be executed "
+                            "pessimistically within the same bar. "
                             "See https://github.com/kernc/backtesting.py/issues/119",
                             UserWarning)
+                        reprocess_orders = True
 
             # Order processed
             self.orders.remove(order)
