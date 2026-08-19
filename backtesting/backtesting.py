@@ -17,7 +17,7 @@ from functools import cached_property, lru_cache, partial
 from itertools import chain, product, repeat
 from math import copysign
 from numbers import Number
-from typing import Callable, List, Optional, Sequence, Tuple, Type, Union
+from typing import Callable, List, Literal, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 import pandas as pd
@@ -355,7 +355,9 @@ class Position:
     def pl_pct(self) -> float:
         """Profit (positive) or loss (negative) of the current position in percent."""
         total_invested = self.__broker._position_initial_value
-        return (self.pl / total_invested) * 100 if total_invested else 0
+        if not np.isfinite(total_invested) or total_invested == 0:
+            return 0
+        return (self.pl / total_invested) * 100
 
     @property
     def is_long(self) -> bool:
@@ -430,9 +432,9 @@ class Order:
                                                  ('tp', self.__tp_price),
                                                  ('contingent', self.is_contingent),
                                                  ('tag', self.__tag),
-                                             ) if value is not None))  # noqa: E126
+                                             ) if value is not None and value is not False))  # noqa: E126
 
-    def cancel(self):
+    def cancel(self) -> None:
         """Cancel the order."""
         self.__broker.orders.remove(self)
         trade = self.__parent_trade
@@ -498,11 +500,11 @@ class Order:
         return self.__tp_price
 
     @property
-    def parent_trade(self):
+    def parent_trade(self) -> Optional['Trade']:
         return self.__parent_trade
 
     @property
-    def tag(self):
+    def tag(self) -> object:
         """
         Arbitrary value (such as a string) which, if set, enables tracking
         of this order and the associated `Trade` (see `Trade.tag`).
@@ -514,17 +516,17 @@ class Order:
     # Extra properties
 
     @property
-    def is_long(self):
+    def is_long(self) -> bool:
         """True if the order is long (order size is positive)."""
         return self.__size > 0
 
     @property
-    def is_short(self):
+    def is_short(self) -> bool:
         """True if the order is short (order size is negative)."""
         return self.__size < 0
 
     @property
-    def is_contingent(self):
+    def is_contingent(self) -> bool:
         """
         True for [contingent] orders, i.e. [OCO] stop-loss and take-profit bracket orders
         placed upon an active trade. Remaining contingent orders are canceled when
@@ -545,7 +547,7 @@ class Trade:
     When an `Order` is filled, it results in an active `Trade`.
     Find active trades in `Strategy.trades` and closed, settled trades in `Strategy.closed_trades`.
     """
-    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar, tag):
+    def __init__(self, broker: '_Broker', size: int, entry_price: float, entry_bar: int, tag: object):
         self.__broker = broker
         self.__size = size
         self.__entry_price = entry_price
@@ -557,7 +559,7 @@ class Trade:
         self.__tag = tag
         self._commissions = 0
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
                f'price={self.__entry_price}-{self.__exit_price or ""} pl={self.pl:.0f}' \
                f'{" tag=" + str(self.__tag) if self.__tag is not None else ""}>'
@@ -570,7 +572,7 @@ class Trade:
     def _copy(self, **kwargs):
         return copy(self)._replace(**kwargs)
 
-    def close(self, portion: float = 1.):
+    def close(self, portion: float = 1.) -> None:
         """Place new `Order` to close `portion` of the trade at next market price."""
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
         # Ensure size is an int to avoid rounding errors on 32-bit OS
@@ -581,7 +583,7 @@ class Trade:
     # Fields getters
 
     @property
-    def size(self):
+    def size(self) -> int:
         """Trade size (volume; negative for short trades)."""
         return self.__size
 
@@ -609,7 +611,7 @@ class Trade:
         return self.__exit_bar
 
     @property
-    def tag(self):
+    def tag(self) -> object:
         """
         A tag value inherited from the `Order` that opened
         this trade.
@@ -622,11 +624,11 @@ class Trade:
         return self.__tag
 
     @property
-    def _sl_order(self):
+    def _sl_order(self) -> Optional[Order]:
         return self.__sl_order
 
     @property
-    def _tp_order(self):
+    def _tp_order(self) -> Optional[Order]:
         return self.__tp_order
 
     # Extra properties
@@ -644,17 +646,17 @@ class Trade:
         return self.__broker._data.index[self.__exit_bar]
 
     @property
-    def is_long(self):
+    def is_long(self) -> bool:
         """True if the trade is long (trade size is positive)."""
         return self.__size > 0
 
     @property
-    def is_short(self):
+    def is_short(self) -> bool:
         """True if the trade is short (trade size is negative)."""
         return not self.is_long
 
     @property
-    def pl(self):
+    def pl(self) -> float:
         """
         Trade profit (positive) or loss (negative) in cash units.
         Commissions are reflected only after the Trade is closed.
@@ -663,17 +665,20 @@ class Trade:
         return (self.__size * (price - self.__entry_price)) - self._commissions
 
     @property
-    def pl_pct(self):
+    def pl_pct(self) -> float:
         """Trade profit (positive) or loss (negative) in percent relative to trade entry price."""
         price = self.__exit_price or self.__broker.last_price
+        total_invested = abs(self.__size) * self.__entry_price
+        if not np.isfinite(total_invested) or total_invested == 0:
+            return 0
         gross_pl_pct = copysign(1, self.__size) * (price / self.__entry_price - 1)
 
         # Total commission across the entire trade size to individual units
-        commission_pct = self._commissions / (abs(self.__size) * self.__entry_price)
+        commission_pct = self._commissions / total_invested
         return gross_pl_pct - commission_pct
 
     @property
-    def value(self):
+    def value(self) -> float:
         """Trade total value in cash (volume × price)."""
         price = self.__exit_price or self.__broker.last_price
         return abs(self.__size) * price
@@ -681,7 +686,7 @@ class Trade:
     # SL/TP management API
 
     @property
-    def sl(self):
+    def sl(self) -> Optional[float]:
         """
         Stop-loss price at which to close the trade.
 
@@ -689,14 +694,14 @@ class Trade:
         you create or modify the existing SL order.
         By assigning it `None`, you cancel it.
         """
-        return self.__sl_order and self.__sl_order.stop
+        return self.__sl_order.stop if self.__sl_order else None
 
     @sl.setter
-    def sl(self, price: float):
+    def sl(self, price: Optional[float]):
         self.__set_contingent('sl', price)
 
     @property
-    def tp(self):
+    def tp(self) -> Optional[float]:
         """
         Take-profit price at which to close the trade.
 
@@ -704,13 +709,13 @@ class Trade:
         you create or modify the existing TP order.
         By assigning it `None`, you cancel it.
         """
-        return self.__tp_order and self.__tp_order.limit
+        return self.__tp_order.limit if self.__tp_order else None
 
     @tp.setter
-    def tp(self, price: float):
+    def tp(self, price: Optional[float]):
         self.__set_contingent('tp', price)
 
-    def __set_contingent(self, type, price):
+    def __set_contingent(self, type: str, price: Optional[float]) -> None:
         assert type in ('sl', 'tp')
         assert price is None or 0 < price < np.inf, f'Make sure 0 < price < inf! price: {price}'
         attr = f'_{self.__class__.__qualname__}__{type}_order'
@@ -870,6 +875,7 @@ class _Broker:
                 self._close_trade(trade, self.last_price, i)
             self._cash = 0
             self._equity[i:] = 0
+            self.orders.clear()  # Clear any remaining (unfilled) orders; account is bankrupt
             raise _OutOfMoneyError
 
     def _process_orders(self):
@@ -1040,11 +1046,11 @@ class _Broker:
                             f"({data.index[-1]}) A contingent SL/TP order would execute in the "
                             "same bar its parent stop/limit order was turned into a trade. "
                             "Since we can't assert the precise intra-candle "
-                            "price movement, the affected SL/TP order will instead be executed on "
-                            "the next (matching) price/bar, making the result (of this trade) "
-                            "somewhat dubious. "
+                            "price movement, the affected SL/TP order will be executed "
+                            "pessimistically within the same bar. "
                             "See https://github.com/kernc/backtesting.py/issues/119",
                             UserWarning)
+                        reprocess_orders = True
 
             # Order processed
             self.orders.remove(order)
@@ -1385,7 +1391,7 @@ class Backtest:
 
     def optimize(self, *,
                  maximize: Union[str, Callable[[pd.Series], float]] = 'SQN',
-                 method: str = 'grid',
+                 method: Literal['grid', 'sambo'] = 'grid',
                  max_tries: Optional[Union[int, float]] = None,
                  constraint: Optional[Callable[[dict], bool]] = None,
                  return_heatmap: bool = False,
