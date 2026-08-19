@@ -254,9 +254,9 @@ class Strategy(metaclass=ABCMeta):
             Keep in mind that `self.sell(size=.1)` doesn't close existing `self.buy(size=.1)`
             trade unless:
 
-            * the backtest was run with `exclusive_orders=True`,
-            * the underlying asset price is equal in both cases and
-              the backtest was run with `spread = commission = 0`.
+            * the backtest was run with `exclusive_orders=True`, or
+            * the underlying asset price is equal in both cases,
+              _and_ the backtest was run with `spread = commission = 0`.
 
             Use `Trade.close()` or `Position.close()` to explicitly exit trades.
 
@@ -573,7 +573,14 @@ class Trade:
         return copy(self)._replace(**kwargs)
 
     def close(self, portion: float = 1.):
-        """Place new `Order` to close `portion` of the trade at next market price."""
+        """
+        Place new `Order` to close `portion` of the trade at next market price.
+
+        Since order size is quantized to a whole number of units, `portion`
+        of a small trade may round up to _at least one unit_, so it can end
+        up closing more of the trade than requested (in the extreme, the
+        entire trade for `portion` values that would otherwise round to zero units).
+        """
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
         # Ensure size is an int to avoid rounding errors on 32-bit OS
         size = copysign(max(1, int(round(abs(self.__size) * portion))), -self.__size)
