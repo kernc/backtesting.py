@@ -17,7 +17,7 @@ import pandas as pd
 from pandas.testing import assert_frame_equal
 
 from backtesting import Backtest as _Backtest, Strategy
-from backtesting._stats import compute_drawdown_duration_peaks
+from backtesting._stats import _Stats, compute_drawdown_duration_peaks
 from backtesting._util import _Array, _as_str, _Indicator, patch, try_
 from backtesting.lib import (
     FractionalBacktest, MultiBacktest, OHLCV_AGG,
@@ -389,6 +389,16 @@ class TestBacktest(TestCase):
                     'SL', 'TP', 'PnL', 'ReturnPct', 'EntryTime', 'ExitTime',
                     'Duration', 'Tag', 'Commission',
                     *indicator_columns]))
+
+    def test_stats_repr_ignores_invalid_global_float_format(self):
+        def invalid_float_format(value):
+            return f'{value:.2f}' if value else None
+
+        with pd.option_context('display.float_format', invalid_float_format):
+            representation = repr(_Stats({'Sortino Ratio': 0.}, dtype=object))
+            self.assertIs(pd.options.display.float_format, invalid_float_format)
+
+        self.assertIn('Sortino Ratio    0.0', representation)
 
     def test_compute_stats_bordercase(self):
 

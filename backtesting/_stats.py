@@ -196,6 +196,7 @@ class _Stats(pd.Series):
             'display.max_colwidth', 20,  # Prevent expansion due to _equity and _trades dfs
             'display.max_rows', len(self),  # Reveal self whole
             'display.precision', 5,  # Enough for my eyes at least
+            'display.float_format', None,  # Ignore invalid user-defined formatters
         ):
             # XXX: .fillna(nan) to replace None which aren't na_rep'd otherwise (pandas 3.0).
             #   Replace with proper na_rep option when that becomes available.
