@@ -723,6 +723,41 @@ class Trade:
             setattr(self, attr, order)
 
 
+def _validate_spread(spread, data: pd.DataFrame):
+    """Validate and normalize a scalar or per-bar spread specification."""
+    if isinstance(spread, Number):
+        try:
+            spread_value = float(spread)
+        except (TypeError, ValueError):
+            raise TypeError('`spread` must contain real, non-negative values') from None
+        if not np.isfinite(spread_value) or spread_value < 0:
+            raise ValueError('`spread` must contain finite, non-negative values')
+        return spread
+
+    if isinstance(spread, pd.Series):
+        if not spread.index.equals(data.index):
+            raise ValueError('A `spread` Series must have the same index as `data`')
+        if not pd.api.types.is_numeric_dtype(spread.dtype):
+            raise TypeError('`spread` must contain numeric values')
+        try:
+            values = spread.astype(float).to_numpy()
+        except (TypeError, ValueError):
+            raise TypeError('`spread` must contain numeric values') from None
+    else:
+        values = np.asarray(spread)
+        if values.ndim != 1:
+            raise ValueError('Array-like `spread` must be one-dimensional')
+        if not np.issubdtype(values.dtype, np.number):
+            raise TypeError('`spread` must contain numeric values')
+        values = values.astype(float, copy=True)
+
+    if len(values) != len(data):
+        raise ValueError('Array-like `spread` must have the same length as `data`')
+    if not np.isfinite(values).all() or (values < 0).any():
+        raise ValueError('`spread` must contain finite, non-negative values')
+    return values
+
+
 class _Broker:
     def __init__(self, *, data, cash, spread, commission, margin,
                  trade_on_close, hedging, exclusive_orders, index):
@@ -745,6 +780,8 @@ class _Broker:
             self._commission = self._commission_func
 
         self._spread = spread
+        self._spread_is_dynamic = isinstance(spread, np.ndarray)
+        self._i = 0
         self._leverage = 1 / margin
         self._trade_on_close = trade_on_close
         self._hedging = hedging
@@ -840,7 +877,8 @@ class _Broker:
         Long/short `price`, adjusted for spread.
         In long positions, the adjusted price is a fraction higher, and vice versa.
         """
-        return (price or self.last_price) * (1 + copysign(self._spread, size))
+        spread = self._spread[self._i] if self._spread_is_dynamic else self._spread
+        return (price or self.last_price) * (1 + copysign(spread, size))
 
     @property
     def equity(self) -> float:
@@ -1136,9 +1174,14 @@ class Backtest:
 
     `cash` is the initial cash to start with.
 
-    `spread` is the constant bid-ask spread rate (relative to the price).
-    E.g. set it to `0.0002` for commission-less forex
-    trading where the average spread is roughly 0.2‰ of the asking price.
+    `spread` is the bid-ask spread rate (relative to the price). It can be a
+    non-negative scalar, or a one-dimensional NumPy array or pandas Series
+    containing one finite value per data row. A per-row spread is applied at
+    the bar where the order is filled; a pandas Series must have the same
+    index as `data`. The values are relative to price, so a spread supplied in
+    price units must first be divided by the corresponding price. E.g. set it
+    to `0.0002` for commission-less forex trading where the average spread is
+    roughly 0.2‰ of the asking price.
 
     `commission` is the commission rate. E.g. if your broker's commission
     is 1% of order value, set commission to `0.01`.
@@ -1197,7 +1240,7 @@ class Backtest:
                  strategy: Type[Strategy],
                  *,
                  cash: float = 10_000,
-                 spread: float = .0,
+                 spread: Union[float, Sequence[float], np.ndarray, pd.Series] = .0,
                  commission: Union[float, Tuple[float, float]] = .0,
                  margin: float = 1.,
                  trade_on_close=False,
@@ -1209,9 +1252,6 @@ class Backtest:
             raise TypeError('`strategy` must be a Strategy sub-type')
         if not isinstance(data, pd.DataFrame):
             raise TypeError("`data` must be a pandas.DataFrame with columns")
-        if not isinstance(spread, Number):
-            raise TypeError('`spread` must be a float value, percent of '
-                            'entry order price')
         if not isinstance(commission, (Number, tuple)) and not callable(commission):
             raise TypeError('`commission` must be a float percent of order value, '
                             'a tuple of `(fixed, relative)` commission, '
@@ -1243,6 +1283,7 @@ class Backtest:
             raise ValueError('Some OHLC values are missing (NaN). '
                              'Please strip those lines with `df.dropna()` or '
                              'fill them in with `df.interpolate()` or whatever.')
+        spread = _validate_spread(spread, data)
         if np.any(data['Close'] > cash):
             warnings.warn('Some prices are larger than initial cash value. Note that fractional '
                           'trading is not supported by this class. If you want to trade Bitcoin, '
@@ -1252,7 +1293,10 @@ class Backtest:
         if not data.index.is_monotonic_increasing:
             warnings.warn('Data index is not sorted in ascending order. Sorting.',
                           stacklevel=2)
-            data = data.sort_index()
+            sort_order = data.index.argsort(kind='mergesort')
+            data = data.iloc[sort_order]
+            if isinstance(spread, np.ndarray):
+                spread = spread[sort_order]
         if not isinstance(data.index, pd.DatetimeIndex):
             warnings.warn('Data index is not datetime. Assuming simple periods, '
                           'but `pd.DateTimeIndex` is advised.',

@@ -279,6 +279,85 @@ class TestBacktest(TestCase):
         self.assertEqual(stats['_equity_curve']['Equity'].iloc[2:4].round(2).tolist(),
                          [9781.28, 9846.04])
 
+    def test_time_varying_spread(self):
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(size=1)
+                elif len(self.data) == 4:
+                    self.position.close()
+
+        spread = np.zeros(len(SHORT_DATA))
+        spread[2] = .01
+        stats = Backtest(SHORT_DATA, S, cash=10_000, spread=spread).run()
+        expected_entry = SHORT_DATA['Open'].iloc[2] * (1 + spread[2])
+        self.assertEqual(stats['_trades']['EntryPrice'].iloc[0], expected_entry)
+
+        scalar_stats = Backtest(SHORT_DATA, S, cash=10_000, spread=.01).run()
+        constant_stats = Backtest(
+            SHORT_DATA, S, cash=10_000,
+            spread=pd.Series(.01, index=SHORT_DATA.index),
+        ).run()
+        assert_frame_equal(scalar_stats['_trades'], constant_stats['_trades'])
+        assert_frame_equal(scalar_stats['_equity_curve'], constant_stats['_equity_curve'])
+
+    def test_time_varying_spread_order_directions_and_types(self):
+        data = pd.DataFrame({
+            'Open': [10., 10., 10., 10.],
+            'High': [10., 10., 10., 10.],
+            'Low': [10., 10., 10., 10.],
+            'Close': [10., 10., 10., 10.],
+        })
+        spread = np.array([0., 0., .05, 0.])
+
+        def entry_price(size, **order_kwargs):
+            class S(Strategy):
+                def init(self):
+                    pass
+
+                def next(self):
+                    if len(self.data) == 2:
+                        if size > 0:
+                            self.buy(size=size, **order_kwargs)
+                        else:
+                            self.sell(size=-size, **order_kwargs)
+
+            return Backtest(data, S, cash=100, spread=spread).run()['_trades']['EntryPrice'].iloc[0]
+
+        self.assertEqual(entry_price(1), 10 * (1 + spread[2]))
+        self.assertEqual(entry_price(-1), 10 * (1 - spread[2]))
+        self.assertEqual(entry_price(1, limit=10), 10 * (1 + spread[2]))
+        self.assertEqual(entry_price(1, stop=10), 10 * (1 + spread[2]))
+
+    def test_time_varying_spread_validation(self):
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                pass
+
+        with self.assertRaisesRegex(ValueError, 'same length'):
+            _Backtest(SHORT_DATA, S, spread=np.zeros(len(SHORT_DATA) - 1))
+        with self.assertRaisesRegex(ValueError, 'one-dimensional'):
+            _Backtest(SHORT_DATA, S, spread=np.zeros((len(SHORT_DATA), 1)))
+        with self.assertRaisesRegex(TypeError, 'numeric'):
+            _Backtest(SHORT_DATA, S, spread=['0'] * len(SHORT_DATA))
+        with self.assertRaisesRegex(ValueError, 'finite'):
+            _Backtest(SHORT_DATA, S, spread=np.full(len(SHORT_DATA), np.nan))
+        with self.assertRaisesRegex(ValueError, 'non-negative'):
+            _Backtest(SHORT_DATA, S, spread=np.full(len(SHORT_DATA), -.01))
+        with self.assertRaisesRegex(ValueError, 'same index'):
+            _Backtest(
+                SHORT_DATA, S,
+                spread=pd.Series(0., index=SHORT_DATA.index[::-1]),
+            )
+        with self.assertRaisesRegex(ValueError, 'finite'):
+            _Backtest(SHORT_DATA, S, spread=np.nan)
+
     def test_commissions(self):
         class S(_S):
             def next(self):
