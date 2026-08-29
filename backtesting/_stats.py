@@ -182,6 +182,11 @@ def compute_stats(
     s['SQN'] = np.sqrt(n_trades) * pl.mean() / (pl.std() or np.nan)
     s['Kelly Criterion'] = win_rate - (1 - win_rate) / (pl[pl > 0].mean() / -pl[pl < 0].mean())
 
+    s['_extended_stats'] = _Stats({
+        '# Long Trades': int((trades_df['Size'] > 0).sum()),
+        '# Short Trades': int((trades_df['Size'] < 0).sum()),
+    }, dtype=object)
+
     s['_strategy'] = strategy_instance
     s['_equity_curve'] = equity_df
     s['_trades'] = trades_df
@@ -191,6 +196,13 @@ def compute_stats(
 
 
 class _Stats(pd.Series):
+    def __getitem__(self, key):
+        try:
+            return super().__getitem__(key)
+        except KeyError:
+            extended_stats = super().__getitem__('_extended_stats')
+            return extended_stats[key]
+
     def __repr__(self):
         with pd.option_context(
             'display.max_colwidth', 20,  # Prevent expansion due to _equity and _trades dfs

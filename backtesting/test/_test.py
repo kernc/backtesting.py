@@ -390,6 +390,65 @@ class TestBacktest(TestCase):
                     'Duration', 'Tag', 'Commission',
                     *indicator_columns]))
 
+    def test_extended_trade_direction_stats(self):
+        data = SHORT_DATA.iloc[:8]
+
+        def run_direction(direction):
+            class S(_S):
+                def next(self):
+                    if len(self.data) == 2:
+                        (self.buy if direction > 0 else self.sell)(size=1)
+                    elif len(self.data) == 4:
+                        self.position.close()
+
+            return Backtest(data, S).run()
+
+        long_stats = run_direction(1)
+        self.assertEqual(long_stats['_extended_stats']['# Long Trades'], 1)
+        self.assertEqual(long_stats['_extended_stats']['# Short Trades'], 0)
+        self.assertEqual(long_stats['# Long Trades'], 1)
+
+        short_stats = run_direction(-1)
+        self.assertEqual(short_stats._extended_stats['# Long Trades'], 0)
+        self.assertEqual(short_stats._extended_stats['# Short Trades'], 1)
+        self.assertEqual(short_stats['# Short Trades'], 1)
+
+        class Mixed(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(size=1)
+                elif len(self.data) == 4:
+                    self.position.close()
+                elif len(self.data) == 5:
+                    self.sell(size=1)
+                elif len(self.data) == 7:
+                    self.position.close()
+
+        mixed_stats = Backtest(data, Mixed).run()
+        extended = mixed_stats['_extended_stats']
+        self.assertSequenceEqual(list(extended.index), ['# Long Trades', '# Short Trades'])
+        self.assertEqual(extended.to_dict(), {'# Long Trades': 1, '# Short Trades': 1})
+        self.assertEqual(mixed_stats['# Trades'], extended.sum())
+        self.assertNotIn('# Long Trades', mixed_stats.index)
+
+        class NoTrade(_S):
+            def next(self):
+                pass
+
+        no_trade_stats = Backtest(data, NoTrade).run()
+        self.assertEqual(no_trade_stats['_extended_stats'].to_dict(),
+                         {'# Long Trades': 0, '# Short Trades': 0})
+
+        class OpenTrade(_S):
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(size=1)
+
+        with self.assertWarnsRegex(UserWarning, 'finalize_trades'):
+            open_stats = _Backtest(data, OpenTrade).run()
+        self.assertEqual(open_stats['_extended_stats']['# Long Trades'], 0)
+        self.assertEqual(open_stats['_extended_stats']['# Short Trades'], 0)
+
     def test_compute_stats_bordercase(self):
 
         class SingleTrade(Strategy):
