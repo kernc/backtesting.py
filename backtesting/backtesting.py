@@ -1296,6 +1296,8 @@ class Backtest:
             Max. Drawdown Duration      584 days 00:00:00
             Avg. Drawdown Duration       41 days 00:00:00
             # Trades                                   66
+            # Long Trades                              33
+            # Short Trades                             33
             Win Rate [%]                          46.9697
             Best Trade [%]                       53.59595
             Worst Trade [%]                     -18.39887

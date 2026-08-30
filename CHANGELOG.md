@@ -5,6 +5,8 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
+* Include long and short trade counts in the backtest statistics (#1309).
+
 ### 0.6.6
 (2026-07-22)
 

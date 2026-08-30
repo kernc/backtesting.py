@@ -330,6 +330,8 @@ class TestBacktest(TestCase):
         expected = pd.Series({
                 # NOTE: These values are also used on the website!  # noqa: E126
                 '# Trades': 66,
+                '# Long Trades': 33,
+                '# Short Trades': 33,
                 'Avg. Drawdown Duration': pd.Timedelta('41 days 00:00:00'),
                 'Avg. Drawdown [%]': -5.925851581948801,
                 'Avg. Trade Duration': pd.Timedelta('46 days 00:00:00'),
@@ -378,6 +380,9 @@ class TestBacktest(TestCase):
             sorted(['Equity', 'DrawdownPct', 'DrawdownDuration']))
 
         self.assertEqual(len(stats['_trades']), 66)
+        self.assertEqual(stats['# Long Trades'], (stats['_trades']['Size'] > 0).sum())
+        self.assertEqual(stats['# Short Trades'], (stats['_trades']['Size'] < 0).sum())
+        self.assertEqual(stats['# Long Trades'] + stats['# Short Trades'], stats['# Trades'])
 
         indicator_columns = [
             f'{entry}_SMA(C,{n})'
@@ -422,6 +427,8 @@ class TestBacktest(TestCase):
                 self.assertFalse(np.isnan(stats['Equity Final [$]']))
                 self.assertFalse(stats['_equity_curve']['Equity'].isnull().any())
                 self.assertEqual(stats['_strategy'].__class__, strategy)
+                self.assertEqual(stats['# Long Trades'], (stats['_trades']['Size'] > 0).sum())
+                self.assertEqual(stats['# Short Trades'], (stats['_trades']['Size'] < 0).sum())
 
     def test_trade_enter_hit_sl_on_same_day(self):
         the_day = pd.Timestamp("2012-10-17 00:00:00")
@@ -1006,6 +1013,8 @@ class TestLib(TestCase):
                             list(long_stats._equity_curve.Equity))
         self.assertNotEqual(stats['Sharpe Ratio'], long_stats['Sharpe Ratio'])
         self.assertEqual(long_stats['# Trades'], len(only_long_trades))
+        self.assertEqual(long_stats['# Long Trades'], len(only_long_trades))
+        self.assertEqual(long_stats['# Short Trades'], 0)
         self.assertEqual(stats._strategy, long_stats._strategy)
         assert_frame_equal(long_stats._trades, only_long_trades)
 
