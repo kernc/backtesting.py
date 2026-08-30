@@ -279,6 +279,40 @@ class TestBacktest(TestCase):
         self.assertEqual(stats['_equity_curve']['Equity'].iloc[2:4].round(2).tolist(),
                          [9781.28, 9846.04])
 
+    def test_variable_spread(self):
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) in (2, 4):
+                    self.buy(size=1)
+                elif self.position:
+                    self.position.close()
+
+        data = SHORT_DATA.copy()
+        data['SpreadRate'] = 0.
+        data.iloc[2, data.columns.get_loc('SpreadRate')] = .02
+        data.iloc[4, data.columns.get_loc('SpreadRate')] = .03
+
+        stats = Backtest(data, S, spread='SpreadRate').run()
+        np.testing.assert_array_equal(
+            stats['_trades']['EntryPrice'],
+            data['Open'].iloc[[2, 4]] * [1.02, 1.03])
+
+        data['SpreadRate'] = np.arange(len(data)) / 100
+        stats = Backtest(data, S, spread='SpreadRate', trade_on_close=True).run()
+        np.testing.assert_array_equal(
+            stats['_trades']['EntryPrice'],
+            data['Close'].iloc[[1, 3]] * [1.01, 1.03])
+
+        with self.assertRaisesRegex(ValueError, "Spread column 'Missing' not found"):
+            Backtest(data, S, spread='Missing')
+        with self.assertRaisesRegex(TypeError, "Spread column 'SpreadRate' must be numeric"):
+            Backtest(data.assign(SpreadRate='invalid'), S, spread='SpreadRate')
+        with self.assertRaisesRegex(ValueError, "Spread column 'SpreadRate'.*finite"):
+            Backtest(data.assign(SpreadRate=np.nan), S, spread='SpreadRate')
+
     def test_commissions(self):
         class S(_S):
             def next(self):

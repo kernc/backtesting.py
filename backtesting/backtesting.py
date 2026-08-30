@@ -835,12 +835,17 @@ class _Broker:
         """ Price at the last (current) close. """
         return self._data._current_value('Close')
 
-    def _adjusted_price(self, size=None, price=None) -> float:
+    def _adjusted_price(self, size=None, price=None, spread_bar=None) -> float:
         """
         Long/short `price`, adjusted for spread.
         In long positions, the adjusted price is a fraction higher, and vice versa.
         """
-        return (price or self.last_price) * (1 + copysign(self._spread, size))
+        spread = self._spread
+        if isinstance(spread, str):
+            spread = (self._data._current_value(spread)
+                      if spread_bar is None
+                      else self._data[spread][spread_bar])
+        return (price or self.last_price) * (1 + copysign(spread, size))
 
     @property
     def equity(self) -> float:
@@ -958,7 +963,7 @@ class _Broker:
 
             # Adjust price to include commission (or bid-ask spread).
             # In long positions, the adjusted price is a fraction higher, and vice versa.
-            adjusted_price = self._adjusted_price(order.size, price)
+            adjusted_price = self._adjusted_price(order.size, price, time_index)
             adjusted_price_plus_commission = \
                 adjusted_price + self._commission(order.size, price) / abs(order.size)
 
@@ -1136,9 +1141,11 @@ class Backtest:
 
     `cash` is the initial cash to start with.
 
-    `spread` is the constant bid-ask spread rate (relative to the price).
+    `spread` is the bid-ask spread rate (relative to the price).
     E.g. set it to `0.0002` for commission-less forex
     trading where the average spread is roughly 0.2‰ of the asking price.
+    To model a spread that changes over time, pass the name of a numeric
+    `data` column containing the relative spread rate for each bar.
 
     `commission` is the commission rate. E.g. if your broker's commission
     is 1% of order value, set commission to `0.01`.
@@ -1197,7 +1204,7 @@ class Backtest:
                  strategy: Type[Strategy],
                  *,
                  cash: float = 10_000,
-                 spread: float = .0,
+                 spread: Union[float, str] = .0,
                  commission: Union[float, Tuple[float, float]] = .0,
                  margin: float = 1.,
                  trade_on_close=False,
@@ -1209,9 +1216,9 @@ class Backtest:
             raise TypeError('`strategy` must be a Strategy sub-type')
         if not isinstance(data, pd.DataFrame):
             raise TypeError("`data` must be a pandas.DataFrame with columns")
-        if not isinstance(spread, Number):
+        if not isinstance(spread, (Number, str)):
             raise TypeError('`spread` must be a float value, percent of '
-                            'entry order price')
+                            'entry order price, or a numeric data column name')
         if not isinstance(commission, (Number, tuple)) and not callable(commission):
             raise TypeError('`commission` must be a float percent of order value, '
                             'a tuple of `(fixed, relative)` commission, '
@@ -1219,6 +1226,14 @@ class Backtest:
                             'and returns commission dollar value')
 
         data = data.copy(deep=False)
+
+        if isinstance(spread, str):
+            if spread not in data:
+                raise ValueError(f"Spread column {spread!r} not found in `data`")
+            if not pd.api.types.is_numeric_dtype(data[spread]):
+                raise TypeError(f"Spread column {spread!r} must be numeric")
+            if not np.isfinite(data[spread]).all():
+                raise ValueError(f"Spread column {spread!r} must contain only finite values")
 
         # Convert index to datetime index
         if (not isinstance(data.index, pd.DatetimeIndex) and
