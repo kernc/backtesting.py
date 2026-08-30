@@ -248,6 +248,28 @@ class TestBacktest(TestCase):
             stats = bt.run()
         self.assertEqual(stats['# Trades'], 0)
 
+    def test_bankruptcy_clears_orders_and_trades(self):
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if len(self.data) == 2:
+                    self.buy(size=1, tag='first')
+                    self.buy(size=1, tag='second')
+                elif len(self.data) == 3:
+                    self.buy(size=1, limit=.5, tag='pending')
+
+        prices = np.array([100., 100., 100., 1., 1.])
+        data = pd.DataFrame({column: prices for column in ('Open', 'High', 'Low', 'Close')})
+        with self.assertWarnsRegex(UserWarning, 'index is not datetime'):
+            stats = Backtest(data, S, cash=100, margin=.5, hedging=True).run()
+
+        self.assertFalse(stats._strategy.orders)
+        self.assertFalse(stats._strategy.trades)
+        self.assertEqual(len(stats._trades), 2)
+        self.assertCountEqual(stats._trades['Tag'], ('first', 'second'))
+
     def test_spread_commission(self):
         class S(Strategy):
             def init(self):
