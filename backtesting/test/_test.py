@@ -387,7 +387,7 @@ class TestBacktest(TestCase):
             sorted(stats['_trades'].columns),
             sorted(['Size', 'EntryBar', 'ExitBar', 'EntryPrice', 'ExitPrice',
                     'SL', 'TP', 'PnL', 'ReturnPct', 'EntryTime', 'ExitTime',
-                    'Duration', 'Tag', 'Commission',
+                    'Duration', 'Tag', 'CloseReason', 'Commission',
                     *indicator_columns]))
 
     def test_compute_stats_bordercase(self):
@@ -552,6 +552,32 @@ class TestStrategy(TestCase):
             yield
 
         self._Backtest(coroutine).run()
+
+    def test_close_reason(self):
+        def coroutine(self):
+            yield self.buy(size=4, tag='entry')
+
+            trade = self.trades[0]
+            trade.close(.5, reason='scale-out')
+            assert self.orders[0].tag == 'scale-out'
+            yield
+
+            self.position.close(reason='signal')
+            yield
+
+        stats = self._Backtest(coroutine).run()
+        self.assertEqual(stats._trades.Tag.tolist(), ['entry', 'entry'])
+        self.assertEqual(stats._trades.CloseReason.tolist(), ['scale-out', 'signal'])
+        self.assertEqual([trade.close_reason for trade in stats._strategy.closed_trades],
+                         ['scale-out', 'signal'])
+
+    def test_close_reason_defaults_to_none(self):
+        def coroutine(self):
+            yield self.buy()
+            yield self.position.close()
+
+        stats = self._Backtest(coroutine).run()
+        self.assertEqual(stats._trades.CloseReason.tolist(), [None])
 
     def test_close_trade_leaves_needsize_0(self):
         def coroutine(self):

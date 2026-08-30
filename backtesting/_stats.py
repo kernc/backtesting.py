@@ -74,6 +74,7 @@ def compute_stats(
         })
         trades_df['Duration'] = trades_df['ExitTime'] - trades_df['EntryTime']
         trades_df['Tag'] = [t.tag for t in trades]
+        trades_df['CloseReason'] = [t.close_reason for t in trades]
 
         # Add indicator values
         if len(trades_df) and strategy_instance:

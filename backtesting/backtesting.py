@@ -367,12 +367,13 @@ class Position:
         """True if the position is short (position size is negative)."""
         return self.size < 0
 
-    def close(self, portion: float = 1.):
+    def close(self, portion: float = 1., reason: object = None):
         """
-        Close portion of position by closing `portion` of each active trade. See `Trade.close`.
+        Close `portion` of each active trade, optionally recording `reason`
+        as the exit reason. See `Trade.close`.
         """
         for trade in self.__broker.trades:
-            trade.close(portion)
+            trade.close(portion, reason)
 
     def __repr__(self):
         return f'<Position: {self.size} ({len(self.__broker.trades)} trades)>'
@@ -404,7 +405,8 @@ class Order:
                  sl_price: Optional[float] = None,
                  tp_price: Optional[float] = None,
                  parent_trade: Optional['Trade'] = None,
-                 tag: object = None):
+                 tag: object = None,
+                 close_reason: object = None):
         self.__broker = broker
         assert size != 0
         self.__size = size
@@ -414,6 +416,7 @@ class Order:
         self.__tp_price = tp_price
         self.__parent_trade = parent_trade
         self.__tag = tag
+        self.__close_reason = close_reason
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
@@ -430,6 +433,7 @@ class Order:
                                                  ('tp', self.__tp_price),
                                                  ('contingent', self.is_contingent),
                                                  ('tag', self.__tag),
+                                                 ('close_reason', self.__close_reason),
                                              ) if value is not None))  # noqa: E126
 
     def cancel(self):
@@ -509,6 +513,10 @@ class Order:
         """
         return self.__tag
 
+    @property
+    def _close_reason(self):
+        return self.__close_reason
+
     __pdoc__['Order.parent_trade'] = False
 
     # Extra properties
@@ -555,6 +563,7 @@ class Trade:
         self.__sl_order: Optional[Order] = None
         self.__tp_order: Optional[Order] = None
         self.__tag = tag
+        self.__close_reason = None
         self._commissions = 0
 
     def __repr__(self):
@@ -570,12 +579,20 @@ class Trade:
     def _copy(self, **kwargs):
         return copy(self)._replace(**kwargs)
 
-    def close(self, portion: float = 1.):
-        """Place new `Order` to close `portion` of the trade at next market price."""
+    def close(self, portion: float = 1., reason: object = None):
+        """
+        Place new `Order` to close `portion` of the trade at next market price.
+
+        If supplied, `reason` becomes the closing order's `Order.tag` and is
+        exposed as `Trade.close_reason` after the trade (or portion thereof)
+        is closed.
+        """
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
         # Ensure size is an int to avoid rounding errors on 32-bit OS
         size = copysign(max(1, int(round(abs(self.__size) * portion))), -self.__size)
-        order = Order(self.__broker, size, parent_trade=self, tag=self.__tag)
+        order = Order(self.__broker, size, parent_trade=self,
+                      tag=reason if reason is not None else self.__tag,
+                      close_reason=reason)
         self.__broker.orders.insert(0, order)
 
     # Fields getters
@@ -620,6 +637,11 @@ class Trade:
         See also `Order.tag`.
         """
         return self.__tag
+
+    @property
+    def close_reason(self):
+        """Reason supplied when this trade was closed, otherwise None."""
+        return self.__close_reason
 
     @property
     def _sl_order(self):
@@ -936,7 +958,8 @@ class _Broker:
                 size = copysign(min(abs(_prev_size), abs(order.size)), order.size)
                 # If this trade isn't already closed (e.g. on multiple `trade.close(.5)` calls)
                 if trade in self.trades:
-                    self._reduce_trade(trade, price, size, time_index)
+                    self._reduce_trade(trade, price, size, time_index,
+                                       order._close_reason)
                     assert order.size != -_prev_size or trade not in self.trades
                     if order is trade._sl_order:
                         # Set SL back on the order for stats._trades["SL"]
@@ -1052,7 +1075,8 @@ class _Broker:
         if reprocess_orders:
             self._process_orders()
 
-    def _reduce_trade(self, trade: Trade, price: float, size: float, time_index: int):
+    def _reduce_trade(self, trade: Trade, price: float, size: float, time_index: int,
+                      close_reason: object = None):
         assert trade.size * size < 0
         assert abs(trade.size) >= abs(size)
         self._trades_cache_clear()
@@ -1073,9 +1097,10 @@ class _Broker:
             close_trade = trade._copy(size=-size, sl_order=None, tp_order=None)
             self.trades.append(close_trade)
 
-        self._close_trade(close_trade, price, time_index)
+        self._close_trade(close_trade, price, time_index, close_reason)
 
-    def _close_trade(self, trade: Trade, price: float, time_index: int):
+    def _close_trade(self, trade: Trade, price: float, time_index: int,
+                     close_reason: object = None):
         self._trades_cache_clear()
         self.trades.remove(trade)
         if trade._sl_order:
@@ -1083,7 +1108,8 @@ class _Broker:
         if trade._tp_order:
             self.orders.remove(trade._tp_order)
 
-        closed_trade = trade._replace(exit_price=price, exit_bar=time_index)
+        closed_trade = trade._replace(exit_price=price, exit_bar=time_index,
+                                      close_reason=close_reason)
         self.closed_trades.append(closed_trade)
         # Apply commission one more time at trade exit
         commission = self._commission(trade.size, price)
