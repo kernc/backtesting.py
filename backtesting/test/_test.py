@@ -1061,11 +1061,24 @@ class TestLib(TestCase):
                 res = btm.run(fast=2)
                 self.assertIsInstance(res, pd.DataFrame)
                 self.assertEqual(res.columns.tolist(), [0, 1, 2])
-                heatmap = btm.optimize(fast=[2, 4], slow=[10, 20])
+                stats, heatmap = btm.optimize(fast=[2, 4], slow=[10, 20],
+                                              return_heatmap=True)
+                self.assertIsInstance(stats, pd.DataFrame)
+                self.assertEqual(stats.columns.tolist(), [0, 1, 2])
+                self.assertIn('# Trades', stats.index)
                 self.assertIsInstance(heatmap, pd.DataFrame)
                 self.assertEqual(heatmap.columns.tolist(), [0, 1, 2])
                 print(start_method, time.monotonic() - start_time)
         plot_heatmaps(heatmap.mean(axis=1), open_browser=False)
+
+    def test_MultiBacktest_optimize_returns_best_stats_by_default(self):
+        btm = MultiBacktest([GOOG.iloc[:100]], SmaCross, cash=100_000,
+                            finalize_trades=True)
+        stats = btm.optimize(fast=[2, 4], slow=[10, 20])
+        self.assertIsInstance(stats, pd.DataFrame)
+        self.assertEqual(stats.columns.tolist(), [0])
+        self.assertIn('# Trades', stats.index)
+        self.assertNotIn('_strategy', stats.index)
 
     class SometimesNoTrade(Strategy):
         def init(self):

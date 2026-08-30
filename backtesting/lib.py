@@ -576,7 +576,9 @@ class MultiBacktest:
         from backtesting.test import EURUSD, BTCUSD, SmaCross
         btm = MultiBacktest([EURUSD, BTCUSD], SmaCross)
         stats_per_ticker: pd.DataFrame = btm.run(fast=10, slow=20)
-        heatmap_per_ticker: pd.DataFrame = btm.optimize(...)
+        stats_per_ticker, heatmap_per_ticker = btm.optimize(
+            fast=range(10, 30, 10), slow=range(20, 40, 10),
+            return_heatmap=True)
     """
     def __init__(self, df_list, strategy_cls, **kwargs):
         self._dfs = df_list
@@ -615,24 +617,36 @@ class MultiBacktest:
             for shmem in chain(*shms):
                 shmem.close()
 
-    def optimize(self, **kwargs) -> pd.DataFrame:
+    def optimize(self, *, return_heatmap: bool = False, **kwargs) -> Union[
+            pd.DataFrame, tuple[pd.DataFrame, pd.DataFrame]]:
         """
-        Wraps `backtesting.backtesting.Backtest.optimize`, but returns `pd.DataFrame` with
-        currency indexes in columns.
+        Wraps `backtesting.backtesting.Backtest.optimize` and returns a
+        `pd.DataFrame` of best-run statistics, with datasets in columns.
 
-            heamap: pd.DataFrame = btm.optimize(...)
+        If `return_heatmap` is `True`, also returns a second `pd.DataFrame`
+        containing optimization heatmaps, with datasets in columns.
+
+            stats, heatmap = btm.optimize(
+                fast=range(10, 30, 10), slow=range(20, 40, 10),
+                return_heatmap=True)
             from backtesting.plot import plot_heatmaps
             plot_heatmaps(heatmap.mean(axis=1))
         """
+        best_stats = []
         heatmaps = []
         # Simple loop since bt.optimize already does its own multiprocessing
         for df in _tqdm(self._dfs, desc=self.__class__.__name__, mininterval=2):
             bt = Backtest(df, self._strategy, **self._bt_kwargs)
-            _best_stats, heatmap = bt.optimize(  # type: ignore
+            stats, heatmap = bt.optimize(  # type: ignore
                 return_heatmap=True, return_optimization=False, **kwargs)
+            best_stats.append(stats.filter(regex='^[^_]'))
             heatmaps.append(heatmap)
+
+        stats = pd.DataFrame(dict(zip(count(), best_stats)))
         heatmap = pd.DataFrame(dict(zip(count(), heatmaps)))
-        return heatmap
+        if return_heatmap:
+            return stats, heatmap
+        return stats
 
 
 # NOTE: Don't put anything below this __all__ list
