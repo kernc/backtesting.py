@@ -1311,6 +1311,39 @@ class Backtest:
             _trades                       Size  EntryB...
             dtype: object
 
+        The less self-explanatory statistics are calculated as follows.
+        Percentages are expressed as values between -100 and 100, whereas
+        ratios are unitless.
+
+        * **Return [%]** is the percentage change in the equity curve.
+        * **Buy & Hold Return [%]** is the long-only return from the first
+          tradable bar (after the longest indicator warm-up period) to the
+          final close. Consequently, changing an indicator lookback can
+          change this value.
+        * **Return (Ann.) [%]** compounds the geometric mean period return.
+          Daily and intraday data use 252 trading days per year when weekends
+          are absent and 365 otherwise; weekly, monthly, and yearly data use 52, 12,
+          and 1 periods respectively. **CAGR [%]** instead annualizes the
+          total equity return over the elapsed calendar duration.
+        * **Sharpe Ratio** is excess annualized return divided by annualized
+          volatility. **Sortino Ratio** divides it by annualized downside
+          deviation, and **Calmar Ratio** by absolute maximum drawdown.
+        * **Beta** is the covariance of strategy and market log returns
+          divided by market log-return variance. **Alpha [%]** is the total
+          return unexplained by the risk-free rate and beta-adjusted buy-and-
+          hold return.
+        * **Profit Factor** is gross positive trade return divided by absolute
+          gross negative trade return. **Expectancy [%]** is the arithmetic
+          mean of trade returns.
+        * **SQN** is ``sqrt(number of trades) * mean(PnL) / std(PnL)`` and
+          therefore uses absolute trade profit/loss rather than percentage
+          return. **Kelly Criterion** is
+          ``win rate - loss rate / (mean win / abs(mean loss))``.
+
+        Annualized statistics require a datetime index. When their inputs are
+        unavailable or their denominator is zero, the corresponding result is
+        ``NaN``.
+
         .. warning::
             You may obtain different results for different strategy parameters.
             E.g. if you use 50- and 200-bar SMA, the trading simulation will
