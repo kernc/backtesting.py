@@ -131,6 +131,24 @@ class TestBacktest(TestCase):
         with self.assertRaises(ValueError):
             Backtest(GOOG.iloc[:0], SmaCross).run()
 
+    def test_data_numeric_timestamp_index(self):
+        timestamps = {
+            's': [1609459200, 1609545600],
+            'ms': [1609459200000, 1609545600000],
+            'us': [1609459200000000, 1609545600000000],
+            'ns': [1609459200000000000, 1609545600000000000],
+        }
+        expected = pd.DatetimeIndex(['2021-01-01', '2021-01-02'])
+
+        for unit, index in timestamps.items():
+            with self.subTest(unit=unit):
+                data = GOOG.iloc[:2].copy()
+                data.index = index
+
+                bt = Backtest(data, SmaCross)
+
+                self.assertTrue(bt._data.index.equals(expected))
+
     def test_assertions(self):
         class Assertive(Strategy):
             def init(self):
