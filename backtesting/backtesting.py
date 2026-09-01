@@ -1224,10 +1224,15 @@ class Backtest:
         if (not isinstance(data.index, pd.DatetimeIndex) and
             not isinstance(data.index, pd.RangeIndex) and
             # Numeric index with most large numbers
-            (data.index.is_numeric() and
+            (pd.api.types.is_numeric_dtype(data.index.dtype) and
              (data.index > pd.Timestamp('1975').timestamp()).mean() > .8)):
+            index_magnitude = np.nanmedian(np.abs(data.index))
+            # Infer seconds, milliseconds, microseconds, or nanoseconds by magnitude
+            unit = next((unit for unit, threshold in (
+                ('s', 1e11), ('ms', 1e14), ('us', 1e17)
+            ) if index_magnitude < threshold), 'ns')
             try:
-                data.index = pd.to_datetime(data.index, infer_datetime_format=True)
+                data.index = pd.to_datetime(data.index, unit=unit)
             except ValueError:
                 pass
 
