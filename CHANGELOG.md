@@ -5,6 +5,10 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
+* `Strategy.I()` gained a `warmup=True` parameter. Setting it `False` excludes
+  that indicator's leading NaN values from the automatic warm-up bar count that
+  delays the start of the backtest (#1339)
+
 ### 0.6.6
 (2026-07-22)
 

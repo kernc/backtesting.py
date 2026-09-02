@@ -77,6 +77,7 @@ class Strategy(metaclass=ABCMeta):
     def I(self,  # noqa: E743
           func: Callable, *args,
           name=None, plot=True, overlay=None, color=None, scatter=False,
+          warmup=True,
           **kwargs) -> np.ndarray:
         """
         Declare an indicator. An indicator is just an array of values
@@ -108,6 +109,13 @@ class Strategy(metaclass=ABCMeta):
 
         If `scatter` is `True`, the plotted indicator marker will be a
         circle instead of a connected line segment (default).
+
+        If `warmup` is `False`, this indicator's leading NaN values are
+        _not_ counted towards the number of warm-up bars before which
+        the backtest doesn't begin trading (see warning below). Set this
+        for indicators that are informational/secondary only (e.g. computed
+        on a higher, resampled time frame with `backtesting.lib.resample_apply`)
+        and aren't essential to have available from the very first bar.
 
         Additional `*args` and `**kwargs` are passed to `func` and can
         be used for parameters.
@@ -175,7 +183,7 @@ class Strategy(metaclass=ABCMeta):
                 overlay = ((x < 1.4) & (x > .6)).mean() > .6
 
         value = _Indicator(value, name=name, plot=plot, overlay=overlay,
-                           color=color, scatter=scatter,
+                           color=color, scatter=scatter, warmup=warmup,
                            # _Indicator.s Series accessor uses this:
                            index=self.data.index)
         self._indicators.append(value)

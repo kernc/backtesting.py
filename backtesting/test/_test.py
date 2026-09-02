@@ -591,6 +591,20 @@ class TestStrategy(TestCase):
         stats = self._Backtest(coroutine).run()
         self.assertEqual(list(stats._trades.Tag), [1, 1, 2])
 
+    def test_indicator_warmup_false_excluded_from_start_bar(self):
+        class S(Strategy):
+            def init(self):
+                self.sma_fast = self.I(SMA, self.data.Close, 5)
+                self.sma_slow = self.I(SMA, self.data.Close, 100, warmup=False)
+                self.first_next_bar = None
+
+            def next(self):
+                if self.first_next_bar is None:
+                    self.first_next_bar = len(self.data) - 1
+
+        stats = Backtest(GOOG, S).run()
+        self.assertEqual(stats._strategy.first_next_bar, 5)
+
 
 class TestOptimize(TestCase):
     def test_optimize(self):
