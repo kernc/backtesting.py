@@ -387,7 +387,7 @@ class TestBacktest(TestCase):
             sorted(stats['_trades'].columns),
             sorted(['Size', 'EntryBar', 'ExitBar', 'EntryPrice', 'ExitPrice',
                     'SL', 'TP', 'PnL', 'ReturnPct', 'EntryTime', 'ExitTime',
-                    'Duration', 'Tag', 'Commission',
+                    'Duration', 'Tag', 'ExitTag', 'Commission',
                     *indicator_columns]))
 
     def test_compute_stats_bordercase(self):
@@ -440,6 +440,18 @@ class TestBacktest(TestCase):
 
         with self.assertWarns(UserWarning):
             self.assertEqual(Backtest(GOOG, S).run()._trades.iloc[0].ExitPrice, 705.58)
+
+    def test_trade_sl_hit_sets_exit_tag(self):
+        the_day = pd.Timestamp("2012-10-17 00:00:00")
+
+        class S(_S):
+            def next(self):
+                if self.data.index[-1] == the_day:
+                    self.buy(sl=720)
+
+        trades = Backtest(GOOG, S).run()._trades
+        self.assertEqual(trades.iloc[0].ExitPrice, 720)
+        self.assertEqual(trades.iloc[0].ExitTag, 'sl')
 
     def test_stop_price_between_sl_tp(self):
         class S(_S):
@@ -590,6 +602,55 @@ class TestStrategy(TestCase):
 
         stats = self._Backtest(coroutine).run()
         self.assertEqual(list(stats._trades.Tag), [1, 1, 2])
+
+    def test_trade_close_exit_tag(self):
+        def coroutine(self):
+            yield self.buy(size=1)
+            self.trades[-1].close(tag='my reason')
+            yield
+
+        stats = self._Backtest(coroutine).run()
+        self.assertEqual(list(stats._trades.ExitTag), ['my reason'])
+
+    def test_position_close_exit_tag(self):
+        def coroutine(self):
+            yield self.buy(size=1)
+            self.position.close(tag='my reason')
+            yield
+
+        stats = self._Backtest(coroutine).run()
+        self.assertEqual(list(stats._trades.ExitTag), ['my reason'])
+
+    def test_close_without_tag_falls_back_to_opening_tag(self):
+        # Backward compatibility: a close with no tag= given reuses the trade's
+        # opening tag for the closing order (and hence for `Trade.exit_tag`), same
+        # as before `tag=` existed.
+        def coroutine(self):
+            yield self.buy(size=1, tag='open-reason')
+            self.position.close()
+            yield
+
+        stats = self._Backtest(coroutine).run()
+        self.assertEqual(list(stats._trades.Tag), ['open-reason'])
+        self.assertEqual(list(stats._trades.ExitTag), ['open-reason'])
+
+    def test_position_close_partial_exit_tag(self):
+        def coroutine(self):
+            yield self.buy(size=10)
+            assert self.trades
+            self.position.close(portion=.5, tag='half')
+            yield
+            assert len(self.trades) == 1
+            assert self.trades[0].size == 5
+            assert self.trades[0].exit_tag is None
+            yield
+
+        with self.assertWarnsRegex(UserWarning, 'finalize_trades'):
+            stats = self._Backtest(coroutine, finalize_trades=False).run()
+        trades = stats._trades
+        self.assertEqual(len(trades), 1)
+        self.assertEqual(trades.iloc[0].Size, 5)
+        self.assertEqual(trades.iloc[0].ExitTag, 'half')
 
 
 class TestOptimize(TestCase):
@@ -1266,6 +1327,23 @@ class TestRegressions(TestCase):
         trades = Backtest(SHORT_DATA, S).run()._trades
         self.assertEqual(trades['ExitBar'].iloc[0], 3)
         self.assertEqual(trades['ExitPrice'].iloc[0], 105)
+        self.assertEqual(trades['ExitTag'].iloc[0], 'tp')
+
+    def test_exit_tag_on_opposing_order_close(self):
+        # A trade closed as a side effect of an opposing order filling (FIFO close),
+        # with no explicit `trade.close()`/`position.close()` call anywhere, gets no
+        # exit tag (`None`) by default.
+        class S(_S):
+            def next(self):
+                i = len(self.data.index)
+                if i == 3:
+                    self.buy(size=1)
+                elif i == 4:
+                    self.sell(size=1)
+
+        trades = Backtest(SHORT_DATA, S).run()._trades
+        self.assertEqual(len(trades), 1)
+        self.assertIsNone(trades['ExitTag'].iloc[0])
 
     def test_optimize_datetime_index_with_timezone(self):
         data: pd.DataFrame = GOOG.iloc[:100]

@@ -367,12 +367,15 @@ class Position:
         """True if the position is short (position size is negative)."""
         return self.size < 0
 
-    def close(self, portion: float = 1.):
+    def close(self, portion: float = 1., *, tag=None):
         """
         Close portion of position by closing `portion` of each active trade. See `Trade.close`.
+
+        If `tag` is given, it is passed through to each `Trade.close()` call,
+        ending up as `Trade.exit_tag` of every closed trade.
         """
         for trade in self.__broker.trades:
-            trade.close(portion)
+            trade.close(portion, tag=tag)
 
     def __repr__(self):
         return f'<Position: {self.size} ({len(self.__broker.trades)} trades)>'
@@ -555,6 +558,7 @@ class Trade:
         self.__sl_order: Optional[Order] = None
         self.__tp_order: Optional[Order] = None
         self.__tag = tag
+        self.__exit_tag = None
         self._commissions = 0
 
     def __repr__(self):
@@ -570,12 +574,20 @@ class Trade:
     def _copy(self, **kwargs):
         return copy(self)._replace(**kwargs)
 
-    def close(self, portion: float = 1.):
-        """Place new `Order` to close `portion` of the trade at next market price."""
+    def close(self, portion: float = 1., *, tag=None):
+        """
+        Place new `Order` to close `portion` of the trade at next market price.
+
+        If `tag` is given, it is used as the tag of the closing `Order` and ends up as
+        `Trade.exit_tag` of this trade once closed, so it can be used to record *why*
+        the trade was closed. If not given, the closing order (and hence `Trade.exit_tag`)
+        falls back to this trade's opening `Trade.tag`, preserving prior behavior.
+        """
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
         # Ensure size is an int to avoid rounding errors on 32-bit OS
         size = copysign(max(1, int(round(abs(self.__size) * portion))), -self.__size)
-        order = Order(self.__broker, size, parent_trade=self, tag=self.__tag)
+        order = Order(self.__broker, size, parent_trade=self,
+                      tag=(self.__tag if tag is None else tag))
         self.__broker.orders.insert(0, order)
 
     # Fields getters
@@ -620,6 +632,21 @@ class Trade:
         See also `Order.tag`.
         """
         return self.__tag
+
+    @property
+    def exit_tag(self):
+        """
+        A tag value indicating why/how the trade was closed, or `None` while the
+        trade is still active.
+
+        Unlike `Trade.tag` (the *opening* tag, fixed for the life of the trade),
+        `exit_tag` reflects the *closing* order: `"sl"` or `"tp"` when the trade
+        was closed automatically by its stop-loss or take-profit order, the
+        `tag=` passed to `Trade.close()` / `Position.close()` when closed
+        explicitly, or `None` for a plain close with no tag given (including
+        trades closed as a side effect of an opposing order filling).
+        """
+        return self.__exit_tag
 
     @property
     def _sl_order(self):
@@ -934,9 +961,19 @@ class _Broker:
                 # If order.size is "greater" than trade.size, this order is a trade.close()
                 # order and part of the trade was already closed beforehand
                 size = copysign(min(abs(_prev_size), abs(order.size)), order.size)
+                # Determine why the trade is being closed, for `Trade.exit_tag`.
+                # SL/TP orders are auto-tagged "sl"/"tp" unless their tag was
+                # explicitly set to something other than the trade's opening tag.
+                if order is trade._sl_order:
+                    exit_tag = 'sl' if order.tag == trade.tag else order.tag
+                elif order is trade._tp_order:
+                    exit_tag = 'tp' if order.tag == trade.tag else order.tag
+                else:
+                    # It's a trade.close()/position.close() order
+                    exit_tag = order.tag
                 # If this trade isn't already closed (e.g. on multiple `trade.close(.5)` calls)
                 if trade in self.trades:
-                    self._reduce_trade(trade, price, size, time_index)
+                    self._reduce_trade(trade, price, size, time_index, exit_tag)
                     assert order.size != -_prev_size or trade not in self.trades
                     if order is trade._sl_order:
                         # Set SL back on the order for stats._trades["SL"]
@@ -1052,7 +1089,8 @@ class _Broker:
         if reprocess_orders:
             self._process_orders()
 
-    def _reduce_trade(self, trade: Trade, price: float, size: float, time_index: int):
+    def _reduce_trade(self, trade: Trade, price: float, size: float, time_index: int,
+                      exit_tag=None):
         assert trade.size * size < 0
         assert abs(trade.size) >= abs(size)
         self._trades_cache_clear()
@@ -1073,9 +1111,9 @@ class _Broker:
             close_trade = trade._copy(size=-size, sl_order=None, tp_order=None)
             self.trades.append(close_trade)
 
-        self._close_trade(close_trade, price, time_index)
+        self._close_trade(close_trade, price, time_index, exit_tag)
 
-    def _close_trade(self, trade: Trade, price: float, time_index: int):
+    def _close_trade(self, trade: Trade, price: float, time_index: int, exit_tag=None):
         self._trades_cache_clear()
         self.trades.remove(trade)
         if trade._sl_order:
@@ -1083,7 +1121,7 @@ class _Broker:
         if trade._tp_order:
             self.orders.remove(trade._tp_order)
 
-        closed_trade = trade._replace(exit_price=price, exit_bar=time_index)
+        closed_trade = trade._replace(exit_price=price, exit_bar=time_index, exit_tag=exit_tag)
         self.closed_trades.append(closed_trade)
         # Apply commission one more time at trade exit
         commission = self._commission(trade.size, price)
