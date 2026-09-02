@@ -5,6 +5,10 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
+* Enhancement: `Position.close()`/`Trade.close()` accept a `tag=` kwarg; SL/TP-triggered
+  closes are auto-tagged `"sl"`/`"tp"`; new `Trade.exit_tag` property and `stats._trades`
+  `'ExitTag'` column expose why a trade was closed (#1352)
+
 ### 0.6.6
 (2026-07-22)
 
