@@ -657,15 +657,20 @@ class Trade:
     def pl(self):
         """
         Trade profit (positive) or loss (negative) in cash units.
-        Commissions are reflected only after the Trade is closed.
         """
-        price = self.__exit_price or self.__broker.last_price
+        if self.__exit_price is None:
+            price = self.__broker.last_price * (1 - copysign(self.__broker._spread / 2, self.__size))
+        else:
+            price = self.__exit_price
         return (self.__size * (price - self.__entry_price)) - self._commissions
 
     @property
     def pl_pct(self):
         """Trade profit (positive) or loss (negative) in percent relative to trade entry price."""
-        price = self.__exit_price or self.__broker.last_price
+        if self.__exit_price is None:
+            price = self.__broker.last_price * (1 - copysign(self.__broker._spread / 2, self.__size))
+        else:
+            price = self.__exit_price
         gross_pl_pct = copysign(1, self.__size) * (price / self.__entry_price - 1)
 
         # Total commission across the entire trade size to individual units
@@ -840,7 +845,7 @@ class _Broker:
         Long/short `price`, adjusted for spread.
         In long positions, the adjusted price is a fraction higher, and vice versa.
         """
-        return (price or self.last_price) * (1 + copysign(self._spread, size))
+        return (price or self.last_price) * (1 + copysign(self._spread / 2, size))
 
     @property
     def equity(self) -> float:
@@ -1064,6 +1069,7 @@ class _Broker:
         else:
             # Reduce existing trade ...
             trade._replace(size=size_left)
+            trade._commissions = self._commission(size_left, trade.entry_price)
             if trade._sl_order:
                 trade._sl_order._replace(size=-trade.size)
             if trade._tp_order:
@@ -1083,20 +1089,24 @@ class _Broker:
         if trade._tp_order:
             self.orders.remove(trade._tp_order)
 
-        closed_trade = trade._replace(exit_price=price, exit_bar=time_index)
+        adjusted_price = price * (1 - copysign(self._spread / 2, trade.size))
+        closed_trade = trade._replace(exit_price=adjusted_price, exit_bar=time_index)
         self.closed_trades.append(closed_trade)
-        # Apply commission one more time at trade exit
-        commission = self._commission(trade.size, price)
-        self._cash += trade.pl - commission
-        # Save commissions on Trade instance for stats
+        
+        commission = self._commission(trade.size, adjusted_price)
+        # Note: trade open commission is already in trade._commissions, 
+        # but if _reduce_trade happened, trade._commissions might be inaccurate for the subset.
+        # Wait, if trade was reduced, the open commission for the subset should be proportional!
+        # Re-calculate open commission for the subset:
         trade_open_commission = self._commission(closed_trade.size, closed_trade.entry_price)
-        # applied here instead of on Trade open because size could have changed
-        # by way of _reduce_trade()
         closed_trade._commissions = commission + trade_open_commission
+        
+        self._cash += closed_trade.pl
 
     def _open_trade(self, price: float, size: int,
                     sl: Optional[float], tp: Optional[float], time_index: int, tag):
         trade = Trade(self, size, price, time_index, tag)
+        trade._commissions = self._commission(size, price)
         self.trades.append(trade)
         self._trades_cache_clear()
         # Apply broker commission at trade open
