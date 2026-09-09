@@ -93,8 +93,14 @@ Kelly Criterion                        0.6134
 _strategy              SmaCross(n1=10, n2=20)
 _equity_curve                          Equ...
 _trades                       Size  EntryB...
+_extended_stats          {'# Long Trades': ..., '# Short Trades': ...}
 dtype: object
 ```
+
+Direction counts are kept in the optional `_extended_stats` entry so the
+default report stays compact. Access them with
+`stats['_extended_stats']['# Long Trades']` or the convenience lookup
+`stats['# Long Trades']` (and the corresponding short-trade key).
 [![plot of trading simulation](https://i.imgur.com/xRFNHfg.png)](https://kernc.github.io/backtesting.py/#example)
 
 Find more usage examples in the [documentation].

@@ -1317,6 +1317,13 @@ class Backtest:
             begin on bar 201. The actual length of delay is equal to the lookback
             period of the `Strategy.I` indicator which lags the most.
             Obviously, this can affect results.
+
+        Optional trade-direction counts are available under
+        `stats['_extended_stats']`, for example
+        `stats['_extended_stats']['# Long Trades']` and
+        `stats['_extended_stats']['# Short Trades']`. They are also available
+        through `stats['# Long Trades']` and `stats['# Short Trades']` for
+        convenience without adding fields to the default report display.
         """
         data = _Data(self._data.copy(deep=False))
         broker: _Broker = self._broker(data=data)
