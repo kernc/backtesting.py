@@ -840,7 +840,8 @@ class _Broker:
         Long/short `price`, adjusted for spread.
         In long positions, the adjusted price is a fraction higher, and vice versa.
         """
-        return (price or self.last_price) * (1 + copysign(self._spread, size))
+        spread = self._spread[self._i] if isinstance(self._spread, np.ndarray) else self._spread
+        return (price or self.last_price) * (1 + copysign(spread, size))
 
     @property
     def equity(self) -> float:
@@ -1210,8 +1211,11 @@ class Backtest:
         if not isinstance(data, pd.DataFrame):
             raise TypeError("`data` must be a pandas.DataFrame with columns")
         if not isinstance(spread, Number):
-            raise TypeError('`spread` must be a float value, percent of '
-                            'entry order price')
+            if hasattr(spread, '__len__') and len(spread) == len(data):
+                spread = np.asarray(spread, dtype=float)
+            else:
+                raise TypeError('`spread` must be a float value (percent of '
+                                'entry order price) or a sequence of the same length as data')
         if not isinstance(commission, (Number, tuple)) and not callable(commission):
             raise TypeError('`commission` must be a float percent of order value, '
                             'a tuple of `(fixed, relative)` commission, '
