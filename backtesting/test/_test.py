@@ -330,6 +330,8 @@ class TestBacktest(TestCase):
         expected = pd.Series({
                 # NOTE: These values are also used on the website!  # noqa: E126
                 '# Trades': 66,
+                '# Long Trades': 33,
+                '# Short Trades': 33,
                 'Avg. Drawdown Duration': pd.Timedelta('41 days 00:00:00'),
                 'Avg. Drawdown [%]': -5.925851581948801,
                 'Avg. Trade Duration': pd.Timedelta('46 days 00:00:00'),
@@ -378,6 +380,9 @@ class TestBacktest(TestCase):
             sorted(['Equity', 'DrawdownPct', 'DrawdownDuration']))
 
         self.assertEqual(len(stats['_trades']), 66)
+        self.assertEqual(stats['# Long Trades'], 33)
+        self.assertEqual(stats['# Short Trades'], 33)
+        self.assertEqual(stats['# Long Trades'] + stats['# Short Trades'], stats['# Trades'])
 
         indicator_columns = [
             f'{entry}_SMA(C,{n})'
