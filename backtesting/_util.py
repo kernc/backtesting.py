@@ -309,7 +309,9 @@ class SharedMemoryManager:
     def arr2shm(self, vals):
         """Array to shared memory. Returns (shm_name, shape, dtype) used for restore."""
         assert vals.ndim == 1, (vals.ndim, vals.shape, vals)
-        shm = self.SharedMemory(size=vals.nbytes, create=True)
+        # Not `vals.nbytes`; lazy indexes (e.g. RangeIndex) report their own,
+        # constant size rather than that of the array they materialize into
+        shm = self.SharedMemory(size=vals.size * vals.dtype.base.itemsize, create=True)
         # np.array can't handle pandas' tz-aware datetimes
         # https://github.com/numpy/numpy/issues/18279
         buf = np.ndarray(vals.shape, dtype=vals.dtype.base, buffer=shm.buf)

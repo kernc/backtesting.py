@@ -1273,6 +1273,16 @@ class TestRegressions(TestCase):
         res = Backtest(data, SmaCross).optimize(fast=range(2, 3), slow=range(4, 5))
         self.assertGreater(res['# Trades'], 0)
 
+    def test_optimize_range_index(self):
+        # Data is passed to the workers through shared memory sized by
+        # `.nbytes`, which a lazy RangeIndex under-reports, previously raising
+        # "TypeError: buffer is too small for requested array". See GH issue #1237.
+        data: pd.DataFrame = GOOG.iloc[:100].reset_index(drop=True)
+        with self.assertWarnsRegex(UserWarning, 'index is not datetime'):
+            bt = Backtest(data, SmaCross)
+        res = bt.optimize(fast=range(2, 3), slow=range(4, 5))
+        self.assertGreater(res['# Trades'], 0)
+
     def test_sl_tp_values_in_trades_df(self):
         class S(_S):
             def next(self):
