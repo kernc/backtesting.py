@@ -1224,10 +1224,10 @@ class Backtest:
         if (not isinstance(data.index, pd.DatetimeIndex) and
             not isinstance(data.index, pd.RangeIndex) and
             # Numeric index with most large numbers
-            (data.index.is_numeric() and
+            (pd.api.types.is_numeric_dtype(data.index) and
              (data.index > pd.Timestamp('1975').timestamp()).mean() > .8)):
             try:
-                data.index = pd.to_datetime(data.index, infer_datetime_format=True)
+                data.index = pd.to_datetime(data.index)
             except ValueError:
                 pass
 

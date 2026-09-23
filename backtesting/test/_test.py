@@ -1283,6 +1283,20 @@ class TestRegressions(TestCase):
         res = bt.optimize(fast=range(2, 3), slow=range(4, 5))
         self.assertGreater(res['# Trades'], 0)
 
+    def test_numeric_and_string_index(self):
+        # `Index.is_numeric()` and `to_datetime(infer_datetime_format=)` were
+        # removed in pandas 3.0, so any index that was neither a DatetimeIndex
+        # nor a RangeIndex made `Backtest()` raise.
+        data = GOOG.iloc[:100].copy()
+        data.index = pd.Index(data.index.values.astype('datetime64[ns]').astype('int64'))
+        bt = Backtest(data, SmaCross)
+        self.assertIsInstance(bt._data.index, pd.DatetimeIndex)
+        self.assertTrue(bt._data.index.equals(GOOG.index[:100]))
+
+        data.index = GOOG.index[:100].strftime('%Y-%m-%d')
+        with self.assertWarnsRegex(UserWarning, 'index is not datetime'):
+            Backtest(data, SmaCross)
+
     def test_sl_tp_values_in_trades_df(self):
         class S(_S):
             def next(self):
