@@ -195,11 +195,11 @@ def compute_stats(
     if trades is None:
         trades = stats._trades
     else:
-        # XXX: Is this buggy?
+        # Rebuild the equity curve from realized P&L only, credited on each trade's exit bar
         equity = equity.copy()
         equity[:] = stats._equity_curve.Equity.iloc[0]
         for t in trades.itertuples(index=False):
-            equity.iloc[t.EntryBar:] += t.PnL
+            equity.iloc[t.ExitBar:] += t.PnL
     return _compute_stats(trades=trades, equity=equity.values, ohlc_data=data,
                           risk_free_rate=risk_free_rate, strategy_instance=stats._strategy)
 
@@ -307,7 +307,7 @@ http://pandas.pydata.org/pandas-docs/stable/timeseries.html#offset-aliases
     while frame and level <= 3:
         frame = frame.f_back
         level += 1
-        if isinstance(frame.f_locals.get('self'), Strategy):  # type: ignore
+        if frame and isinstance(frame.f_locals.get('self'), Strategy):  # type: ignore
             strategy_I = frame.f_locals['self'].I             # type: ignore
             break
     else:
@@ -470,7 +470,8 @@ class TrailingStrategy(Strategy):
         """
         hi, lo, c_prev = self.data.High, self.data.Low, pd.Series(self.data.Close).shift(1)
         tr = np.max([hi - lo, (c_prev - hi).abs(), (c_prev - lo).abs()], axis=0)
-        atr = pd.Series(tr).rolling(periods).mean().bfill().values
+        # No backfill: that would leak future ATR values into the first `periods` bars
+        atr = pd.Series(tr).rolling(periods).mean().values
         self.__atr = atr
 
     def set_trailing_sl(self, n_atr: float = 6):
@@ -490,13 +491,15 @@ class TrailingStrategy(Strategy):
             with `mean(Close * pct / atr)` and set with `set_trailing_sl`.
         """
         assert 0 < pct < 1, 'Need pct= as rate, i.e. 5% == 0.05'
-        pct_in_atr = np.mean(self.data.Close * pct / self.__atr)  # type: ignore
+        pct_in_atr = np.nanmean(self.data.Close * pct / self.__atr)  # type: ignore
         self.set_trailing_sl(pct_in_atr)
 
     def next(self):
         super().next()
         # Can't use index=-1 because self.__atr is not an Indicator type
         index = len(self.data) - 1
+        if np.isnan(self.__atr[index]):  # ATR still warming up
+            return
         for trade in self.trades:
             if trade.is_long:
                 trade.sl = max(trade.sl or -np.inf,
@@ -534,14 +537,15 @@ class FractionalBacktest(Backtest):
                 category=DeprecationWarning, stacklevel=2)
             fractional_unit = 1 / kwargs.pop('satoshi')
         self._fractional_unit = fractional_unit
-        self.__data: pd.DataFrame = data.copy(deep=False)  # Shallow copy
+        with warnings.catch_warnings():
+            warnings.filterwarnings(action='ignore', message='.*?fraction')
+            super().__init__(data, *args, **kwargs)
+        # Scale the data as validated (sorted, with Volume column) by super
+        self.__data: pd.DataFrame = self._data.copy(deep=False)  # Shallow copy
         for col in ('Open', 'High', 'Low', 'Close',):
             self.__data[col] = self.__data[col] * self._fractional_unit
         for col in ('Volume',):
             self.__data[col] = self.__data[col] / self._fractional_unit
-        with warnings.catch_warnings():
-            warnings.filterwarnings(action='ignore', message='.*?fraction')
-            super().__init__(data, *args, **kwargs)
 
     def run(self, **kwargs) -> pd.Series:
         with patch(self, '_data', self.__data):

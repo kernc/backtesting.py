@@ -5,6 +5,32 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
+* Behavior changes:
+  * `Strategy.next()` is now called from the first bar on which all indicators are
+    valid (bar 0 without indicators), one bar earlier than before (#1411).
+    Strategies indexing e.g. `self.data.Close[-2]` must guard against short data.
+  * With `finalize_trades=True`, remaining trades are closed at the last bar's
+    close (was: its open), and orders placed on the last bar are canceled
+    instead of being filled on it.
+  * Invalid `size=`, `portion=`, SL/TP price, `cash=`, `margin=` and `commission=`
+    arguments raise `ValueError` instead of `AssertionError`.
+* New stats: `# Long Trades`, `Win Rate Longs [%]`, `# Short Trades`,
+  `Win Rate Shorts [%]`, `Long/Short Ratio`; new `IsLong`/`IsShort` columns in `stats._trades`.
+* Bug fixes:
+  * `exclusive_orders=True` skipped canceling some pending orders placed in the same bar
+  * Fixed commission was counted repeatedly in stats for partially closed trades
+  * `lib.compute_stats(trades=...)` credited trade P&L on the entry bar instead of the exit bar
+  * `FractionalBacktest` failed on data without `Volume` or with an unsorted index
+  * Numeric epoch-seconds/ms/µs data index was converted to 1970-era timestamps
+  * `resample_apply()` crashed when called outside a strategy from a shallow call stack
+  * `TrailingStrategy` used backfilled (future) ATR values during ATR warm-up
+  * Randomized grid `optimize()` could sample no parameter combination and fail
+  * `SharedMemoryManager` stopped releasing segments after the first failure
+  * `backtesting.Pool()` no longer changes the process-wide multiprocessing start method
+  * Zero is now a valid limit/stop/exit price
+  * Warn about all-NaN indicators, which are ignored for the warm-up period
+  * Pandas 3 compatibility of index conversion and equity plotting without drawdowns
+
 ### 0.6.6
 (2026-07-22)
 

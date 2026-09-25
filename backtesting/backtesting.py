@@ -120,7 +120,7 @@ class Strategy(metaclass=ABCMeta):
         .. warning::
             Rolling indicators may front-pad warm-up values with NaNs.
             In this case, the **backtest will only begin on the first bar when
-            all declared indicators have non-NaN values** (e.g. bar 201 for a
+            all declared indicators have non-NaN values** (e.g. bar 200 for a
             strategy that uses a 200-bar MA).
             This can affect results.
         """
@@ -159,7 +159,7 @@ class Strategy(metaclass=ABCMeta):
         if isinstance(name, list) and (np.atleast_2d(value).shape[0] != len(name)):
             raise ValueError(
                 f'Length of `name=` ({len(name)}) must agree with the number '
-                f'of arrays the indicator returns ({value.shape[0]}).')
+                f'of arrays the indicator returns ({np.atleast_2d(value).shape[0]}).')
 
         if not is_arraylike or not 1 <= value.ndim <= 2 or value.shape[-1] != len(self._data):
             raise ValueError(
@@ -235,8 +235,9 @@ class Strategy(metaclass=ABCMeta):
 
         See also `Strategy.sell()`.
         """
-        assert 0 < size < 1 or round(size) == size >= 1, \
-            "size must be a positive fraction of equity, or a positive whole number of units"
+        if not (0 < size < 1 or round(size) == size >= 1):
+            raise ValueError("size must be a positive fraction of equity, "
+                             "or a positive whole number of units")
         return self._broker.new_order(size, limit, stop, sl, tp, tag)
 
     def sell(self, *,
@@ -266,8 +267,9 @@ class Strategy(metaclass=ABCMeta):
             If you merely want to close an existing long position,
             use `Position.close()` or `Trade.close()`.
         """
-        assert 0 < size < 1 or round(size) == size >= 1, \
-            "size must be a positive fraction of equity, or a positive whole number of units"
+        if not (0 < size < 1 or round(size) == size >= 1):
+            raise ValueError("size must be a positive fraction of equity, "
+                             "or a positive whole number of units")
         return self._broker.new_order(-size, limit, stop, sl, tp, tag)
 
     @property
@@ -556,6 +558,8 @@ class Trade:
         self.__tp_order: Optional[Order] = None
         self.__tag = tag
         self._commissions = 0
+        # Commission paid at entry, not yet attributed to a closed (part of the) trade
+        self._open_commission = 0
 
     def __repr__(self):
         return f'<Trade size={self.__size} time={self.__entry_bar}-{self.__exit_bar or ""} ' \
@@ -572,7 +576,8 @@ class Trade:
 
     def close(self, portion: float = 1.):
         """Place new `Order` to close `portion` of the trade at next market price."""
-        assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
+        if not 0 < portion <= 1:
+            raise ValueError("portion must be a fraction between 0 and 1")
         # Ensure size is an int to avoid rounding errors on 32-bit OS
         size = copysign(max(1, int(round(abs(self.__size) * portion))), -self.__size)
         order = Order(self.__broker, size, parent_trade=self, tag=self.__tag)
@@ -659,13 +664,13 @@ class Trade:
         Trade profit (positive) or loss (negative) in cash units.
         Commissions are reflected only after the Trade is closed.
         """
-        price = self.__exit_price or self.__broker.last_price
+        price = self.__exit_price if self.__exit_price is not None else self.__broker.last_price
         return (self.__size * (price - self.__entry_price)) - self._commissions
 
     @property
     def pl_pct(self):
         """Trade profit (positive) or loss (negative) in percent relative to trade entry price."""
-        price = self.__exit_price or self.__broker.last_price
+        price = self.__exit_price if self.__exit_price is not None else self.__broker.last_price
         gross_pl_pct = copysign(1, self.__size) * (price / self.__entry_price - 1)
 
         # Total commission across the entire trade size to individual units
@@ -675,7 +680,7 @@ class Trade:
     @property
     def value(self):
         """Trade total value in cash (volume × price)."""
-        price = self.__exit_price or self.__broker.last_price
+        price = self.__exit_price if self.__exit_price is not None else self.__broker.last_price
         return abs(self.__size) * price
 
     # SL/TP management API
@@ -712,7 +717,8 @@ class Trade:
 
     def __set_contingent(self, type, price):
         assert type in ('sl', 'tp')
-        assert price is None or 0 < price < np.inf, f'Make sure 0 < price < inf! price: {price}'
+        if not (price is None or 0 < price < np.inf):
+            raise ValueError(f'Make sure 0 < price < inf! price: {price}')
         attr = f'_{self.__class__.__qualname__}__{type}_order'
         order: Order = getattr(self, attr)
         if order:
@@ -726,8 +732,10 @@ class Trade:
 class _Broker:
     def __init__(self, *, data, cash, spread, commission, margin,
                  trade_on_close, hedging, exclusive_orders, index):
-        assert cash > 0, f"cash should be > 0, is {cash}"
-        assert 0 < margin <= 1, f"margin should be between 0 and 1, is {margin}"
+        if not cash > 0:
+            raise ValueError(f"cash should be > 0, is {cash}")
+        if not 0 < margin <= 1:
+            raise ValueError(f"margin should be between 0 and 1, is {margin}")
         self._data: _Data = data
         self._cash = cash
 
@@ -738,10 +746,12 @@ class _Broker:
                 self._commission_fixed, self._commission_relative = commission
             except TypeError:
                 self._commission_fixed, self._commission_relative = 0, commission
-            assert self._commission_fixed >= 0, 'Need fixed cash commission in $ >= 0'
-            assert -.1 <= self._commission_relative < .1, \
-                ("commission should be between -10% "
-                 f"(e.g. market-maker's rebates) and 10% (fees), is {self._commission_relative}")
+            if not self._commission_fixed >= 0:
+                raise ValueError('Need fixed cash commission in $ >= 0')
+            if not -.1 <= self._commission_relative < .1:
+                raise ValueError(
+                    "commission should be between -10% "
+                    f"(e.g. market-maker's rebates) and 10% (fees), is {self._commission_relative}")
             self._commission = self._commission_func
 
         self._spread = spread
@@ -775,25 +785,26 @@ class _Broker:
         Argument size indicates whether the order is long or short
         """
         size = float(size)
-        stop = stop and float(stop)
-        limit = limit and float(limit)
+        stop = None if stop is None else float(stop)
+        limit = None if limit is None else float(limit)
         sl = sl and float(sl)
         tp = tp and float(tp)
 
         is_long = size > 0
         assert size != 0, size
         adjusted_price = self._adjusted_price(size)
+        entry_price = next(p for p in (limit, stop, adjusted_price) if p is not None)
 
         if is_long:
-            if not (sl or -np.inf) < (limit or stop or adjusted_price) < (tp or np.inf):
+            if not (sl or -np.inf) < entry_price < (tp or np.inf):
                 raise ValueError(
                     "Long orders require: "
-                    f"SL ({sl}) < LIMIT ({limit or stop or adjusted_price}) < TP ({tp})")
+                    f"SL ({sl}) < LIMIT ({entry_price}) < TP ({tp})")
         else:
-            if not (tp or -np.inf) < (limit or stop or adjusted_price) < (sl or np.inf):
+            if not (tp or -np.inf) < entry_price < (sl or np.inf):
                 raise ValueError(
                     "Short orders require: "
-                    f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})")
+                    f"TP ({tp}) < LIMIT ({entry_price}) < SL ({sl})")
 
         order = Order(self, size, limit, stop, sl, tp, trade, tag)
 
@@ -801,10 +812,10 @@ class _Broker:
             # If exclusive orders (each new order auto-closes previous orders/position),
             # cancel all non-contingent orders and close all open trades beforehand
             if self._exclusive_orders:
-                for o in self.orders:
+                for o in list(self.orders):
                     if not o.is_contingent:
                         o.cancel()
-                for t in self.trades:
+                for t in list(self.trades):
                     t.close()
 
         # Put the new order in the order queue, Ensure SL orders are processed first
@@ -840,7 +851,7 @@ class _Broker:
         Long/short `price`, adjusted for spread.
         In long positions, the adjusted price is a fraction higher, and vice versa.
         """
-        return (price or self.last_price) * (1 + copysign(self._spread, size))
+        return (self.last_price if price is None else price) * (1 + copysign(self._spread, size))
 
     @property
     def equity(self) -> float:
@@ -852,12 +863,13 @@ class _Broker:
         margin_used = sum(trade.value / self._leverage for trade in self.trades)
         return max(0, self.equity - margin_used)
 
-    def next(self):
+    def next(self, process_orders: bool = True):
         # Reset cached value here due to price change on every bar
-        self.__dict__.pop(self.__class__._position_unrealized_pl.func.__name__, None)
+        self.__dict__.pop(self.__class__._position_unrealized_pl.func.__name__, None)  # type: ignore[attr-defined]
 
         i = self._i = len(self._data) - 1
-        self._process_orders()
+        if process_orders:
+            self._process_orders()
 
         # Log account equity for the equity curve
         equity = self.equity
@@ -886,7 +898,7 @@ class _Broker:
 
             # Check if stop condition was hit
             stop_price = order.stop
-            if stop_price:
+            if stop_price is not None:
                 is_stop_hit = ((high >= stop_price) if order.is_long else (low <= stop_price))
                 if not is_stop_hit:
                     continue
@@ -897,31 +909,32 @@ class _Broker:
 
             # Determine purchase price.
             # Check if limit order can be filled.
-            if order.limit:
+            if order.limit is not None:
                 is_limit_hit = low <= order.limit if order.is_long else high >= order.limit
                 # When stop and limit are hit within the same bar, we pessimistically
                 # assume limit was hit before the stop (i.e. "before it counts")
                 is_limit_hit_before_stop = (is_limit_hit and
-                                            (order.limit <= (stop_price or -np.inf)
+                                            (order.limit <= (-np.inf if stop_price is None else stop_price)
                                              if order.is_long
-                                             else order.limit >= (stop_price or np.inf)))
+                                             else order.limit >= (np.inf if stop_price is None else stop_price)))
                 if not is_limit_hit or is_limit_hit_before_stop:
                     continue
 
                 # stop_price, if set, was hit within this bar
-                price = (min(stop_price or open, order.limit)
+                trigger_price = open if stop_price is None else stop_price
+                price = (min(trigger_price, order.limit)
                          if order.is_long else
-                         max(stop_price or open, order.limit))
+                         max(trigger_price, order.limit))
             else:
                 # Market-if-touched / market order
                 # Contingent orders always on next open
                 prev_close = data.Close[-2]
                 price = prev_close if self._trade_on_close and not order.is_contingent else open
-                if stop_price:
+                if stop_price is not None:
                     price = max(price, stop_price) if order.is_long else min(price, stop_price)
 
             # Determine entry/exit bar index
-            is_market_order = not order.limit and not stop_price
+            is_market_order = order.limit is None and stop_price is None
             time_index = (
                 (self._i - 1)
                 if is_market_order and self._trade_on_close and not order.is_contingent else
@@ -1030,7 +1043,7 @@ class _Broker:
                         reprocess_orders = True
                     # Order.stop and TP hit within the same bar, but SL wasn't. This case
                     # is not ambiguous, because stop and TP go in the same price direction.
-                    elif stop_price and not order.limit and order.tp and (
+                    elif stop_price is not None and order.limit is None and order.tp and (
                             (order.is_long and order.tp <= high and (order.sl or -np.inf) < low) or
                             (order.is_short and order.tp >= low and (order.sl or np.inf) > high)):
                         reprocess_orders = True
@@ -1062,6 +1075,10 @@ class _Broker:
         if not size_left:
             close_trade = trade
         else:
+            # Split the entry commission proportionally between the closed and remaining parts
+            closed_open_commission = trade._open_commission * abs(size) / abs(trade.size)
+            trade._open_commission -= closed_open_commission
+
             # Reduce existing trade ...
             trade._replace(size=size_left)
             if trade._sl_order:
@@ -1071,6 +1088,7 @@ class _Broker:
 
             # ... by closing a reduced copy of it
             close_trade = trade._copy(size=-size, sl_order=None, tp_order=None)
+            close_trade._open_commission = closed_open_commission
             self.trades.append(close_trade)
 
         self._close_trade(close_trade, price, time_index)
@@ -1088,11 +1106,9 @@ class _Broker:
         # Apply commission one more time at trade exit
         commission = self._commission(trade.size, price)
         self._cash += trade.pl - commission
-        # Save commissions on Trade instance for stats
-        trade_open_commission = self._commission(closed_trade.size, closed_trade.entry_price)
-        # applied here instead of on Trade open because size could have changed
-        # by way of _reduce_trade()
-        closed_trade._commissions = commission + trade_open_commission
+        # Save commissions on Trade instance for stats: the (share of) entry commission
+        # actually paid at trade open, plus the exit commission
+        closed_trade._commissions = commission + closed_trade._open_commission
 
     def _open_trade(self, price: float, size: int,
                     sl: Optional[float], tp: Optional[float], time_index: int, tag):
@@ -1100,7 +1116,8 @@ class _Broker:
         self.trades.append(trade)
         self._trades_cache_clear()
         # Apply broker commission at trade open
-        self._cash -= self._commission(size, price)
+        trade._open_commission = self._commission(size, price)
+        self._cash -= trade._open_commission
         # Create SL/TP (bracket) orders.
         if tp:
             trade.tp = tp
@@ -1224,11 +1241,18 @@ class Backtest:
         if (not isinstance(data.index, pd.DatetimeIndex) and
             not isinstance(data.index, pd.RangeIndex) and
             # Numeric index with most large numbers
-            (data.index.is_numeric() and
+            (pd.api.types.is_numeric_dtype(data.index.dtype) and
+             not pd.api.types.is_bool_dtype(data.index.dtype) and
              (data.index > pd.Timestamp('1975').timestamp()).mean() > .8)):
+            # Infer epoch unit from magnitude; bare numbers are otherwise taken as nanoseconds
+            magnitude = np.nanmedian(np.abs(data.index.values.astype(float)))
+            unit = ('s' if magnitude < 1e11 else
+                    'ms' if magnitude < 1e14 else
+                    'us' if magnitude < 1e17 else
+                    'ns')
             try:
-                data.index = pd.to_datetime(data.index, infer_datetime_format=True)
-            except ValueError:
+                data.index = pd.to_datetime(data.index, unit=unit)
+            except (ValueError, TypeError):
                 pass
 
         if 'Volume' not in data:
@@ -1279,44 +1303,52 @@ class Backtest:
             End                       2013-03-01 00:00:00
             Duration                   3116 days 00:00:00
             Exposure Time [%]                    96.74115
-            Equity Final [$]                     51422.99
+            Equity Final [$]                     51959.95
             Equity Peak [$]                      75787.44
-            Return [%]                           414.2299
-            Buy & Hold Return [%]               703.45824
-            Return (Ann.) [%]                    21.18026
-            Volatility (Ann.) [%]                36.49391
-            CAGR [%]                             14.15984
-            Sharpe Ratio                          0.58038
-            Sortino Ratio                         1.08479
-            Calmar Ratio                          0.44144
-            Alpha [%]                           394.37391
-            Beta                                  0.03803
+            Return [%]                           419.5995
+            Buy & Hold Return [%]               522.06019
+            Return (Ann.) [%]                    21.33895
+            Volatility (Ann.) [%]                36.54153
+            CAGR [%]                             21.30787
+            Sharpe Ratio                          0.58396
+            Sortino Ratio                         1.09295
+            Calmar Ratio                          0.44475
+            Alpha [%]                           399.71493
+            Beta                                  0.03809
             Max. Drawdown [%]                   -47.98013
             Avg. Drawdown [%]                    -5.92585
             Max. Drawdown Duration      584 days 00:00:00
             Avg. Drawdown Duration       41 days 00:00:00
             # Trades                                   66
             Win Rate [%]                          46.9697
+            # Long Trades                              33
+            Win Rate Longs [%]                   54.54545
+            # Short Trades                             33
+            Win Rate Shorts [%]                  39.39394
+            Long/Short Ratio                          1.0
             Best Trade [%]                       53.59595
             Worst Trade [%]                     -18.39887
-            Avg. Trade [%]                        2.53172
+            Avg. Trade [%]                        2.54797
             Max. Trade Duration         183 days 00:00:00
             Avg. Trade Duration          46 days 00:00:00
-            Profit Factor                         2.16795
-            Expectancy [%]                        3.27481
-            SQN                                   1.07662
-            Kelly Criterion                       0.15187
+            Profit Factor                         2.17447
+            Expectancy [%]                         3.2931
+            SQN                                   1.08809
+            Kelly Criterion                        0.1532
             _strategy                            SmaCross
             _equity_curve                           Eq...
-            _trades                       Size  EntryB...
+            _trades                       Size  IsLong...
             dtype: object
 
         .. warning::
             You may obtain different results for different strategy parameters.
             E.g. if you use 50- and 200-bar SMA, the trading simulation will
-            begin on bar 201. The actual length of delay is equal to the lookback
-            period of the `Strategy.I` indicator which lags the most.
-            Obviously, this can affect results.
+            begin on bar 200, the first bar on which every indicator is valid;
+            without indicators, `Strategy.next()` is called from the first bar.
+            The actual length of delay is equal to the lookback period of the
+            `Strategy.I` indicator which lags the most. Obviously, this can
+            affect results. Orders placed in `Strategy.next()` are filled on the
+            following bar (or at the deciding bar's close with `trade_on_close`).
         """
         data = _Data(self._data.copy(deep=False))
         broker: _Broker = self._broker(data=data)
@@ -1327,10 +1359,18 @@ class Backtest:
 
         # Indicators used in Strategy.next()
         indicator_attrs = _strategy_indicators(strategy)
+        all_nan = [attr for attr, indicator in indicator_attrs
+                   if not indicator._opts.get('scatter') and
+                   try_(lambda: np.isnan(indicator.astype(float)).all(axis=-1).any(), False)]
+        if all_nan:
+            warnings.warn(f'Indicator(s) {", ".join(map(repr, all_nan))} are all NaN and '
+                          'are ignored when determining the indicator warm-up period.',
+                          stacklevel=2)
 
-        # Skip first few candles where indicators are still "warming up"
-        # +1 to have at least two entries available
-        start = 1 + _indicator_warmup_nbars(strategy)
+        # Skip first few candles where indicators are still "warming up"; `next()` then starts on the first bar where
+        # every indicator is valid (bar 0 without warm-up). No extra bar is needed: the broker processes an order on
+        # the bar after the one it was placed on, so the first decision cannot fill with its own bar's prices.
+        start = _indicator_warmup_nbars(strategy)
 
         # Disable "invalid value encountered in ..." warnings. Comparison
         # np.nan >= 3 is not invalid; it's False.
@@ -1344,24 +1384,28 @@ class Backtest:
                     # Slice indicator on the last dimension (case of 2d indicator)
                     setattr(strategy, attr, indicator[..., :i + 1])
 
-                # Handle orders processing and broker stuff
+                # Handle orders processing and broker stuff. On the first simulation bar only orders placed in
+                # `Strategy.init()` can be pending; they are first processed on the following bar (its open, or this
+                # bar's close with `trade_on_close`), exactly as when `next()` started one bar later.
                 try:
-                    broker.next()
+                    broker.next(process_orders=i > start)
                 except _OutOfMoneyError:
                     break
 
                 # Next tick, a moment before bar close
                 strategy.next()
             else:
-                if self._finalize_trades is True:
-                    # Close any remaining open trades so they produce some stats
-                    for trade in reversed(broker.trades):
-                        trade.close()
-
-                    # HACK: Re-run broker one last time to handle close orders placed in the last
-                    #  strategy iteration. Use the same OHLC values as in the last broker iteration.
-                    if start < len(self._data):
-                        try_(broker.next, exception=_OutOfMoneyError)
+                if self._finalize_trades is True and start < len(self._data):
+                    # Orders still pending can no longer be filled; there is no next bar
+                    for order in list(broker.orders):
+                        if not order.is_contingent:
+                            order.cancel()
+                    # Close any remaining open trades at the last bar's close so they produce
+                    # some stats, and record the final (post-commission) equity
+                    last_bar = len(self._data) - 1
+                    for trade in list(broker.trades):
+                        broker._close_trade(trade, broker.last_price, last_bar)
+                    broker._equity[last_bar] = broker.equity
                 elif len(broker.trades):
                     warnings.warn(
                         'Some trades remain open at the end of backtest. Use '
@@ -1511,18 +1555,21 @@ class Backtest:
             return size
 
         def _optimize_grid() -> Union[pd.Series, Tuple[pd.Series, pd.Series]]:
-            rand = default_rng(random_state).random
+            rng = default_rng(random_state)
             grid_frac = (1 if max_tries is None else
                          max_tries if 0 < max_tries <= 1 else
                          max_tries / _grid_size())
-            param_combos = [dict(params)  # back to dict so it pickles
-                            for params in (AttrDict(params)
-                                           for params in product(*(zip(repeat(k), _tuple(v))
-                                                                   for k, v in kwargs.items())))
-                            if constraint(params)
-                            and rand() <= grid_frac]
-            if not param_combos:
+            admissible = [dict(params)  # back to dict so it pickles
+                          for params in (AttrDict(params)
+                                         for params in product(*(zip(repeat(k), _tuple(v))
+                                                                 for k, v in kwargs.items())))
+                          if constraint(params)]
+            if not admissible:
                 raise ValueError('No admissible parameter combinations to test')
+            param_combos = [params for params in admissible if rng.random() <= grid_frac]
+            if not param_combos:
+                # Randomized search sampled nothing; test at least one admissible combination
+                param_combos = [admissible[rng.integers(len(admissible))]]
 
             if len(param_combos) > 300:
                 warnings.warn(f'Searching for best of {len(param_combos)} configurations.',

@@ -87,10 +87,17 @@ def _strategy_indicators(strategy):
 def _indicator_warmup_nbars(strategy):
     if strategy is None:
         return 0
-    nbars = max((np.isnan(indicator.astype(float)).argmin(axis=-1).max()
+
+    def first_valid_bar(indicator):
+        is_nan = np.isnan(indicator.astype(float))
+        # An all-NaN row never warms up, so it's ignored rather than stalling the whole
+        # backtest (Backtest.run() warns about it)
+        return np.where(is_nan.all(axis=-1), 0, is_nan.argmin(axis=-1)).max()
+
+    nbars = max((first_valid_bar(indicator)
                  for _, indicator in _strategy_indicators(strategy)
                  if not indicator._opts['scatter']), default=0)
-    return nbars
+    return int(nbars)
 
 
 class _Array(np.ndarray):
@@ -296,15 +303,19 @@ class SharedMemoryManager:
         return self
 
     def __exit__(self, *args, **kwargs):
+        error = None
+        # Release every segment even if some fail, then re-raise the first failure
         for shm in self._shms:
             try:
                 shm.close()
                 if shm._create:
                     shm.unlink()
-            except Exception:
+            except Exception as e:
                 warnings.warn(f'Failed to unlink shared memory {shm.name!r}',
                               category=ResourceWarning, stacklevel=2)
-                raise
+                error = error or e
+        if error is not None:
+            raise error
 
     def arr2shm(self, vals):
         """Array to shared memory. Returns (shm_name, shape, dtype) used for restore."""

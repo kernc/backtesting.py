@@ -67,7 +67,6 @@ except ImportError:
 
 from . import lib  # noqa: F401
 from ._plotting import set_bokeh_output  # noqa: F401
-from ._util import try_
 from .backtesting import Backtest, Strategy  # noqa: F401
 
 # Skip Pool in pdoc3 API docs. Interested users get the warning.
@@ -78,10 +77,10 @@ __pdoc__ = {'backtesting.Pool': False}
 def Pool(processes=None, initializer=None, initargs=()):
     import multiprocessing as mp
     import sys
-    # Revert performance related change in Python>=3.14
-    if sys.platform.startswith('linux') and mp.get_start_method(allow_none=True) != 'fork':
-        try_(lambda: mp.set_start_method('fork'))
-    if mp.get_start_method() == 'spawn':
+    # Revert performance related change in Python>=3.14, using a "fork" context
+    # rather than changing the process-wide default start method
+    ctx = mp.get_context('fork') if sys.platform.startswith('linux') else mp.get_context()
+    if ctx.get_start_method() == 'spawn':
         import warnings
         warnings.warn(
             "If you want to use multi-process optimization with "
@@ -95,4 +94,4 @@ def Pool(processes=None, initializer=None, initargs=()):
         from multiprocessing.dummy import Pool
         return Pool(processes, initializer, initargs)
     else:
-        return mp.Pool(processes, initializer, initargs)
+        return ctx.Pool(processes, initializer, initargs)

@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import unittest
+import warnings
 from concurrent.futures.process import ProcessPoolExecutor
 from contextlib import contextmanager
 from functools import partial
@@ -254,6 +255,8 @@ class TestBacktest(TestCase):
                 self.done = False
 
             def next(self):
+                if len(self.data) < ORDER_BAR:  # place the order on bar ORDER_BAR - 1
+                    return
                 if not self.position:
                     self.buy()
                 else:
@@ -330,36 +333,41 @@ class TestBacktest(TestCase):
         expected = pd.Series({
                 # NOTE: These values are also used on the website!  # noqa: E126
                 '# Trades': 66,
+                '# Long Trades': 33,
+                '# Short Trades': 33,
                 'Avg. Drawdown Duration': pd.Timedelta('41 days 00:00:00'),
                 'Avg. Drawdown [%]': -5.925851581948801,
                 'Avg. Trade Duration': pd.Timedelta('46 days 00:00:00'),
-                'Avg. Trade [%]': 2.531715975158555,
+                'Avg. Trade [%]': 2.5479693282886906,
                 'Best Trade [%]': 53.59595229490424,
                 'Buy & Hold Return [%]': 522.0601851851852,
-                'Calmar Ratio': 0.44166409202994605,
+                'Calmar Ratio': 0.4447456445221315,
                 'Duration': pd.Timedelta('3116 days 00:00:00'),
                 'End': pd.Timestamp('2013-03-01 00:00:00'),
-                'Equity Final [$]': 51422.98999999996,
+                'Equity Final [$]': 51959.94999999997,
                 'Equity Peak [$]': 75787.44,
-                'Expectancy [%]': 3.2748078066748834,
+                'Expectancy [%]': 3.2930986285628268,
                 'Exposure Time [%]': 96.74115456238361,
+                'Long/Short Ratio': 1.0,
                 'Max. Drawdown Duration': pd.Timedelta('584 days 00:00:00'),
                 'Max. Drawdown [%]': -47.98012705007589,
                 'Max. Trade Duration': pd.Timedelta('183 days 00:00:00'),
-                'Profit Factor': 2.167945974262033,
-                'Return (Ann.) [%]': 21.191099249053224,
-                'Return [%]': 414.2298999999996,
-                'Volatility (Ann.) [%]': 36.49716090702389,
-                'CAGR [%]': 21.160245705962623,
-                'SQN': 1.0766187356697705,
-                'Kelly Criterion': 0.1518705127029717,
-                'Sharpe Ratio': 0.5806232244485349,
-                'Sortino Ratio': 1.0853434352488662,
+                'Profit Factor': 2.174469316409448,
+                'Return (Ann.) [%]': 21.338952529139753,
+                'Return [%]': 419.59949999999964,
+                'Volatility (Ann.) [%]': 36.541528967898145,
+                'CAGR [%]': 21.307865404063108,
+                'SQN': 1.0880865497975716,
+                'Kelly Criterion': 0.15319708142323157,
+                'Sharpe Ratio': 0.5839644134181166,
+                'Sortino Ratio': 1.0929459039159732,
                 'Start': pd.Timestamp('2004-08-19 00:00:00'),
                 'Win Rate [%]': 46.96969696969697,
+                'Win Rate Longs [%]': 54.54545454545454,
+                'Win Rate Shorts [%]': 39.39393939393939,
                 'Worst Trade [%]': -18.39887353835481,
-                'Alpha [%]': 394.37391142027462,
-                'Beta': 0.03803390709192,
+                'Alpha [%]': 399.7149324245838,
+                'Beta': 0.03808864981412506,
         })
 
         def almost_equal(a, b):
@@ -385,7 +393,7 @@ class TestBacktest(TestCase):
             for n in (SmaCross.fast, SmaCross.slow)]
         self.assertSequenceEqual(
             sorted(stats['_trades'].columns),
-            sorted(['Size', 'EntryBar', 'ExitBar', 'EntryPrice', 'ExitPrice',
+            sorted(['Size', 'IsLong', 'IsShort', 'EntryBar', 'ExitBar', 'EntryPrice', 'ExitPrice',
                     'SL', 'TP', 'PnL', 'ReturnPct', 'EntryTime', 'ExitTime',
                     'Duration', 'Tag', 'Commission',
                     *indicator_columns]))
@@ -565,6 +573,7 @@ class TestStrategy(TestCase):
 
     def test_stop_limit_order_price_is_stop_price(self):
         def coroutine(self):
+            yield  # place both orders on the second bar
             self.buy(stop=112, limit=113, size=1)
             self.sell(stop=107, limit=105, size=1)
             yield
@@ -676,6 +685,134 @@ class TestOptimize(TestCase):
         self.assertLess(end - start, .3 + handicap)
 
 
+class TestFirstBarExecution(TestCase):
+    """`Strategy.next()` runs on the earliest bar where every indicator is valid, including bar 0.
+
+    Orders decided on a bar are processed by the broker on the following bar only, so deciding on the first bar never
+    fills with prices of that same bar (except `trade_on_close`, which by definition fills at the deciding bar's close).
+    """
+    DATA = SHORT_DATA.iloc[:6]
+
+    @staticmethod
+    def _run(decide, data=None, **kwargs):
+        calls = []
+
+        class S(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                calls.append(len(self.data) - 1)
+                decide(self, len(self.data) - 1)
+
+        stats = Backtest(TestFirstBarExecution.DATA if data is None else data, S, **kwargs).run()
+        return stats, calls
+
+    def test_next_is_called_on_the_first_bar_without_indicators(self):
+        _, calls = self._run(lambda strategy, bar: None)
+        self.assertEqual(calls, list(range(len(self.DATA))))
+
+    def test_first_bar_market_order_fills_at_the_next_open(self):
+        def decide(strategy, bar):
+            if bar == 0:
+                strategy.buy(size=1)
+
+        stats, _ = self._run(decide)
+        trade = stats._trades.iloc[0]
+        self.assertEqual(trade.EntryBar, 1)
+        self.assertEqual(trade.EntryPrice, self.DATA.Open.iloc[1])
+        self.assertEqual(stats._equity_curve.Equity.iloc[0], 10_000)  # nothing filled on the deciding bar
+
+    def test_first_bar_limit_stop_and_bracket_orders_are_evaluated_from_the_next_bar(self):
+        first = self.DATA.iloc[0]
+        self.assertTrue((self.DATA.Low.iloc[1:] > first.Low).all())  # only bar 0 itself reaches its low
+
+        def run(place):
+            return self._run(lambda strategy, bar: place(strategy) if bar == 0 else None)[0]._trades
+
+        # a limit the deciding bar's own low satisfies must not fill with that bar's prices
+        self.assertTrue(run(lambda strategy: strategy.buy(size=1, limit=first.Low)).empty)
+        # a stop the deciding bar's own high reached triggers only on a later bar, at that bar's prices
+        second = self.DATA.iloc[1]
+        self.assertGreaterEqual(second.High, first.High)
+        stop = run(lambda strategy: strategy.buy(size=1, stop=first.High)).iloc[0]
+        self.assertEqual((stop.EntryBar, stop.EntryPrice), (1, max(second.Open, first.High)))
+        self.assertTrue(run(lambda strategy: strategy.buy(size=1, stop=self.DATA.High.max() + 1)).empty)
+        bracket = run(lambda strategy: strategy.buy(size=1, sl=first.Low * .5, tp=first.High * 2)).iloc[0]
+        self.assertEqual((bracket.EntryBar, bracket.EntryPrice), (1, self.DATA.Open.iloc[1]))
+
+    def test_warm_up_still_delays_next_until_every_indicator_is_valid(self):
+        seen = []
+
+        class S(Strategy):
+            def init(self):
+                self.sma = self.I(SMA, self.data.Close, 3)
+
+            def next(self):
+                seen.append((len(self.data) - 1, self.sma[-1]))
+
+        Backtest(self.DATA, S).run()
+        self.assertEqual(seen[0][0], 2)  # SMA(3) is first valid on bar 2
+        self.assertTrue(all(np.isfinite(value) for _, value in seen))
+
+    def test_trade_on_close_fills_a_first_bar_decision_at_that_bar_close(self):
+        def decide(strategy, bar):
+            if bar in (0, 2):
+                strategy.buy(size=1)
+
+        stats, _ = self._run(decide, trade_on_close=True)
+        first, later = stats._trades.iloc[0], stats._trades.iloc[1]
+        self.assertEqual((first.EntryBar, first.EntryPrice), (0, self.DATA.Close.iloc[0]))
+        self.assertEqual((later.EntryBar, later.EntryPrice), (2, self.DATA.Close.iloc[2]))
+
+    def test_first_bar_reversal_behaves_like_any_later_bar(self):
+        def decide(strategy, bar):
+            if bar == 0:
+                strategy.buy()
+            elif bar == 1:
+                strategy.sell()
+
+        stats, _ = self._run(decide, exclusive_orders=True)
+        long_trade, short_trade = stats._trades.iloc[0], stats._trades.iloc[1]
+        self.assertEqual((long_trade.EntryBar, long_trade.ExitBar), (1, 2))
+        self.assertGreater(long_trade.Size, 0)
+        self.assertEqual((short_trade.EntryBar, short_trade.EntryPrice), (2, self.DATA.Open.iloc[2]))
+        self.assertLess(short_trade.Size, 0)
+
+    def test_orders_placed_in_init_keep_their_fill_timing_after_indicator_warm_up(self):
+        # SMA(3) is first valid on bar 2, so next() starts there; an init() order is first processed on the
+        # following simulation bar, exactly as when next() started one bar after the warm-up
+        warm_up = 2
+        for trade_on_close, entry_bar, price in ((False, warm_up + 1, self.DATA.Open.iloc[warm_up + 1]),
+                                                 (True, warm_up, self.DATA.Close.iloc[warm_up])):
+            seen = []
+
+            class S(Strategy):
+                def init(self):
+                    self.sma = self.I(SMA, self.data.Close, 3)
+                    self.buy(size=1)
+
+                def next(self):
+                    seen.append(len(self.data) - 1)
+
+            trade = Backtest(self.DATA, S, trade_on_close=trade_on_close).run()._trades.iloc[0]
+            self.assertEqual(seen[0], warm_up)
+            self.assertEqual((trade.EntryBar, trade.EntryPrice), (entry_bar, price))
+
+    def test_orders_placed_in_init_keep_filling_on_the_second_bar(self):
+        for trade_on_close, price in ((False, self.DATA.Open.iloc[1]), (True, self.DATA.Close.iloc[0])):
+            class S(Strategy):
+                def init(self):
+                    self.buy(size=1)
+
+                def next(self):
+                    pass
+
+            trade = Backtest(self.DATA, S, trade_on_close=trade_on_close).run()._trades.iloc[0]
+            self.assertEqual(trade.EntryPrice, price)
+            self.assertEqual(trade.EntryBar, 0 if trade_on_close else 1)
+
+
 class TestPlot(TestCase):
     def test_plot_before_run(self):
         bt = Backtest(GOOG, SmaCross)
@@ -721,7 +858,9 @@ class TestPlot(TestCase):
                 with self.subTest(rule=rule):
                     df = EURUSD.iloc[:2].resample(rule).agg(OHLCV_AGG).dropna().iloc[:1100]
                     bt = Backtest(df, SmaCross)
-                    bt.run()
+                    # Data is shorter than the SMA windows
+                    with self.assertWarnsRegex(UserWarning, 'all NaN'):
+                        bt.run()
                     bt.plot(filename=f, open_browser=False)
 
     def test_range_axis(self):
@@ -1134,7 +1273,7 @@ class TestUtil(TestCase):
         Backtest(GOOG.iloc[:20], S).run()
 
     def test_indicators_picklable(self):
-        bt = Backtest(SHORT_DATA, SmaCross)
+        bt = Backtest(GOOG.iloc[:100], SmaCross)  # Long enough for SmaCross indicators
         with ProcessPoolExecutor() as executor:
             stats = executor.submit(_Backtest.run, bt).result()
         assert stats._strategy._indicators[0]._opts, '._opts and .name were not unpickled'
@@ -1158,7 +1297,7 @@ class TestDocs(TestCase):
                     run_path(file)
 
     def test_backtest_run_docstring_contains_stats_keys(self):
-        stats = Backtest(SHORT_DATA, SmaCross).run()
+        stats = Backtest(GOOG.iloc[:100], SmaCross).run()  # Long enough for SmaCross indicators
         for key in stats.index:
             self.assertIn(key, _Backtest.run.__doc__)
 
@@ -1166,7 +1305,7 @@ class TestDocs(TestCase):
         with open(os.path.join(os.path.dirname(__file__),
                                '..', '..', 'README.md')) as f:
             readme = f.read()
-        stats = Backtest(SHORT_DATA, SmaCross).run()
+        stats = Backtest(GOOG.iloc[:100], SmaCross).run()  # Long enough for SmaCross indicators
         for key in stats.index:
             self.assertIn(key, readme)
 
@@ -1203,6 +1342,7 @@ class TestRegressions(TestCase):
 
     def test_trade_on_close_closes_trades_on_close(self):
         def coro(strat):
+            yield  # decide on the second bar
             yield strat.buy(size=1, sl=90) and strat.buy(size=1, sl=80)
             assert len(strat.trades) == 2
             yield strat.trades[0].close()
@@ -1311,3 +1451,212 @@ class TestRegressions(TestCase):
         self.assertEqual(trade['ExitPrice'], 99.19)
         # ... yet the SL value must be preserved in the trades data frame.
         self.assertEqual(trade['SL'], 99.5)
+
+
+class TestBugFixes(TestCase):
+    """Regression tests for the issues listed in BUG_REPORT.md."""
+
+    class _OnBars(Strategy):
+        """Calls `actions[bar](self)` on the given bars."""
+        actions: dict = {}
+
+        def init(self):
+            pass
+
+        def next(self):
+            action = self.actions.get(len(self.data) - 1)
+            if action:
+                action(self)
+
+    def _run(self, data, actions, **kwargs):
+        return _Backtest(data, self._OnBars, **kwargs).run(actions=actions)
+
+    def test_stats_long_short_trades(self):
+        def orders(self):
+            self.buy(size=1)
+
+        stats = self._run(SHORT_DATA, {2: orders, 5: lambda s: s.position.close(),
+                                       7: lambda s: s.sell(size=1)}, finalize_trades=True)
+        self.assertEqual(stats['# Long Trades'], 1)
+        self.assertEqual(stats['# Short Trades'], 1)
+        self.assertEqual(stats['Long/Short Ratio'], 1)
+        self.assertEqual(stats._trades['IsLong'].tolist(), [True, False])
+        self.assertEqual(stats._trades['IsShort'].tolist(), [False, True])
+
+        # Trades frames without IsLong/IsShort columns (e.g. user-supplied) still work
+        trades = stats._trades.drop(columns=['IsLong', 'IsShort'])
+        substats = compute_stats(stats=stats, trades=trades, data=SHORT_DATA)
+        self.assertEqual(substats['# Long Trades'], 1)
+        self.assertEqual(substats['# Short Trades'], 1)
+
+    def test_exclusive_orders_cancels_all_previous_orders(self):
+        def reverse(self):
+            self.buy(size=2)
+            self.sell(size=3)
+
+        def record(self):
+            self.position_size = self.position.size
+
+        stats = self._run(SHORT_DATA, {2: lambda s: s.buy(size=1), 5: reverse, 7: record},
+                          exclusive_orders=True, finalize_trades=True)
+        self.assertEqual(stats._strategy.position_size, -3)
+
+    def test_finalize_trades_closes_at_last_close_and_ignores_last_bar_orders(self):
+        last = len(SHORT_DATA) - 1
+        stats = self._run(SHORT_DATA, {2: lambda s: s.buy(size=1), last: lambda s: s.sell(size=5)},
+                          finalize_trades=True)
+        self.assertEqual(len(stats._trades), 1)
+        self.assertFalse(stats._strategy.trades)
+        self.assertFalse(stats._strategy.orders)
+        trade = stats._trades.iloc[0]
+        self.assertEqual((trade.ExitBar, trade.ExitPrice), (last, SHORT_DATA.Close.iloc[-1]))
+        self.assertEqual(stats['Equity Final [$]'], 10_000 + trade.PnL)
+
+    def test_compute_stats_trades_subset_credits_pnl_on_exit_bar(self):
+        stats = self._run(SHORT_DATA, {2: lambda s: s.buy(size=1), 8: lambda s: s.position.close()})
+        trade = stats._trades.iloc[0]
+        equity = compute_stats(stats=stats, trades=stats._trades,
+                               data=SHORT_DATA)._equity_curve.Equity
+        self.assertTrue((equity.iloc[:trade.ExitBar] == 10_000).all())
+        self.assertTrue((equity.iloc[trade.ExitBar:] == 10_000 + trade.PnL).all())
+
+    def test_fixed_commission_not_double_counted_on_partial_close(self):
+        stats = self._run(SHORT_DATA, {2: lambda s: s.buy(size=10),
+                                       5: lambda s: s.trades[0].close(.5),
+                                       8: lambda s: s.trades[0].close()},
+                          commission=(100, 0))
+        # One entry fee and two exit fees were paid
+        self.assertEqual(stats['Commissions [$]'], 300)
+        self.assertAlmostEqual(stats['Equity Final [$]'], 10_000 + stats._trades.PnL.sum())
+
+    def test_FractionalBacktest_validates_data(self):
+        def run(data):
+            return FractionalBacktest(data, SmaCross, fractional_unit=1,
+                                      finalize_trades=True).run()
+
+        expected = run(GOOG.iloc[:100])
+        with self.assertWarnsRegex(UserWarning, 'not sorted'):
+            unsorted = run(GOOG.iloc[:100].iloc[::-1])
+        self.assertEqual(unsorted['Equity Final [$]'], expected['Equity Final [$]'])
+        no_volume = run(GOOG.iloc[:100].drop(columns='Volume'))
+        self.assertEqual(no_volume['Equity Final [$]'], expected['Equity Final [$]'])
+
+    def test_epoch_index_converted_to_datetime(self):
+        for divisor in (10**9, 10**6, 10**3, 1):
+            with self.subTest(divisor=divisor):
+                df = GOOG.iloc[:100].copy()
+                df.index = df.index.astype(np.int64) // divisor
+                self.assertTrue(_Backtest(df, SmaCross)._data.index.equals(GOOG.index[:100]))
+
+    def test_plot_without_drawdown(self):
+        arr = np.r_[1, 1, 2, 3, 4.]
+        df = pd.DataFrame({'Open': arr, 'High': arr, 'Low': arr, 'Close': arr},
+                          index=pd.date_range('2020', periods=len(arr)))
+        bt = _Backtest(df, self._OnBars)
+        bt.run(actions={0: lambda s: s.buy(size=1), 2: lambda s: s.position.close()})
+        with _tempfile() as f:
+            bt.plot(filename=f, open_browser=False, superimpose=False)
+
+    def test_resample_apply_outside_strategy(self):
+        import subprocess
+        code = ('from backtesting.lib import resample_apply; from backtesting.test import GOOG; '
+                'print(len(resample_apply("W", None, GOOG.Close)))')
+        out = subprocess.run([sys.executable, '-W', 'ignore', '-c', code],
+                             capture_output=True, text=True, check=True).stdout
+        self.assertEqual(int(out), len(GOOG))
+
+    def test_all_nan_indicator_warns(self):
+        class S(Strategy):
+            def init(self):
+                self.nan = self.I(lambda: np.full(len(self.data), np.nan))
+
+            def next(self):
+                pass
+
+        with self.assertWarnsRegex(UserWarning, "'nan' are all NaN"):
+            _Backtest(SHORT_DATA, S).run()
+
+    def test_TrailingStrategy_has_no_lookahead(self):
+        class S(TrailingStrategy):
+            def init(self):
+                super().init()
+                self.set_atr_periods(10)
+                self.set_trailing_sl(3)
+
+            def next(self):
+                super().next()
+                if len(self.data) == 2:
+                    self.buy(size=1)
+                if len(self.data) == 8:
+                    self.sl_during_warmup = self.trades[0].sl
+
+        stats = Backtest(SHORT_DATA, S).run()
+        self.assertIsNone(stats._strategy.sl_during_warmup)
+        self.assertIsNotNone(stats._trades.SL.iloc[0])
+
+    def test_shared_memory_manager_releases_all_segments(self):
+        class FakeShm:
+            def __init__(self, fail):
+                self.fail, self.name, self._create, self.unlinked = fail, 'fake', True, False
+
+            def close(self):
+                if self.fail:
+                    raise OSError
+
+            def unlink(self):
+                self.unlinked = True
+
+        from backtesting._util import SharedMemoryManager
+        smm = SharedMemoryManager()
+        smm._shms = [FakeShm(True), FakeShm(False)]
+        with self.assertRaises(OSError), self.assertWarns(ResourceWarning):
+            smm.__exit__()
+        self.assertTrue(smm._shms[1].unlinked)
+
+    def test_pool_keeps_global_start_method(self):
+        import backtesting
+        before = mp.get_start_method(allow_none=True)
+        with backtesting.Pool(1) as pool:
+            self.assertEqual(pool.map(abs, [-1]), [1])
+        self.assertEqual(mp.get_start_method(allow_none=True), before)
+
+    def test_invalid_arguments_raise_value_error(self):
+        for actions in ({1: lambda s: s.buy(size=-1)},
+                        {1: lambda s: s.sell(size=1.5)},
+                        {1: lambda s: s.buy(size=1), 3: lambda s: s.position.close(2)}):
+            with self.subTest(), self.assertRaises(ValueError):
+                self._run(SHORT_DATA, actions, finalize_trades=True)
+        for kwargs in (dict(cash=0), dict(margin=2), dict(commission=(-1, 0)), dict(commission=.5)):
+            with self.subTest(**kwargs), self.assertRaises(ValueError), \
+                    warnings.catch_warnings():
+                warnings.simplefilter('ignore', UserWarning)  # Prices larger than cash
+                self._run(SHORT_DATA, {}, **kwargs)
+
+    def test_randomized_grid_always_tests_something(self):
+        bt = Backtest(GOOG.iloc[:100], SmaCross)
+        for seed in range(20):
+            with self.subTest(seed=seed):
+                stats = bt.optimize(fast=[2, 3], slow=[10, 20], max_tries=.01, random_state=seed)
+                self.assertIn(stats._strategy.fast, (2, 3))
+
+    def test_indicator_name_length_error(self):
+        class S(Strategy):
+            def init(self):
+                self.I(lambda: None, name=['a', 'b'])
+
+            def next(self):
+                pass
+
+        with self.assertRaises(ValueError):
+            _Backtest(SHORT_DATA, S).run()
+
+    def test_zero_exit_price(self):
+        from backtesting.backtesting import Trade, _Broker
+        index = pd.DatetimeIndex(['2025'])
+        broker = _Broker(data=pd.DataFrame({'Close': [5.]}, index=index), cash=100, spread=0,
+                         commission=0, margin=1, trade_on_close=False, hedging=False,
+                         exclusive_orders=False, index=index)
+        trade = Trade(broker, 2, 1., 0, None)._replace(exit_price=0., exit_bar=0)
+        self.assertEqual(trade.pl, -2)
+        self.assertEqual(trade.pl_pct, -1)
+        self.assertEqual(trade.value, 0)

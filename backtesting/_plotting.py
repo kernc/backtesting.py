@@ -333,7 +333,9 @@ return this.labels[index] || "";
         """Equity section"""
         # Max DD Dur. line
         equity = equity_data['Equity'].copy()
-        dd_end = equity_data['DrawdownDuration'].idxmax()
+        dd_duration = equity_data['DrawdownDuration']
+        # idxmax() of an all-NaN series (i.e. no drawdown) raises in newer pandas
+        dd_end = np.nan if dd_duration.isnull().all() else dd_duration.idxmax()
         if np.isnan(dd_end):
             dd_start = dd_end = equity.index[0]
         else:
@@ -483,7 +485,7 @@ return this.labels[index] || "";
                               millisecond='s').get(time_resolution))
         if not resample_rule:
             warnings.warn(
-                f"'Can't superimpose OHLC data with rule '{resample_rule}'"
+                f"Can't superimpose OHLC data with rule {superimpose!r} "
                 f"(index datetime resolution: '{time_resolution}'). Skipping.",
                 stacklevel=4)
             return

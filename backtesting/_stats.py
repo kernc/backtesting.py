@@ -60,6 +60,8 @@ def compute_stats(
         # Came straight from Backtest.run()
         trades_df = pd.DataFrame({
             'Size': [t.size for t in trades],
+            'IsLong': [t.is_long for t in trades],
+            'IsShort': [t.is_short for t in trades],
             'EntryBar': [t.entry_bar for t in trades],
             'ExitBar': [t.exit_bar for t in trades],
             'EntryPrice': [t.entry_price for t in trades],
@@ -171,6 +173,15 @@ def compute_stats(
     s['# Trades'] = n_trades = len(trades_df)
     win_rate = np.nan if not n_trades else (pl > 0).mean()
     s['Win Rate [%]'] = win_rate * 100
+    # Derive direction from Size so that any trades frame (e.g. a user-supplied subset) works
+    is_long = (trades_df['Size'] > 0).values.astype(bool)
+    is_short = (trades_df['Size'] < 0).values.astype(bool)
+    s['# Long Trades'] = n_long_trades = int(is_long.sum())
+    s['Win Rate Longs [%]'] = (np.nan if not n_long_trades else (pl[is_long] > 0).mean()) * 100
+    s['# Short Trades'] = n_short_trades = int(is_short.sum())
+    s['Win Rate Shorts [%]'] = (np.nan if not n_short_trades else (pl[is_short] > 0).mean()) * 100
+    s['Long/Short Ratio'] = (np.nan if not n_long_trades or not n_short_trades else
+                             n_long_trades / n_short_trades)
     s['Best Trade [%]'] = returns.max() * 100
     s['Worst Trade [%]'] = returns.min() * 100
     mean_return = geometric_mean(returns)

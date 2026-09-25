@@ -81,6 +81,11 @@ Max. Drawdown Duration      688 days 00:00:00
 Avg. Drawdown Duration       41 days 00:00:00
 # Trades                                   93
 Win Rate [%]                            53.76
+# Long Trades                              46
+Win Rate Longs [%]                      60.87
+# Short Trades                             47
+Win Rate Shorts [%]                     44.68
+Long/Short Ratio                         0.98
 Best Trade [%]                          57.12
 Worst Trade [%]                        -16.63
 Avg. Trade [%]                           1.96
