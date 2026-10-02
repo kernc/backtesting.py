@@ -1311,3 +1311,16 @@ class TestRegressions(TestCase):
         self.assertEqual(trade['ExitPrice'], 99.19)
         # ... yet the SL value must be preserved in the trades data frame.
         self.assertEqual(trade['SL'], 99.5)
+
+    def test_trade_pl_pct_zero_entry_price(self):
+        # See GH issue #1318.
+        from backtesting.backtesting import Trade
+
+        class _StubBroker:
+            last_price = 100.
+
+        for bad_price in (0., float('nan')):
+            with self.subTest(entry_price=bad_price):
+                trade = Trade(_StubBroker(), size=10, entry_price=bad_price,
+                              entry_bar=0, tag=None)
+                self.assertEqual(trade.pl_pct, 0.)
