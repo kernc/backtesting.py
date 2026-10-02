@@ -345,6 +345,9 @@ def random_ohlc_data(example_data: pd.DataFrame, *,
     `frac` is a fraction of data to sample (with replacement). Values greater
     than 1 result in oversampling.
 
+    An integer `random_state` seeds a reproducible sequence of samples.
+    Successive samples advance the random state instead of resetting it.
+
     Such random data can be effectively used for stress testing trading
     strategy robustness, Monte Carlo simulations, significance testing, etc.
 
@@ -355,8 +358,11 @@ def random_ohlc_data(example_data: pd.DataFrame, *,
     >>> next(ohlc_generator)  # returns new random data
     ...
     """
+    sampling_state = (np.random.RandomState(random_state)
+                      if isinstance(random_state, (int, np.integer)) else random_state)
+
     def shuffle(x):
-        return x.sample(frac=frac, replace=frac > 1, random_state=random_state)
+        return x.sample(frac=frac, replace=frac > 1, random_state=sampling_state)
 
     if len(example_data.columns.intersection({'Open', 'High', 'Low', 'Close'})) != 4:
         raise ValueError("`data` must be a pandas.DataFrame with columns "
