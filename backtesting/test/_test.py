@@ -997,6 +997,18 @@ class TestLib(TestCase):
         self.assertEqual(new_data.shape, GOOG.shape)
         self.assertEqual(list(new_data.columns), list(GOOG.columns))
 
+    def test_random_ohlc_data_seeded_varies(self):
+        generator = random_ohlc_data(GOOG, random_state=42)
+        first = next(generator)
+        second = next(generator)
+        self.assertFalse(first.equals(second))
+
+    def test_random_ohlc_data_seeded_reproducible(self):
+        first = random_ohlc_data(GOOG, random_state=42)
+        second = random_ohlc_data(GOOG, random_state=42)
+        for _ in range(3):
+            assert_frame_equal(next(first), next(second))
+
     def test_compute_stats(self):
         stats = Backtest(GOOG, SmaCross).run()
         only_long_trades = stats._trades[stats._trades.Size > 0]
