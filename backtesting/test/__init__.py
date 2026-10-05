@@ -4,6 +4,9 @@ from __future__ import annotations
 
 import pandas as pd
 
+from backtesting import Strategy
+from backtesting.lib import crossover
+
 
 def _read_file(filename):
     from os.path import dirname, join
@@ -27,3 +30,22 @@ def SMA(arr: pd.Series, n: int) -> pd.Series:
     Returns `n`-period simple moving average of array `arr`.
     """
     return pd.Series(arr).rolling(n).mean()
+
+
+class SmaCross(Strategy):
+    """A simple moving average crossover strategy with `fast` and `slow` periods."""
+    # NOTE: These values are also used on the website!
+    fast = 10
+    slow = 30
+
+    def init(self):
+        self.sma1 = self.I(SMA, self.data.Close, self.fast)
+        self.sma2 = self.I(SMA, self.data.Close, self.slow)
+
+    def next(self):
+        if crossover(self.sma1, self.sma2):
+            self.position.close()
+            self.buy()
+        elif crossover(self.sma2, self.sma1):
+            self.position.close()
+            self.sell()

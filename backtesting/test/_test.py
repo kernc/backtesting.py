@@ -32,7 +32,7 @@ from backtesting.lib import (
     random_ohlc_data,
     resample_apply,
 )
-from backtesting.test import BTCUSD, EURUSD, GOOG, SMA
+from backtesting.test import BTCUSD, EURUSD, GOOG, SMA, SmaCross
 
 SHORT_DATA = GOOG.iloc[:20]  # Short data for fast tests with no indicator lag
 
@@ -56,24 +56,6 @@ def chdir(path):
         yield
     finally:
         os.chdir(cwd)
-
-
-class SmaCross(Strategy):
-    # NOTE: These values are also used on the website!
-    fast = 10
-    slow = 30
-
-    def init(self):
-        self.sma1 = self.I(SMA, self.data.Close, self.fast)
-        self.sma2 = self.I(SMA, self.data.Close, self.slow)
-
-    def next(self):
-        if crossover(self.sma1, self.sma2):
-            self.position.close()
-            self.buy()
-        elif crossover(self.sma2, self.sma1):
-            self.position.close()
-            self.sell()
 
 
 class _S(Strategy):
@@ -1048,6 +1030,16 @@ class TestLib(TestCase):
         trade = trades.iloc[0]
         self.assertAlmostEqual(trade['EntryPrice'], 236.69)
         self.assertAlmostEqual(stats['_strategy']._indicators[0][trade['EntryBar']], 234.14)
+
+    def test_MultiBacktest_example(self):
+        example = inspect.cleandoc(MultiBacktest.__doc__.split('Example:', 1)[1])
+        namespace = {}
+        exec(example, namespace)
+        self.assertEqual(namespace['stats_per_ticker'].columns.tolist(), [0, 1])
+        heatmap = namespace['heatmap_per_ticker']
+        self.assertEqual(heatmap.columns.tolist(), [0, 1])
+        self.assertEqual(heatmap.index.names, ['fast', 'slow'])
+        self.assertEqual(len(heatmap), 4)
 
     def test_MultiBacktest(self):
         import backtesting
