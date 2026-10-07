@@ -952,8 +952,21 @@ class TestLib(TestCase):
         self.assertFalse(crossover([0], [1]))
 
     def test_quantile(self):
-        self.assertEqual(quantile(np.r_[1, 3, 2], .5), 2)
-        self.assertEqual(quantile(np.r_[1, 3, 2]), .5)
+        for series in (
+                np.r_[1, 3, 2],
+                [1, 3, 2],
+                (1, 3, 2),
+                pd.Series([1, 3, 2]),
+                pd.Series([1, 3, 2], index=[-1, 0, 1]),
+                pd.Series([1, 3, 2], index=pd.date_range('2020', periods=3))):
+            with self.subTest(series=series):
+                self.assertEqual(quantile(series, .5), 2)
+                self.assertEqual(quantile(series), .5)
+
+    def test_quantile_empty(self):
+        for series in (np.array([]), [], (), pd.Series(dtype=float)):
+            with self.subTest(series=series):
+                self.assertTrue(np.isnan(quantile(series)))
 
     def test_resample_apply(self):
         res = resample_apply('D', SMA, EURUSD.Close, 10)

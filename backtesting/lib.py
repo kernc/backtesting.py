@@ -162,9 +162,10 @@ def quantile(series: Sequence, quantile: Union[None, float] = None):
         0.13
     """
     if quantile is None:
+        values = np.asarray(series)
         try:
-            last, series = series[-1], series[:-1]
-            return np.mean(series < last)
+            last, values = values[-1], values[:-1]
+            return np.mean(values < last)
         except IndexError:
             return np.nan
     assert 0 <= quantile <= 1, "quantile must be within [0, 1]"
