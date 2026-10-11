@@ -70,14 +70,23 @@ _EQUITY_AGG = {
 }
 
 
-def barssince(condition: Sequence[bool], default=np.inf) -> int:
+def barssince(condition: Union[Sequence[bool], bool, np.bool_, Number], default=np.inf) -> int:
     """
     Return the number of bars since `condition` sequence was last `True`,
     or if never, return `default`.
 
-        >>> barssince(self.data.Close > self.data.Open)
+    Any scalar (0-d) condition — a `bool`, `np.bool_`, number, or 0-d array,
+    such as the result of `cross` — returns 0 if truthy, otherwise `default`.
+    A scalar carries no history, so its answer is only ever 0 or `default`;
+    pass a sequence to measure the number of bars since an earlier event.
+
+        >>> barssince(self.data.Close > self.data.Open)  # sequence
         3
+        >>> barssince(cross(self.data.Close, self.sma))  # scalar
+        0
     """
+    if np.ndim(condition) == 0:
+        return 0 if condition else default
     return next(compress(range(len(condition)), reversed(condition)), default)
 
 
