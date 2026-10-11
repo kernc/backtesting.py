@@ -950,7 +950,11 @@ class TestLib(TestCase):
         for scalar, expected in ((1, 0), (0, np.inf), (-5, 0),
                                  (np.int64(1), 0), (np.float64(0.0), np.inf),
                                  (np.True_, 0), (np.False_, np.inf),
-                                 (np.array(True), 0), (np.array(False), np.inf)):
+                                 (np.array(True), 0), (np.array(False), np.inf),
+                                 # side effect of the 0-d branch (PR #1422 review):
+                                 # None/str are 0-d too; None is falsy -> default,
+                                 # non-empty str is truthy -> 0 (used to raise TypeError)
+                                 (None, np.inf), ("", np.inf), ("a", 0)):
             with self.subTest(scalar=repr(scalar)):
                 self.assertEqual(barssince(scalar), expected)
                 self.assertEqual(barssince(scalar, -1),
