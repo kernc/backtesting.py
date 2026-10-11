@@ -939,6 +939,28 @@ class TestLib(TestCase):
         self.assertEqual(barssince(np.r_[0, 0, 0]), np.inf)
         self.assertEqual(barssince(np.r_[0, 0, 0], 0), 0)
 
+    def test_barssince_scalar(self):
+        for boolean in (bool, np.bool_):
+            with self.subTest(boolean=boolean):
+                self.assertEqual(barssince(boolean(True)), 0)
+                self.assertEqual(barssince(boolean(True), -1), 0)
+                self.assertEqual(barssince(boolean(False)), np.inf)
+                self.assertEqual(barssince(boolean(False), -1), -1)
+
+    def test_barssince_cross(self):
+        for series in ([0, 2], [2, 0], [0, 0]):
+            with self.subTest(series=series):
+                condition = cross(np.array(series), np.array([1, 1]))
+                expected = 0 if series != [0, 0] else np.inf
+                self.assertEqual(barssince(condition), expected)
+
+    def test_barssince_sequences(self):
+        for sequence in (list, tuple, np.array):
+            for values, expected in (([], -1), ([False], -1), ([True], 0),
+                                     ([True, False, True, False], 1)):
+                with self.subTest(sequence=sequence, values=values):
+                    self.assertEqual(barssince(sequence(values), -1), expected)
+
     def test_cross(self):
         self.assertTrue(cross([0, 1], [1, 0]))
         self.assertTrue(cross([1, 0], [0, 1]))
