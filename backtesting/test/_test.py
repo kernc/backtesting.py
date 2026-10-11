@@ -946,6 +946,15 @@ class TestLib(TestCase):
                 self.assertEqual(barssince(boolean(True), -1), 0)
                 self.assertEqual(barssince(boolean(False)), np.inf)
                 self.assertEqual(barssince(boolean(False), -1), -1)
+        # any scalar (0-d): ints, numpy scalars, 0-d arrays
+        for scalar, expected in ((1, 0), (0, np.inf), (-5, 0),
+                                 (np.int64(1), 0), (np.float64(0.0), np.inf),
+                                 (np.True_, 0), (np.False_, np.inf),
+                                 (np.array(True), 0), (np.array(False), np.inf)):
+            with self.subTest(scalar=repr(scalar)):
+                self.assertEqual(barssince(scalar), expected)
+                self.assertEqual(barssince(scalar, -1),
+                                 expected if expected == 0 else -1)
 
     def test_barssince_cross(self):
         for series in ([0, 2], [2, 0], [0, 0]):
