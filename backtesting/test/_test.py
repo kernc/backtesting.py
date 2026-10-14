@@ -1,15 +1,22 @@
 import inspect
+import json
 import multiprocessing as mp
 import os
+import re
+import subprocess
 import sys
 import time
 import unittest
 from concurrent.futures.process import ProcessPoolExecutor
+from concurrent.futures.thread import ThreadPoolExecutor
 from contextlib import contextmanager
 from functools import partial
 from glob import glob
+from pathlib import Path
 from runpy import run_path
-from tempfile import NamedTemporaryFile, gettempdir
+from shutil import which
+from tempfile import NamedTemporaryFile, TemporaryDirectory, gettempdir
+from threading import Barrier
 from unittest import TestCase
 
 import numpy as np
@@ -17,6 +24,7 @@ import pandas as pd
 from pandas.testing import assert_frame_equal
 
 from backtesting import Backtest as _Backtest, Strategy
+from backtesting import _plotting
 from backtesting._stats import compute_drawdown_duration_peaks
 from backtesting._util import _Array, _as_str, _Indicator, patch, try_
 from backtesting.lib import (
@@ -677,6 +685,196 @@ class TestOptimize(TestCase):
 
 
 class TestPlot(TestCase):
+    def _assert_plot_file(self, filename, fig, other=None):
+        html = Path(filename).read_text(encoding='utf-8')
+        script = re.search(r'<script type="application/json"[^>]*>(.*?)</script>',
+                           html, re.DOTALL)
+        self.assertIsNotNone(script)
+        documents = json.loads(script.group(1))
+        roots = [root['id'] for doc in documents.values() for root in doc['roots']]
+        self.assertEqual(roots, [fig.id])
+        if other is not None:
+            self.assertNotIn(other.id, re.findall(r'"id"\s*:\s*"([^"]+)"', script.group(1)))
+
+    @staticmethod
+    def _heatmap():
+        return pd.Series(
+            [1., 2., 3., 4.],
+            index=pd.MultiIndex.from_product([[5, 10], [20, 30]], names=['fast', 'slow']))
+
+    def test_concurrent_plot_files(self):
+        backtests = [Backtest(GOOG.iloc[:100], SmaCross) for _ in range(2)]
+        for bt in backtests:
+            bt.run()
+        heatmap = partial(plot_heatmaps, self._heatmap())
+        real_gridplot = _plotting.gridplot
+        pairs = [(backtests[0].plot, backtests[1].plot),
+                 (heatmap, heatmap), (backtests[0].plot, heatmap)]
+        for first, second in pairs:
+            with self.subTest(first=first, second=second), TemporaryDirectory() as directory:
+                barrier = Barrier(2, timeout=30)
+
+                def gridplot(*args, **kwargs):
+                    fig = real_gridplot(*args, **kwargs)
+                    barrier.wait()
+                    return fig
+
+                paths = [os.path.join(directory, name) for name in ('first.html', 'second.html')]
+                with patch(_plotting, 'gridplot', gridplot), ThreadPoolExecutor(2) as executor:
+                    futures = [executor.submit(plot, filename=path, open_browser=False)
+                               for plot, path in zip((first, second), paths)]
+                    figures = [future.result(timeout=60) for future in futures]
+                for i in range(2):
+                    self.assertTrue(os.path.isfile(paths[i]))
+                    self._assert_plot_file(paths[i], figures[i], figures[1 - i])
+                    self.assertEqual(figures[i].document.roots, [figures[i]])
+                self.assertIsNot(figures[0].document, figures[1].document)
+
+    def test_preserve_bokeh_state(self):
+        from bokeh.io import curdoc
+        from bokeh.io import state as io_state
+        from bokeh.io.state import State, curstate
+        from bokeh.models import Div
+
+        bt = Backtest(GOOG.iloc[:100], SmaCross)
+        bt.run()
+        with TemporaryDirectory() as directory:
+            state = State()
+            state.output_file(os.path.join(directory, 'external.html'), title='External plot')
+            state.output_notebook()
+            document = state.document
+            root = Div(text='External document')
+            document.add_root(root)
+            output = state.file
+            with patch(io_state, '_STATE', state):
+                for i, plot in enumerate((bt.plot, partial(plot_heatmaps, self._heatmap()))):
+                    filename = os.path.join(directory, f'plot-{i}.html')
+                    fig = plot(filename=filename, open_browser=False)
+                    self._assert_plot_file(filename, fig)
+                    self.assertIs(curstate(), state)
+                    self.assertIs(curdoc(), document)
+                    self.assertEqual(document.roots, [root])
+                    self.assertIs(state.file, output)
+                    self.assertTrue(state.notebook)
+                    self.assertEqual(state.notebook_type, 'jupyter')
+                    self.assertIsNot(fig.document, document)
+            self.assertFalse(os.path.exists(output.filename))
+
+    def test_output_modes(self):
+        from bokeh.events import DocumentReady
+        from bokeh.io import notebook, state as io_state, util as io_util
+        from bokeh.io.state import State
+        from bokeh.models import CustomJS
+
+        bt = Backtest(GOOG.iloc[:100], SmaCross)
+        bt.run()
+        external = State()
+        marker = 'FOREIGN_DOCUMENT_MARKER'
+        external.document.js_on_event(DocumentReady, CustomJS(code=f'console.log("{marker}");'))
+        for plot in (bt.plot, partial(plot_heatmaps, self._heatmap())):
+            with self.subTest(plot=plot), TemporaryDirectory() as directory, chdir(directory):
+                opened = []
+                published = []
+
+                def browser(filename, **kwargs):
+                    opened.append(Path(filename).read_text(encoding='utf-8'))
+
+                def publish(data, **kwargs):
+                    published.append(data)
+
+                with patch(_plotting, 'IS_JUPYTER_NOTEBOOK', True), \
+                        patch(_plotting, 'view', browser), \
+                        patch(notebook, 'publish_display_data', publish), \
+                        patch(io_state, '_STATE', external), \
+                        patch(io_util, 'detect_current_filename',
+                              lambda: os.path.join(directory, 'notebook.py')):
+                    fig = plot(open_browser=True)
+                    self.assertIn(fig.id, published[0][notebook.HTML_MIME_TYPE])
+                    script = published[1][notebook.JS_MIME_TYPE]
+                    self.assertIn(fig.id, script)
+                    self.assertIn('plx.gif.html', script)
+                    self.assertNotIn(marker, script)
+                    self.assertIs(io_state.curstate(), external)
+                    self.assertIsNot(fig.document, external.document)
+                    self.assertEqual(fig.document.roots, [fig])
+                    self.assertEqual(opened, [])
+                    self.assertEqual(os.listdir(directory), [])
+                    published.clear()
+                    for open_browser in (False, True):
+                        fig = plot(filename='explicit', open_browser=open_browser)
+                        self._assert_plot_file('explicit.html', fig)
+                        self.assertFalse(os.path.exists('explicit'))
+                        self.assertEqual(published, [])
+                        if open_browser:
+                            self.assertEqual(len(opened), 1)
+                            self.assertRegex(opened[0], rf'"id"\s*:\s*"{re.escape(fig.id)}"')
+                        else:
+                            self.assertEqual(opened, [])
+
+    def test_notebook_delayed_load(self):
+        from bokeh.io import notebook
+
+        node = which('node')
+        if node is None:
+            self.skipTest('Node.js is required to execute notebook JavaScript')
+        published = []
+
+        def publish(data, **kwargs):
+            published.append(data)
+
+        with patch(_plotting, 'IS_JUPYTER_NOTEBOOK', True), \
+                patch(notebook, 'publish_display_data', publish):
+            fig = plot_heatmaps(self._heatmap(), open_browser=False)
+        result = subprocess.run(
+            [node, '-e', '''
+                const vm = require("node:vm");
+                const script = require("node:fs").readFileSync(0, "utf8");
+                const timers = new Map();
+                const renders = [];
+                let next = 0;
+                const context = {
+                    setInterval(callback, delay, ...args) {
+                        const id = ++next;
+                        timers.set(id, () => callback(...args));
+                        return id;
+                    },
+                    clearInterval(id) { timers.delete(id); },
+                };
+                context.window = context;
+                vm.runInNewContext(script, context);
+                for (const tick of [...timers.values()]) tick();
+                context.Bokeh = {embed: {
+                    embed_items_notebook(docs, items) { renders.push({docs, items}); },
+                }};
+                for (const tick of [...timers.values()]) tick();
+                process.stdout.write(JSON.stringify({renders, pending: timers.size}));
+            '''],
+            input=published[1][notebook.JS_MIME_TYPE], text=True,
+            capture_output=True, check=True, timeout=10)
+        output = json.loads(result.stdout)
+        self.assertEqual(output['pending'], 0)
+        self.assertEqual(len(output['renders']), 1)
+        documents = output['renders'][0]['docs']
+        roots = [root['id'] for doc in documents.values() for root in doc['roots']]
+        self.assertEqual(roots, [fig.id])
+        self.assertIn('plx.gif.html', json.dumps(documents))
+
+    def test_default_filenames(self):
+        from bokeh.io import util as io_util
+
+        bt = Backtest(GOOG.iloc[:100], SmaCross)
+        bt.run(fast=5)
+        with TemporaryDirectory() as directory, chdir(directory), \
+                patch(_plotting, 'IS_JUPYTER_NOTEBOOK', False), \
+                patch(io_util, 'detect_current_filename',
+                      lambda: os.path.join(directory, 'heatmap.py')):
+            fig = bt.plot(open_browser=False)
+            filename = ('SmaCross_fast-5_.html' if sys.platform.startswith('win')
+                        else 'SmaCross(fast=5).html')
+            self._assert_plot_file(filename, fig)
+            fig = plot_heatmaps(self._heatmap(), open_browser=False)
+            self._assert_plot_file('heatmap.html', fig)
+
     def test_plot_before_run(self):
         bt = Backtest(GOOG, SmaCross)
         self.assertRaises(RuntimeError, bt.plot)

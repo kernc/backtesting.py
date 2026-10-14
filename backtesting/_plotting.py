@@ -17,6 +17,10 @@ from bokeh.colors.named import (
     lime as BULL_COLOR,
     tomato as BEAR_COLOR
 )
+from bokeh.core.json_encoder import serialize_json
+from bokeh.core.templates import DOC_NB_JS
+from bokeh.embed.elements import div_for_render_item
+from bokeh.embed.util import standalone_docs_json_and_render_items
 from bokeh.events import DocumentReady
 from bokeh.plotting import figure as _figure
 from bokeh.models import (  # type: ignore
@@ -36,11 +40,12 @@ try:
     from bokeh.models import CustomJSTickFormatter
 except ImportError:  # Bokeh < 3.0
     from bokeh.models import FuncTickFormatter as CustomJSTickFormatter  # type: ignore
-from bokeh.io import curdoc, output_notebook, output_file, show
-from bokeh.io.state import curstate
+from bokeh.io import notebook, output_notebook, save
+from bokeh.io.state import State
 from bokeh.layouts import gridplot
 from bokeh.palettes import Category10
 from bokeh.transform import factor_cmap, transform
+from bokeh.util.browser import view
 
 from backtesting._util import _data_period, _as_list, _Indicator, try_
 
@@ -76,19 +81,39 @@ def _windos_safe_filename(filename):
     return filename
 
 
-def _bokeh_reset(filename=None):
-    curstate().reset()
+def _bokeh_state(filename=None):
+    state = State()
     if filename:
         if not filename.endswith('.html'):
             filename += '.html'
-        output_file(filename, title=filename)
+        state.output_file(filename, title=filename)
     elif IS_JUPYTER_NOTEBOOK:
-        curstate().output_notebook()
-    _add_popcon()
+        state.output_notebook()
+    return state
 
 
-def _add_popcon():
-    curdoc().js_on_event(DocumentReady, CustomJS(code='''(function() { var i = document.createElement('iframe'); i.style.display='none';i.width=i.height=1;i.loading='eager';i.src='https://kernc.github.io/backtesting.py/plx.gif.html?utm_source='+location.origin;document.body.appendChild(i);})();'''))  # noqa: E501
+def _show(fig, state, open_browser):
+    state.document.add_root(fig)
+    _add_popcon(state.document)
+    if state.notebook:
+        # show_doc() copies callbacks from Bokeh's global document.
+        docs_json, [render_item] = standalone_docs_json_and_render_items(state.document)
+        div = div_for_render_item(render_item)
+        script = DOC_NB_JS.render(
+            docs_json=serialize_json(docs_json),
+            render_items=serialize_json([render_item.to_json()]))
+        notebook.publish_display_data({notebook.HTML_MIME_TYPE: div})
+        notebook.publish_display_data(
+            {notebook.JS_MIME_TYPE: script, notebook.EXEC_MIME_TYPE: ""},
+            metadata={notebook.EXEC_MIME_TYPE: {"id": fig.id}})
+    else:
+        filename = save(fig, state=state)
+        if open_browser:
+            view(filename, new='tab')
+
+
+def _add_popcon(document):
+    document.js_on_event(DocumentReady, CustomJS(code='''(function() { var i = document.createElement('iframe'); i.style.display='none';i.width=i.height=1;i.loading='eager';i.src='https://kernc.github.io/backtesting.py/plx.gif.html?utm_source='+location.origin;document.body.appendChild(i);})();'''))  # noqa: E501
 
 
 def _watermark(fig: _figure):
@@ -208,12 +233,9 @@ def plot(*, results: pd.Series,
     """
     Like much of GUI code everywhere, this is a mess.
     """
-    # We need to reset global Bokeh state, otherwise subsequent runs of
-    # plot() contain some previous run's cruft data (was noticed when
-    # TestPlot.test_file_size() test was failing).
     if not filename and not IS_JUPYTER_NOTEBOOK:
         filename = _windos_safe_filename(str(results._strategy))
-    _bokeh_reset(filename)
+    state = _bokeh_state(filename)
 
     COLORS = [BEAR_COLOR, BULL_COLOR]
     BAR_WIDTH = .8
@@ -722,7 +744,7 @@ return this.labels[index] || "";
         merge_tools=True,
         **kwargs  # type: ignore
     )
-    show(fig, browser=None if open_browser else 'none')
+    _show(fig, state, open_browser)
     return fig
 
 
@@ -736,7 +758,7 @@ def plot_heatmaps(heatmap: pd.Series, agg: Union[Callable, str], ncols: int,
         raise ValueError('`plot_heatmap()` requires at least two optimization '
                          'variables to plot')
 
-    _bokeh_reset(filename)
+    state = _bokeh_state(filename)
 
     param_combinations = combinations(heatmap.index.names, 2)
     dfs = [heatmap.groupby(list(dims)).agg(agg).to_frame(name='_Value')
@@ -789,5 +811,5 @@ def plot_heatmaps(heatmap: pd.Series, agg: Union[Callable, str], ncols: int,
         toolbar_location='above',
         merge_tools=True,
     )
-    show(fig, browser=None if open_browser else 'none')
+    _show(fig, state, open_browser)
     return fig
