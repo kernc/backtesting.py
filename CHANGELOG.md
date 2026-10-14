@@ -5,6 +5,8 @@ These were the major changes contributing to each release:
 
 ### 0.x.x
 
+* Isolate Bokeh output state so concurrent plots and heatmaps save to their own files (#125).
+
 ### 0.6.6
 (2026-07-22)
 
