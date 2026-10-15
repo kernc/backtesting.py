@@ -677,6 +677,51 @@ class TestOptimize(TestCase):
 
 
 class TestPlot(TestCase):
+    def test_superimpose_daily_with_seconds(self):
+        df = pd.DataFrame(
+            dict(Open=100., High=102., Low=99., Close=101., Volume=10.),
+            index=pd.to_datetime([
+                '2021-01-25 14:30:00', '2021-01-26 14:30:00',
+                '2021-01-27 14:30:00', '2021-01-28 14:30:00',
+                '2021-01-29 21:00:02',
+            ]))
+        self.assertEqual(df.index.resolution, 'second')
+        bt = Backtest(df, SmaCross)
+        bt.run()
+        with _tempfile() as f:
+            bt.plot(superimpose=True, resample=False, filename=f, open_browser=False)
+            self.assertGreater(os.path.getsize(f), 0)
+
+    def test_superimpose_explicit_upsampling(self):
+        bt = Backtest(GOOG.iloc[:100], SmaCross)
+        bt.run()
+        with _tempfile() as f:
+            with self.assertRaisesRegex(ValueError, 'Upsampling not supported'):
+                bt.plot(superimpose='h', resample=False, filename=f, open_browser=False)
+
+    def test_superimpose_uses_data_period(self):
+        from bokeh.models import ColumnDataSource
+
+        class NoTrade(_S):
+            def next(self):
+                pass
+
+        for period, rule in [('D', 'ME'), ('h', 'D'), ('15min', 'h'),
+                             ('s', 'min'), ('ms', 's')]:
+            with self.subTest(period=period), _tempfile() as f:
+                df = GOOG.iloc[:100].copy()
+                index = pd.date_range('2021-01-01 14:30:00', periods=len(df), freq=period)
+                df.index = index[:-1].append(index[-1:] + pd.Timedelta(microseconds=123))
+                bt = Backtest(df, NoTrade)
+                bt.run()
+                fig = bt.plot(superimpose=True, resample=False, filename=f, open_browser=False)
+                sources = [source for source in fig.select({'type': ColumnDataSource})
+                           if '_width' in source.data]
+                self.assertEqual(len(sources), 1)
+                expected = df.resample(rule, label='left').agg(OHLCV_AGG)
+                for column in ('Open', 'High', 'Low', 'Close'):
+                    np.testing.assert_array_equal(sources[0].data[column], expected[column])
+
     def test_plot_before_run(self):
         bt = Backtest(GOOG, SmaCross)
         self.assertRaises(RuntimeError, bt.plot)
