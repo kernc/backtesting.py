@@ -474,17 +474,17 @@ return this.labels[index] || "";
 
     def _plot_superimposed_ohlc():
         """Superimposed, downsampled vbars"""
-        time_resolution = pd.DatetimeIndex(df['datetime']).resolution
+        orig_freq = _data_period(df['datetime'])
+        # Timestamp precision need not match the interval between candles.
         resample_rule = (superimpose if isinstance(superimpose, str) else
-                         dict(day='ME',
-                              hour='D',
-                              minute='h',
-                              second='min',
-                              millisecond='s').get(time_resolution))
+                         next((rule for period, rule in (
+                             ('1D', 'ME'), ('1h', 'D'), ('1min', 'h'),
+                             ('1s', 'min'), ('1ms', 's'),
+                         ) if orig_freq >= pd.Timedelta(period)), None))
         if not resample_rule:
             warnings.warn(
                 f"'Can't superimpose OHLC data with rule '{resample_rule}'"
-                f"(index datetime resolution: '{time_resolution}'). Skipping.",
+                f"(data period: '{orig_freq}'). Skipping.",
                 stacklevel=4)
             return
 
@@ -493,7 +493,6 @@ return this.labels[index] || "";
                .agg(dict(OHLCV_AGG, _width='count')))
 
         # Check if resampling was downsampling; error on upsampling
-        orig_freq = _data_period(df['datetime'])
         resample_freq = _data_period(df2.index)
         if resample_freq < orig_freq:
             raise ValueError('Invalid value for `superimpose`: Upsampling not supported.')
