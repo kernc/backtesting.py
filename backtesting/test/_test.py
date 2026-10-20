@@ -1267,6 +1267,33 @@ class TestRegressions(TestCase):
         self.assertEqual(trades['ExitBar'].iloc[0], 3)
         self.assertEqual(trades['ExitPrice'].iloc[0], 105)
 
+    def test_contingent_sl_tp_validated_against_current_price(self):
+        class S(_S):
+            def next(self):
+                i = len(self.data.index)
+                if i == 4:
+                    self.buy()
+                if i == 5:
+                    t = self.trades[0]
+                    # The current price is the close of the last bar, 106.00.
+                    # A stop-loss above it would trigger right away, and a
+                    # take-profit below it would fill right away.
+                    with self.assertRaises(ValueError):
+                        t.sl = 110
+                    with self.assertRaises(ValueError):
+                        t.tp = 90
+                    # A rejected assignment leaves the brackets untouched
+                    self.assertIsNone(t.sl)
+                    self.assertIsNone(t.tp)
+                    # Brackets on the correct side of the price are accepted
+                    t.sl = 105
+                    t.tp = 107.9
+                    self.assertEqual(t.sl, 105)
+                    self.assertEqual(t.tp, 107.9)
+
+        trades = Backtest(SHORT_DATA, S).run()._trades
+        self.assertEqual(trades['ExitPrice'].iloc[0], 104.95)
+
     def test_optimize_datetime_index_with_timezone(self):
         data: pd.DataFrame = GOOG.iloc[:100]
         data.index = data.index.tz_localize('Asia/Kolkata')
