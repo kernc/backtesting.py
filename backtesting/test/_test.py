@@ -1048,6 +1048,7 @@ class TestLib(TestCase):
         trade = trades.iloc[0]
         self.assertAlmostEqual(trade['EntryPrice'], 236.69)
         self.assertAlmostEqual(stats['_strategy']._indicators[0][trade['EntryBar']], 234.14)
+        self.assertAlmostEqual(trade['Entry_SMA(C,2)'], 234.14)
 
     def test_MultiBacktest(self):
         import backtesting

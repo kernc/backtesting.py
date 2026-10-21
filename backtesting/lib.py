@@ -555,6 +555,11 @@ class FractionalBacktest(Backtest):
         for i, indicator in enumerate(indicators):
             if indicator._opts['overlay']:
                 indicators[i] = indicator / self._fractional_unit
+                n = len(np.atleast_2d(indicator))
+                suffixes = [f'_{j}' for j in range(n)] if n > 1 else ['']
+                cols = [f'{when}_{indicator.name}{suffix}'
+                        for when in ('Entry', 'Exit') for suffix in suffixes]
+                trades[trades.columns.intersection(cols)] /= self._fractional_unit
 
         return result
 
