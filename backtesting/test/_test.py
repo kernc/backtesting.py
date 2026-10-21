@@ -1268,6 +1268,10 @@ class TestRegressions(TestCase):
         self.assertEqual(trades['ExitPrice'].iloc[0], 105)
 
     def test_contingent_sl_tp_validated_against_current_price(self):
+        # Inside next() `self` is the strategy, not the test case, so the
+        # assertions close over the test case instead.
+        test = self
+
         class S(_S):
             def next(self):
                 i = len(self.data.index)
@@ -1278,18 +1282,18 @@ class TestRegressions(TestCase):
                     # The current price is the close of the last bar, 106.00.
                     # A stop-loss above it would trigger right away, and a
                     # take-profit below it would fill right away.
-                    with self.assertRaises(ValueError):
+                    with test.assertRaises(ValueError):
                         t.sl = 110
-                    with self.assertRaises(ValueError):
+                    with test.assertRaises(ValueError):
                         t.tp = 90
                     # A rejected assignment leaves the brackets untouched
-                    self.assertIsNone(t.sl)
-                    self.assertIsNone(t.tp)
+                    test.assertIsNone(t.sl)
+                    test.assertIsNone(t.tp)
                     # Brackets on the correct side of the price are accepted
                     t.sl = 105
                     t.tp = 107.9
-                    self.assertEqual(t.sl, 105)
-                    self.assertEqual(t.tp, 107.9)
+                    test.assertEqual(t.sl, 105)
+                    test.assertEqual(t.tp, 107.9)
 
         trades = Backtest(SHORT_DATA, S).run()._trades
         self.assertEqual(trades['ExitPrice'].iloc[0], 104.95)
