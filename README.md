@@ -62,36 +62,37 @@ Results in:
 Start                     2004-08-19 00:00:00
 End                       2013-03-01 00:00:00
 Duration                   3116 days 00:00:00
-Exposure Time [%]                       94.27
-Equity Final [$]                     68935.12
-Equity Peak [$]                      68991.22
-Return [%]                             589.35
-Buy & Hold Return [%]                  703.46
-Return (Ann.) [%]                       25.42
-Volatility (Ann.) [%]                   38.43
-CAGR [%]                                16.80
-Sharpe Ratio                             0.66
-Sortino Ratio                            1.30
-Calmar Ratio                             0.77
-Alpha [%]                              450.62
-Beta                                     0.02
-Max. Drawdown [%]                      -33.08
-Avg. Drawdown [%]                       -5.58
-Max. Drawdown Duration      688 days 00:00:00
-Avg. Drawdown Duration       41 days 00:00:00
+Exposure Time [%]                    94.27374
+Equity Final [$]                  56263.51934
+Equity Peak [$]                   56309.05934
+Commissions [$]                   10563.95154
+Return [%]                          462.63519
+Buy & Hold Return [%]               607.37036
+Return (Ann.) [%]                    22.47754
+Volatility (Ann.) [%]                37.41641
+CAGR [%]                             22.44464
+Sharpe Ratio                          0.60074
+Sortino Ratio                         1.14509
+Calmar Ratio                          0.66244
+Alpha [%]                           450.62135
+Beta                                  0.01978
+Max. Drawdown [%]                   -33.93159
+Avg. Drawdown [%]                    -6.16072
+Max. Drawdown Duration      830 days 00:00:00
+Avg. Drawdown Duration       50 days 00:00:00
 # Trades                                   93
-Win Rate [%]                            53.76
-Best Trade [%]                          57.12
-Worst Trade [%]                        -16.63
-Avg. Trade [%]                           1.96
+Win Rate [%]                         52.68817
+Best Trade [%]                       56.91868
+Worst Trade [%]                     -16.82943
+Avg. Trade [%]                        1.75814
 Max. Trade Duration         121 days 00:00:00
 Avg. Trade Duration          32 days 00:00:00
-Profit Factor                            2.13
-Expectancy [%]                           6.91
-SQN                                      1.78
-Kelly Criterion                        0.6134
-_strategy              SmaCross(n1=10, n2=20)
-_equity_curve                          Equ...
+Profit Factor                         1.99349
+Expectancy [%]                        2.29043
+SQN                                   1.58439
+Kelly Criterion                       0.20929
+_strategy                            SmaCross
+_equity_curve                             ...
 _trades                       Size  EntryB...
 dtype: object
 ```
