@@ -180,7 +180,7 @@ def _maybe_resample_data(resample_rule, df, indicators, equity_data, trades):
         trades['ReturnPct'] = (
             trades['_weighted_ret'] / trades['_abs_size']
         )
-        trades.drop(columns=['_abs_size', '_weighted_ret'], inplace=True)
+        trades = trades.drop(columns=['_abs_size', '_weighted_ret'])
 
         new_index = pd.Index(df.index.astype(np.int64))
         trades['EntryBar'] = new_index.get_indexer(
