@@ -1190,6 +1190,22 @@ class TestRegressions(TestCase):
         self.assertFalse(np.isnan(stats['Return (Ann.) [%]']))
         self.assertEqual(round(stats['Return (Ann.) [%]']), -3)
 
+    def test_stats_annualized_month_and_quarter_end(self):
+        class S(_S):
+            def next(self):
+                if not self.position:
+                    self.buy()
+
+        keys = ['Return (Ann.) [%]', 'Volatility (Ann.) [%]', 'Sharpe Ratio', 'Sortino Ratio']
+        for calendar_rule, business_rule in (('ME', 'BME'), ('QE', 'BQE')):
+            with self.subTest(rule=business_rule):
+                # Same bars, stamped on the calendar vs. the last business day of the period
+                stats = Backtest(GOOG.resample(calendar_rule).agg(OHLCV_AGG), S).run()
+                business_stats = Backtest(GOOG.resample(business_rule).agg(OHLCV_AGG), S).run()
+                np.testing.assert_allclose(business_stats[keys].astype(float),
+                                           stats[keys].astype(float))
+                self.assertAlmostEqual(stats['Return (Ann.) [%]'], stats['CAGR [%]'], delta=.5)
+
     def test_cancel_orders(self):
         class S(_S):
             def next(self):
