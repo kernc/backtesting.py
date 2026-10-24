@@ -29,8 +29,10 @@ def compute_drawdown_duration_peaks(dd: pd.Series):
 
 def geometric_mean(returns: pd.Series) -> float:
     returns = returns.fillna(0) + 1
-    if np.any(returns <= 0):
+    if np.any(returns < 0):
         return 0
+    if np.any(returns == 0):
+        return -1
     return np.exp(np.log(returns).sum() / (len(returns) or np.nan)) - 1
 
 

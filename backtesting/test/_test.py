@@ -17,7 +17,7 @@ import pandas as pd
 from pandas.testing import assert_frame_equal
 
 from backtesting import Backtest as _Backtest, Strategy
-from backtesting._stats import compute_drawdown_duration_peaks
+from backtesting._stats import compute_drawdown_duration_peaks, geometric_mean
 from backtesting._util import _Array, _as_str, _Indicator, patch, try_
 from backtesting.lib import (
     FractionalBacktest, MultiBacktest, OHLCV_AGG,
@@ -324,6 +324,33 @@ class TestBacktest(TestCase):
         durations, peaks = compute_drawdown_duration_peaks(dd)
         np.testing.assert_array_equal(durations, pd.Series([3, 2], index=[3, 5]).reindex(dd.index))
         np.testing.assert_array_equal(peaks, pd.Series([7, 4], index=[3, 5]).reindex(dd.index))
+
+    def test_geometric_mean_total_loss(self):
+        for returns in ([-1.], [.2, -1.], [-1., .2], [np.nan, -1., .2]):
+            with self.subTest(returns=returns):
+                values = pd.Series(returns)
+                expected = (1 + values.fillna(0)).prod() ** (1 / len(values)) - 1
+                self.assertEqual(geometric_mean(values), expected)
+
+    def test_geometric_mean_positive_growth_factors(self):
+        values = pd.Series([.2, -.1, np.nan, .05])
+        expected = (1 + values.fillna(0)).prod() ** (1 / len(values)) - 1
+        self.assertAlmostEqual(geometric_mean(values), expected)
+        self.assertTrue(np.isnan(geometric_mean(pd.Series([], dtype=float))))
+
+    def test_compute_stats_total_loss(self):
+        class BuyAndHold(_S):
+            def next(self):
+                if not self.position:
+                    self.buy(size=2)
+
+        data = pd.DataFrame(
+            {column: [100., 100., 100., 0.01] for column in ('Open', 'High', 'Low', 'Close')},
+            index=pd.date_range('2024-01-01', periods=4),
+        )
+        stats = Backtest(data, BuyAndHold, cash=100, margin=.1).run()
+        self.assertEqual(stats['Equity Final [$]'], 0)
+        self.assertEqual(stats['Return (Ann.) [%]'], -100)
 
     def test_compute_stats(self):
         stats = Backtest(GOOG, SmaCross, finalize_trades=True).run()
