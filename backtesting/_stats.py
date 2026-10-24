@@ -123,12 +123,13 @@ def compute_stats(
     if is_datetime_index:
         freq_days = cast(pd.Timedelta, _data_period(index)).days
         have_weekends = index.dayofweek.to_series().between(5, 6).mean() > 2 / 7 * .6
-        annual_trading_days = (
-            52 if freq_days == 7 else
-            12 if freq_days == 31 else
-            1 if freq_days == 365 else
-            (365 if have_weekends else 252))
-        freq = {7: 'W', 31: 'ME', 365: 'YE'}.get(freq_days, 'D')
+        # Bars stamped on e.g. the last business day of the month aren't evenly spaced
+        freq, annual_trading_days = (
+            ('W', 52) if freq_days == 7 else
+            ('ME', 12) if 28 <= freq_days <= 31 else
+            ('QE', 4) if 89 <= freq_days <= 92 else
+            ('YE', 1) if 364 <= freq_days <= 366 else
+            ('D', 365 if have_weekends else 252))
         day_returns = equity_df['Equity'].resample(freq).last().dropna().pct_change().dropna()
         gmean_day_return = geometric_mean(day_returns)
 
