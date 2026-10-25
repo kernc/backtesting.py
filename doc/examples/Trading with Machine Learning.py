@@ -78,7 +78,7 @@ data['X_BB_width'] = (upper - lower) / close
 data['X_Sentiment'] = ~data.index.to_series().between('2017-09-27', '2017-12-14')
 
 # Some datetime features for good measure
-data['X_day'] = data.index.dayofweek
+data['X_day'] = data.index.day_of_week
 data['X_hour'] = data.index.hour
 
 data = data.dropna().astype(float)
