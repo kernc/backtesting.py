@@ -1627,7 +1627,7 @@ class Backtest:
                 heatmap = pd.Series(dict(zip(map(tuple, res.xv), -res.funv)),
                                     name=maximize_key)
                 heatmap.index.names = kwargs.keys()
-                heatmap.sort_index(inplace=True)
+                heatmap = heatmap.sort_index()
                 output.append(heatmap)
 
             if return_optimization:
