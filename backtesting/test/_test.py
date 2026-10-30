@@ -1037,6 +1037,36 @@ class TestLib(TestCase):
         stats = Backtest(GOOG, S).run()
         self.assertEqual(stats['# Trades'], 57)
 
+    def test_TrailingStrategy_no_lookahead(self):
+        # Stop-losses set up to some bar must not depend on prices after it (#963)
+        def stop_losses(df):
+            sls = []
+
+            class S(TrailingStrategy):
+                def init(self):
+                    super().init()
+                    self.set_atr_periods(20)
+                    self.set_trailing_sl(2)
+
+                def next(self):
+                    super().next()
+                    if not self.position:
+                        self.buy()
+                    sls.append(self.trades[0].sl if self.trades else None)
+
+            Backtest(df, S).run()
+            return sls
+
+        df = GOOG.iloc[:60]
+        changed = df.copy()
+        changed.iloc[10:, changed.columns.get_loc('High')] *= 1.5
+        before, after = stop_losses(df), stop_losses(changed)
+        # Bars before index 10 only see unchanged prices
+        self.assertEqual(before[:9], after[:9])
+        # ATR is unknown during its warm-up, so the stop-loss isn't trailed yet
+        self.assertEqual(before[:18], [None] * 18)
+        self.assertIsNotNone(before[-1])
+
     def test_FractionalBacktest(self):
         ubtc_bt = FractionalBacktest(
             BTCUSD['2015':], SmaCross, fractional_unit=1 / 1e6, cash=100,
