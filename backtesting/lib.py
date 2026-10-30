@@ -467,10 +467,14 @@ class TrailingStrategy(Strategy):
         """
         Set the lookback period for computing ATR. The default value
         of 100 ensures a _stable_ ATR.
+
+        ATR is undefined during the first `periods` bars, and
+        the trailing stop-loss is not adjusted until it becomes known.
         """
         hi, lo, c_prev = self.data.High, self.data.Low, pd.Series(self.data.Close).shift(1)
         tr = np.max([hi - lo, (c_prev - hi).abs(), (c_prev - lo).abs()], axis=0)
-        atr = pd.Series(tr).rolling(periods).mean().bfill().values
+        # Leave the warm-up NaNs, as back-filling them would use future data (#963)
+        atr = pd.Series(tr).rolling(periods).mean().values
         self.__atr = atr
 
     def set_trailing_sl(self, n_atr: float = 6):
@@ -490,13 +494,15 @@ class TrailingStrategy(Strategy):
             with `mean(Close * pct / atr)` and set with `set_trailing_sl`.
         """
         assert 0 < pct < 1, 'Need pct= as rate, i.e. 5% == 0.05'
-        pct_in_atr = np.mean(self.data.Close * pct / self.__atr)  # type: ignore
+        pct_in_atr = np.nanmean(self.data.Close * pct / self.__atr)  # type: ignore
         self.set_trailing_sl(pct_in_atr)
 
     def next(self):
         super().next()
         # Can't use index=-1 because self.__atr is not an Indicator type
         index = len(self.data) - 1
+        if np.isnan(self.__atr[index]):
+            return
         for trade in self.trades:
             if trade.is_long:
                 trade.sl = max(trade.sl or -np.inf,
