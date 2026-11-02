@@ -339,6 +339,6 @@ class SharedMemoryManager:
         df = pd.DataFrame({
             col: SharedMemoryManager.shm2s(shm, shape, dtype)
             for shm, (col, _, shape, dtype) in zip(shm, data_shm)})
-        df.set_index(SharedMemoryManager._DF_INDEX_COL, drop=True, inplace=True)
+        df = df.set_index(SharedMemoryManager._DF_INDEX_COL, drop=True)
         df.index.name = None
         return df, shm

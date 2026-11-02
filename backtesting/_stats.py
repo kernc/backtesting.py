@@ -122,7 +122,7 @@ def compute_stats(
     is_datetime_index = isinstance(index, pd.DatetimeIndex)
     if is_datetime_index:
         freq_days = cast(pd.Timedelta, _data_period(index)).days
-        have_weekends = index.dayofweek.to_series().between(5, 6).mean() > 2 / 7 * .6
+        have_weekends = index.day_of_week.to_series().between(5, 6).mean() > 2 / 7 * .6
         annual_trading_days = (
             52 if freq_days == 7 else
             12 if freq_days == 31 else
