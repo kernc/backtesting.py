@@ -322,6 +322,10 @@ class SharedMemoryManager:
     def df2shm(self, df):
         return tuple((
             (column, *self.arr2shm(values))
+            if isinstance(getattr(values.dtype, 'base', None), np.dtype) else
+            # Not backed by a NumPy array (e.g. pandas>=3 default `str` dtype); pass by value.
+            # Such columns are copied into every task's arguments instead of shared.
+            (column, None, values.array, values.dtype)
             for column, values in chain([(self._DF_INDEX_COL, df.index)], df.items())
         ))
 
@@ -335,10 +339,12 @@ class SharedMemoryManager:
 
     @staticmethod
     def shm2df(data_shm):
-        shm = [SharedMemory(name=name, create=False, track=False) for _, name, _, _ in data_shm]
+        shm = {name: SharedMemory(name=name, create=False, track=False)
+               for _, name, _, _ in data_shm if name is not None}
         df = pd.DataFrame({
-            col: SharedMemoryManager.shm2s(shm, shape, dtype)
-            for shm, (col, _, shape, dtype) in zip(shm, data_shm)})
+            col: (SharedMemoryManager.shm2s(shm[name], shape, dtype) if name is not None else
+                  pd.Series(shape, dtype=dtype))  # Passed by value
+            for col, name, shape, dtype in data_shm})
         df.set_index(SharedMemoryManager._DF_INDEX_COL, drop=True, inplace=True)
         df.index.name = None
-        return df, shm
+        return df, list(shm.values())

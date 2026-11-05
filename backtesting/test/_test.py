@@ -18,7 +18,7 @@ from pandas.testing import assert_frame_equal
 
 from backtesting import Backtest as _Backtest, Strategy
 from backtesting._stats import compute_drawdown_duration_peaks
-from backtesting._util import _Array, _as_str, _Indicator, patch, try_
+from backtesting._util import SharedMemoryManager, _Array, _as_str, _Indicator, patch, try_
 from backtesting.lib import (
     FractionalBacktest, MultiBacktest, OHLCV_AGG,
     SignalStrategy,
@@ -1282,6 +1282,23 @@ class TestRegressions(TestCase):
             bt = Backtest(data, SmaCross)
         res = bt.optimize(fast=range(2, 3), slow=range(4, 5))
         self.assertGreater(res['# Trades'], 0)
+
+    def test_optimize_extension_dtype_columns(self):
+        # E.g. string columns, which pandas >= 3 infers as `str` dtype
+        data = GOOG.iloc[:100].assign(Ticker=pd.array(['GOOG'] * 100, dtype='string'),
+                                      Count=pd.array(range(100), dtype='Int64'))
+        res = Backtest(data, SmaCross).optimize(fast=range(2, 3), slow=range(4, 5))
+        self.assertGreater(res['# Trades'], 0)
+        res = MultiBacktest([data], SmaCross, finalize_trades=True).run(fast=2, slow=4)
+        self.assertGreater(res.loc['# Trades', 0], 0)
+
+        with SharedMemoryManager() as smm:
+            df, shms = smm.shm2df(smm.df2shm(data))
+            try:
+                assert_frame_equal(df, data)
+            finally:
+                for shm in shms:
+                    shm.close()
 
     def test_sl_tp_values_in_trades_df(self):
         class S(_S):
