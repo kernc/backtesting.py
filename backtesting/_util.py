@@ -323,7 +323,8 @@ class SharedMemoryManager:
         return tuple((
             (column, *self.arr2shm(values))
             if isinstance(getattr(values.dtype, 'base', None), np.dtype) else
-            # Not backed by a NumPy array (e.g. pandas>=3 default `str` dtype); pass by value
+            # Not backed by a NumPy array (e.g. pandas>=3 default `str` dtype); pass by value.
+            # Such columns are copied into every task's arguments instead of shared.
             (column, None, values.array, values.dtype)
             for column, values in chain([(self._DF_INDEX_COL, df.index)], df.items())
         ))
