@@ -485,6 +485,54 @@ class TestBacktest(TestCase):
         self.assertRaises(ValueError, Backtest(SHORT_DATA, S, spread=.02).run)
 
 
+class TestDrawdown(TestCase):
+    def assert_drawdowns(self, values, ends, durations, peaks, index=None):
+        dd = pd.Series(values, index=index, dtype=float)
+        actual_duration, actual_peaks = compute_drawdown_duration_peaks(dd)
+        expected_duration = pd.Series(durations, index=dd.index[ends], name='duration').reindex(dd.index)
+        expected_peaks = pd.Series(peaks, index=dd.index[ends], name='peak_dd').reindex(dd.index)
+        pd.testing.assert_series_equal(actual_duration, expected_duration)
+        pd.testing.assert_series_equal(actual_peaks, expected_peaks)
+
+    def test_recovered_intervals(self):
+        self.assert_drawdowns([0, .1, .2, 0, .05, 0, 0], [3, 5], [3., 2.], [.2, .05])
+
+    def test_final_unrecovered_interval(self):
+        self.assert_drawdowns([0, .1, 0, .05, .2, .15], [2, 5], [2., 3.], [.1, .2])
+
+    def test_final_bar_is_the_deepest(self):
+        self.assert_drawdowns([0, .1, .4], [2], [2.], [.4])
+
+    def test_consecutive_high_water_marks(self):
+        self.assert_drawdowns([0, 0, .2, .1, 0, 0, .3, 0], [4, 7], [3., 2.], [.2, .3])
+
+    def test_missing_values_inside_interval(self):
+        self.assert_drawdowns([0, np.nan, .2, 0, np.nan, .3, 0],
+                              [3, 6], [3., 3.], [.2, .3])
+
+    def test_irregular_timezone_aware_index(self):
+        index = pd.to_datetime(['2020-01-01', '2020-01-02', '2020-01-06',
+                                '2020-01-08', '2020-01-10', '2020-01-15'], utc=True)
+        self.assert_drawdowns([0, .1, 0, .05, .2, .15], [2, 5],
+                              [pd.Timedelta(days=5), pd.Timedelta(days=9)], [.1, .2], index)
+
+    def test_numeric_index_measures_index_distance(self):
+        self.assert_drawdowns([0, .1, 0, .05, .2, .15], [2, 5], [5., 9.], [.1, .2],
+                              pd.Index([0, 1, 5, 7, 9, 14]))
+
+    def test_no_drawdown_and_single_observation(self):
+        for values in ([0.], [0., 0., 0.]):
+            with self.subTest(values=values):
+                dd = pd.Series(values)
+                for result in compute_drawdown_duration_peaks(dd):
+                    pd.testing.assert_series_equal(result, dd.replace(0, np.nan))
+
+    def test_single_bar_unrecovered_interval_keeps_existing_output(self):
+        dd = pd.Series([0., .1])
+        for result in compute_drawdown_duration_peaks(dd):
+            pd.testing.assert_series_equal(result, pd.Series([np.nan, .1]))
+
+
 class TestStrategy(TestCase):
     @staticmethod
     def _Backtest(strategy_coroutine, data=SHORT_DATA, **kwargs):

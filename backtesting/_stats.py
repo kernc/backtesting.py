@@ -13,18 +13,22 @@ if TYPE_CHECKING:
 
 def compute_drawdown_duration_peaks(dd: pd.Series):
     iloc = np.unique(np.r_[(dd == 0).values.nonzero()[0], len(dd) - 1])
-    iloc = pd.Series(iloc, index=dd.index[iloc])
-    df = iloc.to_frame('iloc').assign(prev=iloc.shift())
-    df = df[df['iloc'] > df['prev'] + 1].astype(np.int64)
+    starts, ends = iloc[:-1], iloc[1:]
+    drawdown = ends > starts + 1
 
     # If no drawdown since no trade, avoid below for pandas sake and return nan series
-    if not len(df):
+    if not drawdown.any():
         return (dd.replace(0, np.nan),) * 2
 
-    df['duration'] = df['iloc'].map(dd.index.__getitem__) - df['prev'].map(dd.index.__getitem__)
-    df['peak_dd'] = df.apply(lambda row: dd.iloc[row['prev']:row['iloc'] + 1].max(), axis=1)
-    df = df.reindex(dd.index)
-    return df['duration'], df['peak_dd']
+    # Each recovered interval ends at zero. Excluding that boundary from its
+    # maximum has no effect; reduceat includes the final, unrecovered bar too.
+    # fmax, like Series.max(), skips missing values within an interval.
+    peaks = np.fmax.reduceat(dd.to_numpy(), starts)[drawdown]
+    starts, ends = starts[drawdown], ends[drawdown]
+    index = dd.index[ends]
+    durations = pd.Series(dd.index[ends] - dd.index[starts], index=index, name='duration')
+    peaks = pd.Series(peaks, index=index, name='peak_dd')
+    return durations.reindex(dd.index), peaks.reindex(dd.index)
 
 
 def geometric_mean(returns: pd.Series) -> float:
