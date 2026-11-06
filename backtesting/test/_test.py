@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import unittest
+import warnings
 from concurrent.futures.process import ProcessPoolExecutor
 from contextlib import contextmanager
 from functools import partial
@@ -130,6 +131,24 @@ class TestBacktest(TestCase):
             Backtest(GOOG.index, SmaCross).run()
         with self.assertRaises(ValueError):
             Backtest(GOOG.iloc[:0], SmaCross).run()
+
+    def test_ohlc_inconsistent_bars_warns(self):
+        df = GOOG.copy()
+        df.iloc[5, df.columns.get_loc('High')] = 0  # High < max(Open, Close)
+        with self.assertWarnsRegex(UserWarning, 'High < max\\(Open, Close\\)'):
+            Backtest(df, SmaCross).run()
+
+        df = GOOG.copy()
+        df.iloc[5, df.columns.get_loc('Low')] = 1e9  # Low > min(Open, Close)
+        with self.assertWarnsRegex(UserWarning, 'Low > min\\(Open, Close\\)'):
+            Backtest(df, SmaCross).run()
+
+        # No warning on consistent data
+        with warnings.catch_warnings(record=True) as records:
+            warnings.simplefilter('always')
+            Backtest(GOOG, SmaCross).run()
+        self.assertFalse(any('High < max(Open, Close)' in str(r.message)
+                             for r in records))
 
     def test_assertions(self):
         class Assertive(Strategy):

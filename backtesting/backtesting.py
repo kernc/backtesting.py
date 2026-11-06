@@ -1243,6 +1243,12 @@ class Backtest:
             raise ValueError('Some OHLC values are missing (NaN). '
                              'Please strip those lines with `df.dropna()` or '
                              'fill them in with `df.interpolate()` or whatever.')
+        inconsistent_bars = ((data['High'] < np.maximum(data['Open'], data['Close'])) |
+                             (data['Low'] > np.minimum(data['Open'], data['Close'])))
+        if inconsistent_bars.any():
+            warnings.warn(f'{inconsistent_bars.sum()} bars have High < max(Open, Close) '
+                          'or Low > min(Open, Close). Check your data for errors.',
+                          stacklevel=2)
         if np.any(data['Close'] > cash):
             warnings.warn('Some prices are larger than initial cash value. Note that fractional '
                           'trading is not supported by this class. If you want to trade Bitcoin, '
