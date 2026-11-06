@@ -1372,7 +1372,21 @@ class Backtest:
             # for future `indicator._opts['data'].index` calls to work
             data._set_length(len(self._data))
 
-            equity = pd.Series(broker._equity).bfill().fillna(broker._cash).values
+            # Back-fill NaN equity values (leading indicator warm-up bars)
+            # with the next valid value, and any remaining NaNs (no valid
+            # value follows) with the initial cash. Equivalent to
+            # `pd.Series(broker._equity).bfill().fillna(broker._cash)`,
+            # only without the pandas overhead, since this runs on every
+            # `Backtest.run()` call, notably in `Backtest.optimize()`.
+            equity = broker._equity.copy()
+            nan = np.isnan(equity)
+            if nan.any():
+                index = np.where(nan, len(equity), np.arange(len(equity)))
+                index = np.minimum.accumulate(index[::-1])[::-1]
+                np.clip(index, 0, len(equity) - 1, out=index)
+                equity[nan] = equity[index[nan]]
+                if np.isnan(equity[-1]):  # Trailing (or all) NaNs remain
+                    equity[np.isnan(equity)] = broker._cash
             self._results = compute_stats(
                 trades=broker.closed_trades,
                 equity=equity,
