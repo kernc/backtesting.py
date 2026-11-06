@@ -131,6 +131,24 @@ class TestBacktest(TestCase):
         with self.assertRaises(ValueError):
             Backtest(GOOG.iloc[:0], SmaCross).run()
 
+    def test_numeric_index_unix_timestamps(self):
+        # Regression test: with pandas >= 3, this crashed with AttributeError
+        # (`Index.is_numeric()` was removed) and TypeError
+        # (`to_datetime(infer_datetime_format=)` was removed).
+        ns = ((GOOG.index - pd.Timestamp('1970-01-01'))
+              // pd.Timedelta('1ns')).to_numpy()  # unix nanosecond timestamps
+        df = GOOG.copy()
+        df.index = ns
+        stats = Backtest(df, SmaCross).run()
+        self.assertEqual(stats.Start, GOOG.index[0])
+
+        # Non-nanosecond timestamp resolutions are auto-detected
+        for scale in (10**9, 10**6, 10**3, 1):  # s, ms, us, ns
+            df = GOOG.copy()
+            df.index = ns // scale
+            stats = Backtest(df, SmaCross).run()
+            self.assertEqual(stats.Start, GOOG.index[0])
+
     def test_assertions(self):
         class Assertive(Strategy):
             def init(self):
