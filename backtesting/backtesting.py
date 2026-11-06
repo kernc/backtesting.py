@@ -664,7 +664,10 @@ class Trade:
 
     @property
     def pl_pct(self):
-        """Trade profit (positive) or loss (negative) in percent relative to trade entry price."""
+        """Trade profit (positive) or loss (negative), as a fraction of the trade
+        entry price (e.g. `0.05` for a 5% gain). Note, `Position.pl_pct`, by
+        contrast, is expressed in percent.
+        """
         price = self.__exit_price or self.__broker.last_price
         gross_pl_pct = copysign(1, self.__size) * (price / self.__entry_price - 1)
 
@@ -1449,8 +1452,8 @@ class Backtest:
         code finds and returns the "best" of the 7 admissible (of the
         9 possible) parameter combinations:
 
-            best_stats = backtest.optimize(sma1=[5, 10, 15], sma2=[10, 20, 40],
-                                           constraint=lambda p: p.sma1 < p.sma2)
+            best_stats = backtest.optimize(n1=[5, 10, 15], n2=[10, 20, 40],
+                                           constraint=lambda p: p.n1 < p.n2)
         """
         if not kwargs:
             raise ValueError('Need some strategy parameters to optimize')
