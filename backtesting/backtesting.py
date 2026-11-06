@@ -1224,10 +1224,19 @@ class Backtest:
         if (not isinstance(data.index, pd.DatetimeIndex) and
             not isinstance(data.index, pd.RangeIndex) and
             # Numeric index with most large numbers
-            (data.index.is_numeric() and
+            (pd.api.types.is_numeric_dtype(data.index) and
              (data.index > pd.Timestamp('1975').timestamp()).mean() > .8)):
             try:
-                data.index = pd.to_datetime(data.index, infer_datetime_format=True)
+                # Auto-detect the resolution of unix timestamp values (s, ms, us, or ns),
+                # else e.g. second-resolution values are misinterpreted as nanoseconds,
+                # silently yielding dates in 1970.
+                values = data.index.to_numpy()
+                value = float(np.median(values)) if values.size else 0
+                unit = ('s' if value <= 3e9 else
+                        'ms' if value <= 3e12 else
+                        'us' if value <= 3e15 else
+                        'ns')
+                data.index = pd.to_datetime(data.index, unit=unit)
             except ValueError:
                 pass
 
