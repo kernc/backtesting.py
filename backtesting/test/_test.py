@@ -591,6 +591,25 @@ class TestStrategy(TestCase):
         stats = self._Backtest(coroutine).run()
         self.assertEqual(list(stats._trades.Tag), [1, 1, 2])
 
+    def test_order_repr(self):
+        def coro(strat):
+            # Falsy `contingent` flag is omitted from the repr
+            self.assertEqual(repr(strat.buy(size=2)), '<Order size=2.0>')
+            yield
+            # So it is on a standing SL/TP order, before it becomes a trade
+            price = strat.data.Close[-1]
+            order = strat.buy(size=1, sl=price * .9, tp=price * 1.1)
+            self.assertNotIn('contingent', repr(order))
+            yield
+            # Contingent SL/TP orders of an open trade are marked as such
+            self.assertTrue(strat.orders)
+            for order in strat.orders:
+                self.assertIn('contingent', repr(order))
+            yield
+            strat.position.close()
+
+        TestStrategy._Backtest(coro).run()
+
 
 class TestOptimize(TestCase):
     def test_optimize(self):

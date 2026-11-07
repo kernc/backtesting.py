@@ -421,16 +421,18 @@ class Order:
         return self
 
     def __repr__(self):
+        fields = [('size', self.__size),
+                  ('limit', self.__limit_price),
+                  ('stop', self.__stop_price),
+                  ('sl', self.__sl_price),
+                  ('tp', self.__tp_price),
+                  ('contingent', self.is_contingent),
+                  ('tag', self.__tag)]
+        # Omit None fields and the falsy `contingent` flag
+        fields = [(param, value) for param, value in fields
+                  if value is not None and (value or param != 'contingent')]
         return '<Order {}>'.format(', '.join(f'{param}={try_(lambda: round(value, 5), value)!r}'
-                                             for param, value in (
-                                                 ('size', self.__size),
-                                                 ('limit', self.__limit_price),
-                                                 ('stop', self.__stop_price),
-                                                 ('sl', self.__sl_price),
-                                                 ('tp', self.__tp_price),
-                                                 ('contingent', self.is_contingent),
-                                                 ('tag', self.__tag),
-                                             ) if value is not None))  # noqa: E126
+                                             for param, value in fields))
 
     def cancel(self):
         """Cancel the order."""
