@@ -571,7 +571,13 @@ class Trade:
         return copy(self)._replace(**kwargs)
 
     def close(self, portion: float = 1.):
-        """Place new `Order` to close `portion` of the trade at next market price."""
+        """
+        Place new `Order` to close `portion` of the trade at next market price.
+
+        Note that trade size is an integer number of units: the closed size
+        is rounded to the nearest whole unit, and always at least one unit.
+        Closing half of a one-unit trade, for instance, closes the whole trade.
+        """
         assert 0 < portion <= 1, "portion must be a fraction between 0 and 1"
         # Ensure size is an int to avoid rounding errors on 32-bit OS
         size = copysign(max(1, int(round(abs(self.__size) * portion))), -self.__size)
