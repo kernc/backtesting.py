@@ -820,10 +820,28 @@ class _Broker:
     def _position_initial_value(self) -> float:
         return sum(abs(trade.size) * trade.entry_price for trade in self.trades)
 
+    def _unrealized_pl(self, price: float) -> float:
+        return (price * self._position_size -
+                sum(trade.size * trade.entry_price for trade in self.trades))
+
     @cached_property
     def _position_unrealized_pl(self) -> float:
-        return (self.last_price * self._position_size -
-                sum(trade.size * trade.entry_price for trade in self.trades))
+        return self._unrealized_pl(self.last_price)
+
+    def _worst_price(self) -> float:
+        # This bar's worst-case price for the position as a whole:
+        # unrealized P/L is linear in the price, so a net-long position
+        # is worst off at the bar's Low and a net-short one at its High
+        if self._position_size > 0:
+            return self._data._current_value('Low')
+        if self._position_size < 0:
+            return self._data._current_value('High')
+        return self.last_price
+
+    def _unrealized_pl_worst(self) -> float:
+        # Unrealized P/L with the whole position valued at this bar's
+        # worst-case price instead of the last (close) price
+        return self._unrealized_pl(self._worst_price())
 
     def _trades_cache_clear(self):
         self.__dict__.pop(self.__class__._position_size.func.__name__, None)
@@ -866,8 +884,19 @@ class _Broker:
         # If equity is negative, set all to 0 and stop the simulation
         if equity <= 0:
             assert self.margin_available <= 0
-            for trade in self.trades:
+            for trade in list(self.trades):
                 self._close_trade(trade, self.last_price, i)
+            self._cash = 0
+            self._equity[i:] = 0
+            raise _OutOfMoneyError
+
+        # Do the same when equity is wiped out intraday, with the whole
+        # position valued at this bar's worst-case price, even if equity
+        # at the close recovers
+        if self.trades and self._cash + self._unrealized_pl_worst() <= 0:
+            price = self._worst_price()
+            for trade in list(self.trades):
+                self._close_trade(trade, price, i)
             self._cash = 0
             self._equity[i:] = 0
             raise _OutOfMoneyError
