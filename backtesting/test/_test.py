@@ -778,15 +778,138 @@ class TestPlot(TestCase):
         self.assertAlmostEqual(stats['Equity Peak [$]'], 46961)
         self.assertEqual(stats['Equity Final [$]'], 0)
         self.assertEqual(len(trades), 2)
+        # The second trade liquidates intraday on 2009-09-17 (GH-939):
+        # that bar's High wipes out equity even though its Close doesn't
         assert trades[['EntryTime', 'ExitTime']].equals(
             pd.DataFrame({'EntryTime': pd.to_datetime(['2006-11-01', '2008-11-14']),
-                          'ExitTime': pd.to_datetime(['2007-10-31', '2009-09-21'])}))
-        assert trades['PnL'].round().equals(pd.Series([23469., -34420.]))
+                          'ExitTime': pd.to_datetime(['2007-10-31', '2009-09-17'])}))
+        assert trades['PnL'].round().equals(pd.Series([23469., -34494.]))
 
         with _tempfile() as f:
             bt.plot(filename=f, plot_drawdown=True, smooth_equity=False)
             # Give browser time to open before tempfile is removed
             time.sleep(1)
+
+    def test_margin_call_intraday(self):
+        # GH-939: liquidation must also trigger when a bar's adverse
+        # extreme (Low for longs, High for shorts) wipes out equity
+        # intraday, even if the Close recovers
+        def make_data(bar2_low, bar2_high, bar2_close):
+            return pd.DataFrame(
+                {'Open': [100., 100., 100., 100.],
+                 'High': [100., 100., bar2_high, 102.],
+                 'Low': [100., 100., bar2_low, 100.],
+                 'Close': [100., 100., bar2_close, 102.]},
+                index=pd.to_datetime(['2023-01-02', '2023-01-03',
+                                      '2023-01-04', '2023-01-05']))
+
+        class Buy900(_S):
+            def next(self):
+                if not self.position:
+                    self.buy(size=900)
+
+        class Sell900(_S):
+            def next(self):
+                if not self.position:
+                    self.sell(size=900)
+
+        class BuyTwo450(_S):
+            def init(self):
+                super().init()
+                self._placed = False
+
+            def next(self):
+                if not self._placed:
+                    self._placed = True
+                    self.buy(size=450)
+                    self.buy(size=450)
+
+        # Long, entry 100 x 900, cash 10_000, margin .01: equity is 0 at
+        # price 88.89. Dip to Low=80 wipes out equity intraday, but the
+        # close recovers to 100 — must still liquidate, at the Low
+        stats = Backtest(make_data(80, 101, 100), Buy900,
+                         cash=10_000, margin=.01).run()
+        self.assertEqual(stats['Equity Final [$]'], 0)
+        self.assertEqual(stats['_trades']['ExitPrice'].iloc[0], 80)
+
+        # Shallow dip to Low=95 keeps intraday equity positive — no
+        # liquidation; the trade stays open until the end of the data
+        # (ExitBar 3, finalized at the last bar's Open of 100)
+        stats = Backtest(make_data(95, 101, 100), Buy900,
+                         cash=10_000, margin=.01).run()
+        self.assertEqual(stats['Equity Final [$]'], 10000)
+        self.assertEqual(stats['_trades']['ExitBar'].iloc[0], 3)
+
+        # Short mirror: spike to High=120 wipes out equity intraday,
+        # close recovers — must liquidate, at the High
+        stats = Backtest(make_data(99, 120, 100), Sell900,
+                         cash=10_000, margin=.01).run()
+        self.assertEqual(stats['Equity Final [$]'], 0)
+        self.assertEqual(stats['_trades']['ExitPrice'].iloc[0], 120)
+
+        # With multiple open trades, the intraday liquidation must
+        # close every one of them (not skip every second trade while
+        # removing closed trades from the list being iterated over)
+        stats = Backtest(make_data(80, 101, 100), BuyTwo450,
+                         cash=10_000, margin=.01).run()
+        self.assertEqual(stats['Equity Final [$]'], 0)
+        trades = stats['_trades']
+        self.assertEqual(len(trades), 2)
+        self.assertEqual(trades['ExitPrice'].tolist(), [80, 80])
+        self.assertEqual(trades['ExitBar'].tolist(), [2, 2])
+        self.assertEqual(trades['PnL'].tolist(), [-9000, -9000])
+
+        class HedgePair(_S):
+            def init(self):
+                super().init()
+                self._placed = False
+
+            def next(self):
+                if not self._placed:
+                    self._placed = True
+                    self.buy(size=450)
+                    self.sell(size=450)
+
+        class HedgeNetLong(_S):
+            def init(self):
+                super().init()
+                self._placed = False
+
+            def next(self):
+                if not self._placed:
+                    self._placed = True
+                    self.buy(size=900)
+                    self.sell(size=450)
+
+        # A perfectly hedged position (+450/-450 at the same price) has
+        # zero net exposure: its equity is 10_000 at every price, so a
+        # wide bar (Low=80, High=120) must not liquidate it. Valuing
+        # each leg at its own adverse extreme instead would fabricate
+        # a loss the position can never realize
+        stats = Backtest(make_data(80, 120, 100), HedgePair,
+                         cash=10_000, margin=.01, hedging=True).run()
+        self.assertEqual(stats['Equity Final [$]'], 10000)
+        trades = stats['_trades']
+        self.assertEqual(len(trades), 2)
+        self.assertEqual(trades['ExitBar'].tolist(), [3, 3])
+
+        # A hedged but net-long position (+900/-450, net +450) is worst
+        # off at the bar's Low: equity reaches zero at price 77.78, so
+        # a dip to Low=70 liquidates both legs at that one price
+        stats = Backtest(make_data(70, 101, 100), HedgeNetLong,
+                         cash=10_000, margin=.01, hedging=True).run()
+        self.assertEqual(stats['Equity Final [$]'], 0)
+        trades = stats['_trades']
+        self.assertEqual(len(trades), 2)
+        self.assertEqual(trades['ExitPrice'].tolist(), [70, 70])
+        self.assertEqual(trades['PnL'].tolist(), [-27000, 13500])
+
+        # Commission does not change the trigger: the plain long
+        # position above still liquidates at the Low
+        stats = Backtest(make_data(80, 101, 100), Buy900,
+                         cash=10_000, margin=.01, commission=.002).run()
+        self.assertEqual(stats['Equity Final [$]'], 0)
+        self.assertEqual(stats['_trades']['ExitPrice'].iloc[0], 80)
 
     def test_resample(self):
         class S(SmaCross):
