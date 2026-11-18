@@ -1273,6 +1273,61 @@ class TestRegressions(TestCase):
         res = Backtest(data, SmaCross).optimize(fast=range(2, 3), slow=range(4, 5))
         self.assertGreater(res['# Trades'], 0)
 
+    def test_datetime_and_timedelta_indicators(self):
+        # Indicators of tz-aware timestamps (object dtype) used to fail warm-up
+        # computation, and timedelta indicators the overlay heuristic.
+        # See GH issue #906.
+        naive = GOOG.iloc[:100]
+        tz_aware = naive.tz_localize('UTC')
+        indicators = {
+            'timestamp': lambda index: index,
+            'timedelta': lambda index: index - index[0],
+        }
+        for data in (naive, tz_aware):
+            for kind, func in indicators.items():
+                with self.subTest(tz=data.index.tz, kind=kind):
+                    class S(Strategy):
+                        def init(self):
+                            self.ind = self.I(func, self.data.index)
+
+                        def next(self):
+                            pass
+
+                    bt = Backtest(data, S)
+                    bt.run()
+                    self.assertFalse(bt._results._strategy.ind._opts['overlay'])
+                    with _tempfile() as f:
+                        bt.plot(filename=f, open_browser=False)
+
+    def test_indicator_warmup_with_object_dtype(self):
+        # Missing values in an object-dtype indicator delay the start
+        # of the backtest the same as NaNs in a float indicator do
+        warmup = 5
+        indicators = {
+            'float': lambda strategy: strategy.I(
+                lambda close: np.r_[[np.nan] * warmup, close[warmup:]],
+                strategy.data.Close),
+            'object': lambda strategy: strategy.I(
+                lambda index: [None] * warmup + list(index[warmup:]),
+                strategy.data.index.tz_localize('UTC')),
+        }
+        first_bar = {}
+        for kind, make_indicator in indicators.items():
+            class S(Strategy):
+                def init(self):
+                    self.ind = make_indicator(self)
+                    self.first_bar = None
+
+                def next(self):
+                    if self.first_bar is None:
+                        self.first_bar = len(self.data)
+
+            bt = Backtest(SHORT_DATA, S)
+            bt.run()
+            first_bar[kind] = bt._results._strategy.first_bar
+        self.assertGreater(first_bar['float'], warmup)
+        self.assertEqual(first_bar['object'], first_bar['float'])
+
     def test_optimize_range_index(self):
         # Data is passed to the workers through shared memory sized by
         # `.nbytes`, which a lazy RangeIndex under-reports, previously raising

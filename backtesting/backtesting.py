@@ -167,7 +167,9 @@ class Strategy(metaclass=ABCMeta):
                 f'length as `data` (data shape: {self._data.Close.shape}; indicator "{name}" '
                 f'shape: {getattr(value, "shape", "")}, returned value: {value})')
 
-        if overlay is None and np.issubdtype(value.dtype, np.number):
+        # NumPy counts timedelta64 as np.number, but it can't be compared to price
+        if (overlay is None and np.issubdtype(value.dtype, np.number) and
+                not np.issubdtype(value.dtype, np.timedelta64)):
             x = value / self._data.Close
             # By default, overlay if strong majority of indicator values
             # is within 30% of Close
