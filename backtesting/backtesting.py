@@ -1130,10 +1130,12 @@ class Backtest:
     can be used by the strategy (e.g. sentiment info).
     DataFrame index can be either a datetime index (timestamps)
     or a monotonic range index (i.e. a sequence of periods).
-    Datetime strings are parsed. Numeric Unix timestamps are converted
-    only if their unit (s, ms, us or ns) is unambiguous, i.e. in exactly one
-    unit they all fall between 1990 and 2262; otherwise convert them with
-    `pd.to_datetime(..., unit=...)` first.
+    Datetime strings are parsed. For an index that looks like numeric Unix
+    timestamps, Backtest infers a unit (s, ms, us or ns) if exactly one
+    produces dates from 1990-01-01 through 2262-04-11. If no unit fits,
+    it raises `ValueError`. Some pre-1990 timestamps can match a different
+    unit and be converted to incorrect dates. If you know the unit, convert
+    the index with `pd.to_datetime(..., unit=...)` before passing the data.
 
     `strategy` is a `backtesting.backtesting.Strategy`
     _subclass_ (not an instance).
