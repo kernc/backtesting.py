@@ -1705,6 +1705,8 @@ class Backtest:
 
         If `relative_equity` is `True`, scale and label equity graph axis
         with return percent, not absolute cash-equivalent values.
+        Likewise, plot profit/loss markers as trade return percent
+        (`ReturnPct`) or, when `False`, as absolute cash P/L (`PnL`).
 
         If `superimpose` is `True`, superimpose larger-timeframe candlesticks
         over the original candlestick chart. Default downsampling rule is:
