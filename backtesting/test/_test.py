@@ -707,6 +707,29 @@ class TestPlot(TestCase):
                 with self.subTest(param=p[0]):
                     bt.plot(**dict([p]), filename=f, open_browser=False)
 
+    def test_pl_section_relative_equity(self):
+        from bokeh.models import GlyphRenderer, Plot, Scatter
+
+        bt = Backtest(GOOG.iloc[:300], SmaCross, finalize_trades=True)
+        trades = bt.run()._trades
+
+        def pl_markers(**kwargs):
+            with _tempfile() as f:
+                fig = bt.plot(filename=f, open_browser=False, resample=False, **kwargs)
+            pl_fig = next(p for p in fig.select({'type': Plot})
+                          if p.yaxis[0].axis_label == 'Profit / Loss')
+            renderer = next(r for r in pl_fig.renderers
+                            if isinstance(r, GlyphRenderer) and isinstance(r.glyph, Scatter))
+            return np.asarray(renderer.data_source.data['returns']), pl_fig.yaxis[0].formatter.format
+
+        values, tick_format = pl_markers(relative_equity=True)
+        np.testing.assert_allclose(values, trades['ReturnPct'])
+        self.assertIn('%', tick_format)
+
+        values, tick_format = pl_markers(relative_equity=False)
+        np.testing.assert_allclose(values, trades['PnL'])
+        self.assertIn('$', tick_format)
+
     def test_hide_legend(self):
         bt = Backtest(GOOG.iloc[:100], SmaCross)
         bt.run()
