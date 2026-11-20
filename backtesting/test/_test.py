@@ -1267,6 +1267,20 @@ class TestRegressions(TestCase):
         self.assertEqual(trades['ExitBar'].iloc[0], 3)
         self.assertEqual(trades['ExitPrice'].iloc[0], 105)
 
+    def test_market_entries_and_sl_in_same_bar(self):
+        # Market orders fill at bar 3 open (111.24) and both stop-losses
+        # are hit within that same bar (low 103.57)
+        class S(_S):
+            def next(self):
+                if len(self.data.index) == 3:
+                    self.buy(size=1, sl=105)
+                    self.buy(size=1, sl=107)
+
+        trades = Backtest(SHORT_DATA, S, hedging=True).run()._trades
+        self.assertEqual(trades['EntryBar'].tolist(), [3, 3])
+        self.assertEqual(trades['ExitBar'].tolist(), [3, 3])
+        self.assertEqual(sorted(trades['ExitPrice']), [105, 107])
+
     def test_optimize_datetime_index_with_timezone(self):
         data: pd.DataFrame = GOOG.iloc[:100]
         data.index = data.index.tz_localize('Asia/Kolkata')
