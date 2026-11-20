@@ -26,8 +26,8 @@ from numpy.random import default_rng
 from ._plotting import plot  # noqa: I001
 from ._stats import compute_stats, dummy_stats
 from ._util import (
-    SharedMemoryManager, _as_str, _Indicator, _Data, _batch, _indicator_warmup_nbars,
-    _strategy_indicators, patch, try_, _tqdm,
+    SharedMemoryManager, _as_str, _Indicator, _Data, _batch, _index_to_datetime,
+    _indicator_warmup_nbars, _strategy_indicators, patch, try_, _tqdm,
 )
 
 __pdoc__ = {
@@ -1130,6 +1130,10 @@ class Backtest:
     can be used by the strategy (e.g. sentiment info).
     DataFrame index can be either a datetime index (timestamps)
     or a monotonic range index (i.e. a sequence of periods).
+    Datetime strings are parsed. Numeric Unix timestamps are converted
+    only if their unit (s, ms, us or ns) is unambiguous, i.e. in exactly one
+    unit they all fall between 1990 and 2262; otherwise convert them with
+    `pd.to_datetime(..., unit=...)` first.
 
     `strategy` is a `backtesting.backtesting.Strategy`
     _subclass_ (not an instance).
@@ -1221,15 +1225,8 @@ class Backtest:
         data = data.copy(deep=False)
 
         # Convert index to datetime index
-        if (not isinstance(data.index, pd.DatetimeIndex) and
-            not isinstance(data.index, pd.RangeIndex) and
-            # Numeric index with most large numbers
-            (data.index.is_numeric() and
-             (data.index > pd.Timestamp('1975').timestamp()).mean() > .8)):
-            try:
-                data.index = pd.to_datetime(data.index, infer_datetime_format=True)
-            except ValueError:
-                pass
+        if not isinstance(data.index, (pd.DatetimeIndex, pd.RangeIndex)):
+            data.index = _index_to_datetime(data.index)
 
         if 'Volume' not in data:
             data['Volume'] = np.nan
