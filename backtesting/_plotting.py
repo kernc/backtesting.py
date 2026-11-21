@@ -333,10 +333,11 @@ return this.labels[index] || "";
         """Equity section"""
         # Max DD Dur. line
         equity = equity_data['Equity'].copy()
-        dd_end = equity_data['DrawdownDuration'].idxmax()
-        if np.isnan(dd_end):
+        dd_dur = equity_data['DrawdownDuration']
+        if dd_dur.isna().all():
             dd_start = dd_end = equity.index[0]
         else:
+            dd_end = dd_dur.idxmax()
             dd_start = equity[:dd_end].idxmax()
             # If DD not extending into the future, get exact point of intersection with equity
             if dd_end != equity.index[-1]:

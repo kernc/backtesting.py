@@ -788,6 +788,49 @@ class TestPlot(TestCase):
             # Give browser time to open before tempfile is removed
             time.sleep(1)
 
+    def test_no_drawdown(self):
+        from bokeh.models import LegendItem
+
+        def max_dd_duration_line(fig):
+            def legend_label(item):
+                label = item.label
+                return label['value'] if isinstance(label, dict) else label.value
+
+            item, = [item for item in fig.select({'type': LegendItem})
+                     if legend_label(item).startswith('Max Dd Dur.')]
+            renderer, = item.renderers
+            return legend_label(item), list(renderer.data_source.data[renderer.glyph.x])
+
+        close = np.arange(100., 160.)
+        df = pd.DataFrame({'Open': close, 'High': close + .1, 'Low': close, 'Close': close + .05},
+                          index=pd.date_range('2020', periods=len(close)))
+
+        class S(_S):
+            def next(self):
+                if len(self.data) == 3:
+                    self.buy(size=1)
+
+        bt = Backtest(df, S)
+        stats = bt.run()
+        self.assertEqual(stats['# Trades'], 1)
+        # Equity never draws down, so there is no drawdown duration to take idxmax() of
+        self.assertTrue(stats['_equity_curve']['DrawdownDuration'].isna().all())
+
+        with _tempfile() as f:
+            for smooth_equity in (False, True):
+                with self.subTest(smooth_equity=smooth_equity):
+                    fig = bt.plot(filename=f, smooth_equity=smooth_equity, open_browser=False)
+                    # As with pandas 2: the line has zero length, on the first bar
+                    self.assertEqual(max_dd_duration_line(fig), ('Max Dd Dur. (0 days)', [0, 0]))
+
+            # With a drawdown, the line spans it
+            bt = Backtest(GOOG, SmaCross)
+            stats = bt.run()
+            fig = bt.plot(filename=f, open_browser=False)
+            label, (start, end) = max_dd_duration_line(fig)
+            self.assertEqual(label, f"Max Dd Dur. ({stats['Max. Drawdown Duration'].days} days)")
+            self.assertLess(start, end)
+
     def test_resample(self):
         class S(SmaCross):
             def init(self):
