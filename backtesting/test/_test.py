@@ -4,6 +4,7 @@ import os
 import sys
 import time
 import unittest
+import warnings
 from concurrent.futures.process import ProcessPoolExecutor
 from contextlib import contextmanager
 from functools import partial
@@ -130,6 +131,68 @@ class TestBacktest(TestCase):
             Backtest(GOOG.index, SmaCross).run()
         with self.assertRaises(ValueError):
             Backtest(GOOG.iloc[:0], SmaCross).run()
+
+    def test_data_non_datetime_index(self):
+        # pandas 3 removed Index.is_numeric() and to_datetime(infer_datetime_format=)
+        class Noop(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                pass
+
+        data = SHORT_DATA
+
+        def epoch(dates, unit):
+            return (dates - pd.Timestamp('1970-01-01')) // pd.Timedelta(1, unit)
+
+        def assert_converted(dates, index):
+            bt = Backtest(data.set_axis(index), Noop)
+            self.assertIsInstance(bt._data.index, pd.DatetimeIndex)
+            self.assertTrue((bt._data.index == dates).all())
+            stats = bt.run()
+            self.assertEqual(stats['Start'], dates[0])
+            self.assertEqual(stats['Duration'], dates[-1] - dates[0])
+
+        with self.subTest('datetime strings'):
+            assert_converted(data.index, data.index.astype(str))
+        with self.subTest('epoch seconds, float'):
+            assert_converted(data.index, epoch(data.index, 's').astype(float))
+        for unit in ('s', 'ms', 'us', 'ns'):
+            with self.subTest(unit=unit):
+                assert_converted(data.index, epoch(data.index, unit))
+            # Lower bound of the accepted range, where no other unit is valid
+            with self.subTest('from 1990-01-01', unit=unit):
+                dates = pd.date_range('1990-01-01', periods=len(data), freq='D')
+                assert_converted(dates, epoch(dates, unit))
+
+        # The same numbers are valid timestamps in several units, so
+        # timestamps outside the accepted range are not converted
+        for start, unit in (('1989-12-31 23:59:59', 's'),
+                            ('1989-12-31 23:59:59.999', 'ms'),
+                            ('1985-01-01', 's'),
+                            ('1973-01-01', 'ms'),  # Was converted as seconds, to year 4970
+                            ('1972-01-01', 'us'),  # Was converted as milliseconds
+                            ('1970-01-02', 'ms'),  # Would be 1972 in seconds
+                            ('1975-01-02', 'ns')):
+            with self.subTest(start=start, unit=unit), \
+                    self.assertRaisesRegex(ValueError, 'unit is ambiguous'):
+                dates = pd.date_range(start, periods=len(data), freq='D')
+                Backtest(data.set_axis(epoch(dates, unit)), Noop)
+
+        # Small numbers are simple periods, not timestamps
+        for index in (pd.Index(np.arange(5, 5 + len(data))), pd.Index(np.arange(len(data), dtype=float))):
+            with self.subTest(dtype=index.dtype), \
+                    self.assertWarnsRegex(UserWarning, 'not datetime'):
+                bt = Backtest(data.set_axis(index), Noop)
+                self.assertTrue(bt._data.index.equals(index))
+                stats = bt.run()
+                self.assertEqual(stats['Start'], index[0])
+                self.assertEqual(stats['Duration'], index[-1] - index[0])
+
+        with self.assertRaisesRegex(ValueError, 'could not parse'), warnings.catch_warnings():
+            warnings.simplefilter('ignore', UserWarning)  # pandas' "Could not infer format"
+            Backtest(data.set_axis([f'bar {i}' for i in range(len(data))]), Noop)
 
     def test_assertions(self):
         class Assertive(Strategy):

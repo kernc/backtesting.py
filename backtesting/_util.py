@@ -72,6 +72,51 @@ def _batch(seq):
         yield seq[i:i + n]
 
 
+# Unix timestamps are converted only if all of them fall within this range in exactly
+# one unit. The bounds are less than 1000x apart (in seconds since the epoch), so at
+# most one unit can match.
+_EPOCH_RANGE = (pd.Timestamp('1990-01-01'), pd.Timestamp.max)
+_EPOCH_UNITS = (('s', 1), ('ms', 1e3), ('us', 1e6), ('ns', 1e9))
+
+
+def _index_to_datetime(index: pd.Index) -> pd.Index:
+    """
+    Convert a non-datetime data `index` to `pd.DatetimeIndex` where unambiguous.
+
+    Numeric indexes whose values are mostly larger than 1975 in Unix seconds
+    are treated as Unix timestamps. The same numbers are valid timestamps in
+    several units (1.7e9 is 2023 in seconds, but January 1970 in milliseconds),
+    so they are converted only if exactly one unit (s, ms, us or ns) puts all
+    of them within `_EPOCH_RANGE`; otherwise `ValueError` asks the user to
+    convert the index with an explicit unit.
+    Other numeric indexes are returned unchanged and treated as simple periods.
+    Any other index is parsed as datetime strings, or `ValueError` is raised.
+    """
+    if pd.api.types.is_numeric_dtype(index) and not pd.api.types.is_bool_dtype(index):
+        values = np.asarray(index, dtype=float)
+        if not (values > pd.Timestamp('1975').timestamp()).mean() > .8:
+            return index
+        lo, hi = np.nanmin(values), np.nanmax(values)
+        start, end = (t.timestamp() for t in _EPOCH_RANGE)
+        units = [unit for unit, scale in _EPOCH_UNITS
+                 if start * scale <= lo and hi <= end * scale]
+        if not units:
+            raise ValueError(
+                '`data` index looks like Unix timestamps, but their unit is ambiguous: '
+                f'in no unit (s, ms, us or ns) do all values ({lo:.0f} to {hi:.0f}) fall '
+                f'between {_EPOCH_RANGE[0].date()} and {_EPOCH_RANGE[1].date()}. '
+                'Convert the index first, e.g. '
+                "`data.index = pd.to_datetime(data.index, unit='ms')`.")
+        return pd.to_datetime(index, unit=units[0])
+    try:
+        return pd.to_datetime(index)
+    except (ValueError, TypeError) as e:
+        raise ValueError(
+            '`data` index must be a `pd.DatetimeIndex`, datetime strings, Unix timestamps, '
+            f'or a numeric index of simple periods; could not parse {index[:3].tolist()!r}...'
+        ) from e
+
+
 def _data_period(index) -> Union[pd.Timedelta, Number]:
     """Return data index period as pd.Timedelta"""
     values = pd.Series(index[-100:])
