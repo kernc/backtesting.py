@@ -693,7 +693,7 @@ class Trade:
 
     @sl.setter
     def sl(self, price: float):
-        self.__set_contingent('sl', price)
+        self._set_contingent('sl', price)
 
     @property
     def tp(self):
@@ -708,11 +708,15 @@ class Trade:
 
     @tp.setter
     def tp(self, price: float):
-        self.__set_contingent('tp', price)
+        self._set_contingent('tp', price)
 
-    def __set_contingent(self, type, price):
+    def _set_contingent(self, type, price, validate=True):
         assert type in ('sl', 'tp')
         assert price is None or 0 < price < np.inf, f'Make sure 0 < price < inf! price: {price}'
+        # Validate before cancelling the current bracket, so that a rejected
+        # assignment leaves the trade's existing bracket in place.
+        if price and validate:
+            self._validate_contingent(type, price)
         attr = f'_{self.__class__.__qualname__}__{type}_order'
         order: Order = getattr(self, attr)
         if order:
@@ -721,6 +725,31 @@ class Trade:
             kwargs = {'stop': price} if type == 'sl' else {'limit': price}
             order = self.__broker.new_order(-self.size, trade=self, tag=self.tag, **kwargs)
             setattr(self, attr, order)
+
+    def _validate_contingent(self, type, price):
+        """
+        Ensure a contingent bracket order does not execute right away.
+
+        A stop-loss or take-profit set on an open trade becomes a stop or limit
+        order in the market. If it is on the wrong side of the current price, it
+        executes as soon as the next bar opens, instead of waiting for the price
+        to reach it. The brackets of a *new* order are checked against the price
+        for the same reason; see `_Broker.new_order`.
+        """
+        price_now = self.__broker.last_price
+        if type == 'sl':
+            if self.is_long:
+                ok, expected = price < price_now, f'SL ({price}) < PRICE ({price_now})'
+            else:
+                ok, expected = price > price_now, f'PRICE ({price_now}) < SL ({price})'
+        else:
+            if self.is_long:
+                ok, expected = price > price_now, f'PRICE ({price_now}) < TP ({price})'
+            else:
+                ok, expected = price < price_now, f'TP ({price}) < PRICE ({price_now})'
+        if not ok:
+            side = 'Long' if self.is_long else 'Short'
+            raise ValueError(f'{side} trades require: {expected}')
 
 
 class _Broker:
@@ -1102,10 +1131,13 @@ class _Broker:
         # Apply broker commission at trade open
         self._cash -= self._commission(size, price)
         # Create SL/TP (bracket) orders.
+        # These brackets come from the order that opened the trade, and were
+        # validated against the price when that order was placed. The fill price
+        # may differ from it (e.g. after a gap), so they are not validated again.
         if tp:
-            trade.tp = tp
+            trade._set_contingent('tp', tp, validate=False)
         if sl:
-            trade.sl = sl
+            trade._set_contingent('sl', sl, validate=False)
 
 
 class Backtest:
