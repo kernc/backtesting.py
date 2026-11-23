@@ -1,0 +1,15 @@
+comment: off
+coverage:
+  range: 75..95
+  precision: 0
+  status:
+    patch:
+      default:
+        target: 90
+    project:
+      default:
+        target: auto
+        threshold: 5
+  # Fix for https://github.com/codecov/codecov-python/issues/136
+  fixes:
+    - "__init__.py::backtesting/__init__.py"

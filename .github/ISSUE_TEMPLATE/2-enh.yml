@@ -1,0 +1,48 @@
+name: Enhancement proposal
+description: Describe the enhancement you'd like to see
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Thanks for taking the time to give feedback on this software!
+
+  - type: markdown
+    attributes:
+      value: >
+        **Contributing guidelines** $\color{red}{*}$
+
+        - [x] I agree to follow this project's [Contributing Guidelines](https://github.com/kernc/backtesting.py/blob/master/CONTRIBUTING.md) which, I understand, contain short technical notes on how to best contribute to this project.
+
+  - type: markdown
+    attributes:
+      value: >+
+        **Own due diligence** $\color{red}{*}$
+
+        - [x] I verify my due dilligence—I have went through the [**tutorials**](https://kernc.github.io/backtesting.py/doc/backtesting/#manuals) and the [**API docs**](https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html) and have used the [**search** on **Issues**](https://github.com/kernc/backtesting.py/issues?q=(is%3Aissue%20OR%20is%3Apr)%20) and [GitHub **Disucussions**](https://github.com/kernc/backtesting.py/discussions), as well as Google, with all the relevant search keywords to ensure this feature request hadn't been filed or answered before.
+
+  - type: textarea
+    id: expected
+    validations:
+      required: true
+    attributes:
+      label: Enhancement description
+      description: What would you want to see in the software that doesn't appear to be presently included?
+      placeholder: I absolutely love your software, but I'm missing a way to ...
+
+  - type: textarea
+    id: code
+    validations:
+      required: false
+    attributes:
+      label: Code sample
+      description: Code snippet relevant to the new feature
+      render: python
+
+  - type: textarea
+    id: steps
+    validations:
+      required: false
+    attributes:
+      label: Additional info, images
+      description: |
+        Extra information you think might be helpful or interesting.

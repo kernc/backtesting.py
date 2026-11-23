@@ -1,0 +1,91 @@
+name: Bug report
+description: File a new bug report. Please use the search
+body:
+  - type: markdown
+    attributes:
+      value: >
+        Thanks for putting in the effort to submit this bug report! Note, the best bug reports are accompanied with fixing patches / pull-requests. 🙏
+
+  - type: markdown
+    attributes:
+      value: >
+        **Contributing guidelines** $\color{red}{*}$
+
+        - [x] I agree to follow this project's [Contributing Guidelines](https://github.com/kernc/backtesting.py/blob/master/CONTRIBUTING.md) which, I understand, contain short technical notes on how to best contribute to this project.
+
+  - type: markdown
+    attributes:
+      value: >
+        **Own due diligence** $\color{red}{*}$
+
+        - [x] I verify my due dilligence—I have went through the [**tutorials**](https://kernc.github.io/backtesting.py/doc/backtesting/#manuals) and the [**API docs**](https://kernc.github.io/backtesting.py/doc/backtesting/backtesting.html) and have used the [**search** on **Issues**](https://github.com/kernc/backtesting.py/issues?q=(is%3Aissue%20OR%20is%3Apr)%20) and [GitHub **Disucussions**](https://github.com/kernc/backtesting.py/discussions), as well as Google, with all the relevant search keywords that also comprise the title (see above) of the new issue I'm opening.
+
+  - type: textarea
+    id: expected
+    validations:
+      required: true
+    attributes:
+      label: Expected behavior
+      description: You run the code below and expect what to happen?
+      placeholder: When I run the code below ... the program should ...
+
+  - type: textarea
+    id: code
+    validations:
+      required: false
+    attributes:
+      label: Code sample
+      description: Code snippet that clearly reproduces the issue
+      render: python
+      placeholder: |
+        from backtesting import Backtest, Strategy
+        from backtesting.test import GOOG
+
+        class MinimalExample(Strategy):
+            ...
+
+        bt = Backtest(GOOG, Example)
+        ...
+
+  - type: textarea
+    id: actual
+    validations:
+      required: true
+    attributes:
+      label: Actual behavior
+      description: What happened unexpectedly when you ran the code above?
+      placeholder: When I ran the code above ... the program did ...
+
+  - type: textarea
+    id: steps
+    validations:
+      required: false
+    attributes:
+      label: Additional info, steps to reproduce, full crash traceback, screenshots
+      description: >
+        Attach any additional info you think might be helpful and result in quicker resolution of your bug.
+      placeholder: |
+        1. Do ...
+        2. ...
+        3. Boom.
+        4. See attached screenshots where I highlight the relevant parts.
+
+  - type: textarea
+    id: versions
+    validations:
+      required: false
+    attributes:
+      label: Software versions
+      description: >
+        Versions of the relevant software / packages.
+      value: |
+        <!--
+            # Please paste the output of:
+            for pkg in ('backtesting', 'pandas', 'numpy', 'bokeh'):
+                print('-', pkg, getattr(__import__(pkg), '__version__', 'git'))
+        -->
+        - `backtesting.__version__`:
+        - `pandas.__version__`:
+        - `numpy.__version__`:
+        - `bokeh.__version__`:
+        - OS:
