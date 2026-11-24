@@ -358,7 +358,7 @@ class TestBacktest(TestCase):
                 'Start': pd.Timestamp('2004-08-19 00:00:00'),
                 'Win Rate [%]': 46.96969696969697,
                 'Worst Trade [%]': -18.39887353835481,
-                'Alpha [%]': 394.37391142027462,
+                'Alpha [%]': 18.289623729543667,
                 'Beta': 0.03803390709192,
         })
 
@@ -389,6 +389,69 @@ class TestBacktest(TestCase):
                     'SL', 'TP', 'PnL', 'ReturnPct', 'EntryTime', 'ExitTime',
                     'Duration', 'Tag', 'Commission',
                     *indicator_columns]))
+
+    def test_alpha_jensen_annualized(self):
+        # https://github.com/kernc/backtesting.py/issues/1442
+        # Alpha [%] must be the annualized per-bar Jensen intercept, on the
+        # same log-return basis as Beta — not whole-period compounded returns
+        # scaled by a per-bar beta, which reported e.g. -223.9% for a
+        # zero-skill half-invested hold (Jensen alpha about -2%/yr).
+        class HalfInvested(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if not self.position:
+                    self.buy(size=0.5)
+
+        class BuyHold(Strategy):
+            def init(self):
+                pass
+
+            def next(self):
+                if not self.position:
+                    self.buy()
+
+        def jensen_alpha_annualized(stats, risk_free_rate=0.):
+            # Independent recomputation from the equity curve and Close:
+            # intercept of the per-bar log-return regression, x 252.
+            equity = stats['_equity_curve']['Equity'].values
+            close = GOOG.Close.values
+            r_s = np.log(equity[1:] / equity[:-1])
+            r_m = np.log(close[1:] / close[:-1])
+            beta = np.cov(r_s, r_m)[0, 1] / np.cov(r_s, r_m)[1, 1]
+            rf_bar = risk_free_rate / 252
+            return (np.mean(r_s - rf_bar) - beta * np.mean(r_m - rf_bar)) * 252 * 100
+
+        for strategy, lo, hi in ((HalfInvested, -5, 0), (BuyHold, -2, 0)):
+            with self.subTest(strategy=strategy.__name__):
+                stats = Backtest(GOOG, strategy).run()
+                # Ranges encode the issue's reported magnitudes: the old
+                # formula gave -223.9% / -71.3% here, the Jensen values are
+                # about -2% / -1% (the BuyHold offset is the one-bar entry
+                # delay noted in #1442, suggestion 2). The exact value is
+                # pinned by the recomputation below, not by the range.
+                self.assertTrue(lo < stats['Alpha [%]'] < hi)
+                self.assertAlmostEqual(stats['Alpha [%]'],
+                                       jensen_alpha_annualized(stats), places=6)
+
+        # Degenerate cases: Alpha is NaN when beta is undefined (zero-variance
+        # market) or when there is no annualization factor (non-datetime index).
+        flat = GOOG.iloc[:100].copy()
+        flat[['Open', 'High', 'Low', 'Close']] = 50.
+        stats = Backtest(flat, BuyHold).run()
+        self.assertTrue(np.isnan(stats['Beta']))
+        self.assertTrue(np.isnan(stats['Alpha [%]']))
+        stats = Backtest(GOOG.reset_index(drop=True), HalfInvested).run()
+        self.assertTrue(np.isnan(stats['Alpha [%]']))
+
+        # Non-zero risk-free rate, via the public lib.compute_stats path
+        # (Backtest.run() always passes 0.0).
+        stats = Backtest(GOOG, HalfInvested).run()
+        rf_stats = compute_stats(stats=stats, data=GOOG, risk_free_rate=0.05)
+        self.assertAlmostEqual(rf_stats['Alpha [%]'],
+                               jensen_alpha_annualized(stats, risk_free_rate=0.05),
+                               places=6)
 
     def test_compute_stats_bordercase(self):
 
