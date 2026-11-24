@@ -161,8 +161,23 @@ def compute_stats(
         # len == 0 on dummy call `stats_keys = compute_stats(...)` pre optimization
         cov_matrix = np.cov(equity_log_returns, market_log_returns)
         beta = cov_matrix[0, 1] / cov_matrix[1, 1]
-    # Jensen CAPM Alpha: can be strongly positive when beta is negative and B&H Return is large
-    s['Alpha [%]'] = s['Return [%]'] - risk_free_rate * 100 - beta * (s['Buy & Hold Return [%]'] - risk_free_rate * 100)  # noqa: E501
+    # Jensen's alpha, estimated on the same per-bar log returns as beta
+    # and annualized, so it is not inflated by compounding over the whole
+    # backtest period (see #1442). It is the intercept of the regression
+    # of strategy excess returns on market excess returns:
+    #   alpha_bar = mean(r_s - rf_bar) - beta * mean(r_m - rf_bar),
+    # with rf_bar the per-bar risk-free rate derived from the annual rate.
+    # (Subtracting the constant rf_bar from both legs leaves beta unchanged;
+    # only the intercept shifts, by rf_bar * (1 - beta).)
+    # Annualized arithmetically (alpha_bar * annual_trading_days), matching
+    # the issue's "intercept x 252". NaN when beta or the annualization
+    # factor is undefined, like the other annualized metrics.
+    alpha = np.nan
+    if not np.isnan(beta) and not np.isnan(annual_trading_days):
+        rf_per_bar = risk_free_rate / annual_trading_days
+        alpha = (np.mean(equity_log_returns - rf_per_bar)
+                 - beta * np.mean(market_log_returns - rf_per_bar)) * annual_trading_days
+    s['Alpha [%]'] = alpha * 100
     s['Beta'] = beta
     s['Max. Drawdown [%]'] = max_dd * 100
     s['Avg. Drawdown [%]'] = -dd_peaks.mean() * 100
