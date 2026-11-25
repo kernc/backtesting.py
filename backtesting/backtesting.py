@@ -12,11 +12,12 @@ import sys
 import warnings
 from abc import ABCMeta, abstractmethod
 from copy import copy
+from datetime import datetime, timedelta
 from difflib import get_close_matches
 from functools import cached_property, lru_cache, partial
 from itertools import chain, product, repeat
 from math import copysign
-from numbers import Number
+from numbers import Integral, Number
 from typing import Callable, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
@@ -222,14 +223,16 @@ class Strategy(metaclass=ABCMeta):
             stop: Optional[float] = None,
             sl: Optional[float] = None,
             tp: Optional[float] = None,
-            tag: object = None) -> 'Order':
+            tag: object = None,
+            expiry: Optional[Union[int, timedelta, datetime]] = None) -> 'Order':
         """
         Place a new long order and return it. For explanation of parameters, see `Order`
         and its properties.
         Unless you're running `Backtest(..., trade_on_close=True)`,
         market orders are filled on next bar's open,
         whereas other order types (limit, stop-limit, stop-market) are filled when
-        the respective conditions are met.
+        the respective conditions are met. If `expiry` is set and the order
+        is still not filled when it passes, the order is canceled (see `Order.expiry`).
 
         See `Position.close()` and `Trade.close()` for closing existing positions.
 
@@ -237,7 +240,7 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size >= 1, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(size, limit, stop, sl, tp, tag)
+        return self._broker.new_order(size, limit, stop, sl, tp, tag, expiry=expiry)
 
     def sell(self, *,
              size: float = _FULL_EQUITY,
@@ -245,7 +248,8 @@ class Strategy(metaclass=ABCMeta):
              stop: Optional[float] = None,
              sl: Optional[float] = None,
              tp: Optional[float] = None,
-             tag: object = None) -> 'Order':
+             tag: object = None,
+             expiry: Optional[Union[int, timedelta, datetime]] = None) -> 'Order':
         """
         Place a new short order and return it. For explanation of parameters, see `Order`
         and its properties.
@@ -268,7 +272,7 @@ class Strategy(metaclass=ABCMeta):
         """
         assert 0 < size < 1 or round(size) == size >= 1, \
             "size must be a positive fraction of equity, or a positive whole number of units"
-        return self._broker.new_order(-size, limit, stop, sl, tp, tag)
+        return self._broker.new_order(-size, limit, stop, sl, tp, tag, expiry=expiry)
 
     @property
     def equity(self) -> float:
@@ -392,7 +396,7 @@ class Order:
     If you wish to modify aspects of a placed but not yet filled order,
     cancel it and place a new one instead.
 
-    All placed orders are [Good 'Til Canceled].
+    All placed orders are [Good 'Til Canceled], unless they have `Order.expiry` set.
 
     [filled]: https://www.investopedia.com/terms/f/fill.asp
     [Good 'Til Canceled]: https://en.wikipedia.org/wiki/Order_(exchange)#Time_in_force
@@ -404,7 +408,8 @@ class Order:
                  sl_price: Optional[float] = None,
                  tp_price: Optional[float] = None,
                  parent_trade: Optional['Trade'] = None,
-                 tag: object = None):
+                 tag: object = None,
+                 expiry: Optional[Union[int, pd.Timestamp]] = None):
         self.__broker = broker
         assert size != 0
         self.__size = size
@@ -414,6 +419,9 @@ class Order:
         self.__tp_price = tp_price
         self.__parent_trade = parent_trade
         self.__tag = tag
+        self.__expiry = expiry
+        # Number of bars left on which the order can still be filled, if expiry is in bars
+        self.__bars_left = expiry if isinstance(expiry, int) else None
 
     def _replace(self, **kwargs):
         for k, v in kwargs.items():
@@ -428,6 +436,7 @@ class Order:
                                                  ('stop', self.__stop_price),
                                                  ('sl', self.__sl_price),
                                                  ('tp', self.__tp_price),
+                                                 ('expiry', self.__expiry),
                                                  ('contingent', self.is_contingent),
                                                  ('tag', self.__tag),
                                              ) if value is not None))  # noqa: E126
@@ -508,6 +517,39 @@ class Order:
         of this order and the associated `Trade` (see `Trade.tag`).
         """
         return self.__tag
+
+    @property
+    def expiry(self) -> Optional[Union[int, pd.Timestamp]]:
+        """
+        Order expiry, or None (default) if the order is [Good 'Til Canceled].
+
+        If a positive integer, the order can only be filled on that
+        many bars following the bar it was placed on.
+        If a `pd.Timestamp`, the order can only be filled on bars up to
+        and including that time, i.e. the last bar that may fill the order
+        is the last bar whose index is <= expiry. Expiry passed as
+        `pd.Timedelta` is taken from the current bar and reported here
+        as a timestamp. Time-based expiry requires data with a datetime index.
+
+        An order still not filled when its expiry passes is canceled.
+        Only limit and stop orders can expire. Market orders are filled
+        on the next bar regardless, and contingent SL/TP orders
+        (see `Order.is_contingent`) remain until their trade is closed.
+
+        For example, with daily data, `expiry=1` makes the order good
+        for the next bar only. With intraday data, an order good until
+        the end of the current day's session (here at 16:00) is:
+
+            self.buy(limit=price,
+                     expiry=self.data.index[-1].normalize() + pd.Timedelta(hours=16))
+
+        [Good 'Til Canceled]: https://en.wikipedia.org/wiki/Order_(exchange)#Time_in_force
+        """
+        return self.__expiry
+
+    @property
+    def _bars_left(self) -> Optional[int]:
+        return self.__bars_left
 
     __pdoc__['Order.parent_trade'] = False
 
@@ -751,7 +793,9 @@ class _Broker:
         self._exclusive_orders = exclusive_orders
 
         self._equity = np.tile(np.nan, len(index))
+        self._i = -1  # Index of the current bar. Negative until the first bar, i.e. in Strategy.init()
         self.orders: List[Order] = []
+        self._expiring_orders: List[Order] = []
         self.trades: List[Trade] = []
         self.position = Position(self)
         self.closed_trades: List[Trade] = []
@@ -770,7 +814,8 @@ class _Broker:
                   tp: Optional[float] = None,
                   tag: object = None,
                   *,
-                  trade: Optional[Trade] = None) -> Order:
+                  trade: Optional[Trade] = None,
+                  expiry: Optional[Union[int, timedelta, datetime]] = None) -> Order:
         """
         Argument size indicates whether the order is long or short
         """
@@ -795,7 +840,16 @@ class _Broker:
                     "Short orders require: "
                     f"TP ({tp}) < LIMIT ({limit or stop or adjusted_price}) < SL ({sl})")
 
-        order = Order(self, size, limit, stop, sl, tp, trade, tag)
+        if expiry is not None:
+            assert not trade, "Contingent orders don't expire"
+            if not (limit or stop):
+                raise ValueError("Only limit and stop orders can have expiry. "
+                                 "Market orders are filled on the next bar regardless.")
+            expiry = self._parse_expiry(expiry)
+
+        order = Order(self, size, limit, stop, sl, tp, trade, tag, expiry)
+        if expiry is not None:
+            self._expiring_orders.append(order)
 
         if not trade:
             # If exclusive orders (each new order auto-closes previous orders/position),
@@ -811,6 +865,66 @@ class _Broker:
         self.orders.insert(0 if trade and stop else len(self.orders), order)
 
         return order
+
+    def _parse_expiry(self, expiry) -> Union[int, pd.Timestamp]:
+        """
+        Return order `expiry` as a number of bars or as a deadline timestamp.
+        """
+        # Time types first, since np.timedelta64 is also a numbers.Integral
+        if isinstance(expiry, (timedelta, np.timedelta64, datetime, np.datetime64)):
+            index = self._data.index
+            if not isinstance(index, pd.DatetimeIndex):
+                raise TypeError("Order expiry as pd.Timedelta or pd.Timestamp requires data "
+                                "with datetime index. Use a number of bars (int) instead.")
+            # In Strategy.init(), there is no current bar yet
+            in_next = self._i >= 0
+            now = index[-1] if in_next else index[0]
+            if isinstance(expiry, (timedelta, np.timedelta64)):
+                if not in_next:
+                    raise ValueError(
+                        "Order expiry as pd.Timedelta is relative to the current bar. "
+                        "In Strategy.init(), use a number of bars (int) or pd.Timestamp.")
+                expiry = now + pd.Timedelta(expiry)
+            else:
+                expiry = pd.Timestamp(expiry)
+            if not expiry > now:
+                raise ValueError(
+                    f"Order expiry ({expiry}) must be later than the current bar ({now})")
+            return expiry
+
+        if isinstance(expiry, Integral) and not isinstance(expiry, bool):
+            if expiry < 1:
+                raise ValueError(f"Order expiry in bars must be a positive integer, is {expiry}")
+            return int(expiry)
+
+        raise TypeError("Order expiry must be a number of bars (int), "
+                        f"pd.Timedelta or pd.Timestamp, is {expiry!r}")
+
+    def _expire_orders(self, *, before_fill: bool):
+        """
+        Cancel expired orders.
+
+        Before orders are filled on the current bar, cancel those whose expiry
+        time had passed before this bar (e.g. over a weekend gap in data).
+        Afterwards, cancel those that can't be filled on any of the following bars.
+        This way, `Strategy.orders` never contains orders that are already expired.
+        """
+        for order in list(self._expiring_orders):
+            if order in self.orders:
+                expiry = order.expiry
+                if isinstance(expiry, pd.Timestamp):
+                    # Data index is sorted, so any following bar is later than this one
+                    now = self._data.index[-1]
+                    if now < expiry or (before_fill and now == expiry):
+                        continue
+                elif before_fill:
+                    continue
+                elif (bars_left := order._bars_left) and bars_left > 1:
+                    order._replace(bars_left=bars_left - 1)
+                    continue
+                order.cancel()
+            # The order has expired just now, or it was filled or canceled before
+            self._expiring_orders.remove(order)
 
     @cached_property
     def _position_size(self) -> int:
@@ -857,7 +971,9 @@ class _Broker:
         self.__dict__.pop(self.__class__._position_unrealized_pl.func.__name__, None)
 
         i = self._i = len(self._data) - 1
+        self._expire_orders(before_fill=True)
         self._process_orders()
+        self._expire_orders(before_fill=False)
 
         # Log account equity for the equity curve
         equity = self.equity

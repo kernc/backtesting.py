@@ -591,6 +591,145 @@ class TestStrategy(TestCase):
         stats = self._Backtest(coroutine).run()
         self.assertEqual(list(stats._trades.Tag), [1, 1, 2])
 
+    # A buy order with limit=95, placed on bar 1, is filled on bar 3
+    EXPIRY_DATA = pd.DataFrame(
+        {'Open': [100., 100, 100, 100, 95, 95],
+         'High': [101., 101, 101, 101, 96, 96],
+         'Low': [99., 99, 99, 94, 94, 94],
+         'Close': [100., 100, 100, 95, 95, 95]},
+        index=pd.date_range('2024-01-01', periods=6, freq='D'))
+
+    def _entry_bars(self, data=EXPIRY_DATA, trade_on_close=False, **order_kwargs):
+        def coroutine(self):
+            yield self.buy(size=1, **order_kwargs)
+
+        stats = self._Backtest(coroutine, data=data, trade_on_close=trade_on_close,
+                               finalize_trades=True).run()
+        return stats._trades['EntryBar'].tolist()
+
+    def test_order_expiry_bars(self):
+        self.assertEqual(self._entry_bars(limit=95), [3])
+        self.assertEqual(self._entry_bars(limit=95, expiry=2), [3])
+        self.assertEqual(self._entry_bars(limit=95, expiry=np.int64(2)), [3])
+        self.assertEqual(self._entry_bars(limit=95, expiry=1), [])
+
+        # Stop-limit order expires as a whole, also after its stop was hit (on bar 2)
+        self.assertEqual(self._entry_bars(stop=101, limit=96), [3])
+        self.assertEqual(self._entry_bars(stop=101, limit=96, expiry=2), [3])
+        self.assertEqual(self._entry_bars(stop=101, limit=96, expiry=1), [])
+
+        def coroutine(self):
+            order = self.buy(size=1, limit=90, expiry=2)
+            assert 'expiry=2' in repr(order)
+            yield
+            assert self.orders == (order,)
+            assert order.expiry == 2
+            yield
+            assert not self.orders
+
+        self._Backtest(coroutine, data=self.EXPIRY_DATA).run()
+
+        # A new order cancels the previous one, expired or not
+        def coroutine(self):
+            self.buy(size=1, limit=90, expiry=3)
+            yield
+            order = self.buy(size=1, limit=91, expiry=1)
+            assert self.orders == (order,)
+            yield
+            assert not self.orders
+
+        self._Backtest(coroutine, data=self.EXPIRY_DATA, exclusive_orders=True).run()
+
+    def test_order_expiry_time(self):
+        for expiry, expected in (
+                (pd.Timedelta('2D'), [3]),
+                (pd.Timedelta('1D'), []),
+                (np.timedelta64(2, 'D'), [3]),
+                (pd.Timestamp('2024-01-04'), [3]),  # Bar 3. Inclusive.
+                (np.datetime64('2024-01-04'), [3]),
+                (pd.Timestamp('2024-01-03 12:00'), []),
+        ):
+            with self.subTest(expiry=expiry):
+                self.assertEqual(self._entry_bars(limit=95, expiry=expiry), expected)
+
+        # Expiry passes during a gap in data. Strategy.next() couldn't
+        # have canceled this order before it was filled on the following bar.
+        data = self.EXPIRY_DATA.drop(self.EXPIRY_DATA.index[2:4])
+        self.assertEqual(self._entry_bars(data, limit=95), [2])
+        self.assertEqual(self._entry_bars(data, limit=95, expiry=pd.Timedelta('2D')), [])
+
+        data = self.EXPIRY_DATA.tz_localize('UTC')
+        for hour, expected in (('00:00', []), ('01:00', [3])):
+            expiry = pd.Timestamp(f'2024-01-04 {hour}', tz='Europe/Berlin')
+            self.assertEqual(self._entry_bars(data, limit=95, expiry=expiry), expected)
+
+        def coroutine(self):
+            order = self.buy(size=1, limit=90, expiry=pd.Timedelta('1D'))
+            assert order.expiry == pd.Timestamp('2024-01-03')
+            yield
+            assert not self.orders
+
+        self._Backtest(coroutine, data=self.EXPIRY_DATA).run()
+
+        # With duplicate timestamps, the order is canceled after the first bar at its expiry
+        data = self.EXPIRY_DATA.set_index(self.EXPIRY_DATA.index[[0, 1, 2, 2, 4, 5]])
+        self.assertEqual(self._entry_bars(data, limit=95), [3])
+        self.assertEqual(self._entry_bars(data, limit=95, expiry=pd.Timestamp('2024-01-03')), [])
+
+    def test_order_expiry_only_limit_stop_orders(self):
+        # Stop (market-if-touched) order, stop hit on bar 2
+        self.assertEqual(self._entry_bars(stop=101, expiry=1), [2])
+
+        # Market orders are filled on the next bar regardless
+        for expiry in (1, pd.Timedelta('1D'), pd.Timestamp('2024-01-04')):
+            with self.subTest(expiry=expiry):
+                self.assertRaises(ValueError, self._entry_bars, expiry=expiry)
+
+        # Contingent SL/TP orders don't inherit expiry of their parent order
+        def coroutine(self):
+            yield self.buy(size=1, limit=95, sl=90, tp=110, expiry=2)
+            yield
+            yield
+            assert len(self.trades) == 1
+            assert len(self.orders) == 2
+            assert all(order.is_contingent and order.expiry is None for order in self.orders)
+            assert self.trades[-1].sl == 90 and self.trades[-1].tp == 110
+
+        self._Backtest(coroutine, data=self.EXPIRY_DATA).run()
+
+    def test_order_expiry_in_init(self):
+        def entry_bars(**order_kwargs):
+            class S(Strategy):
+                def init(self):
+                    self.buy(size=1, limit=95, **order_kwargs)
+
+                def next(self):
+                    pass
+
+            stats = Backtest(self.EXPIRY_DATA, S, finalize_trades=True).run()
+            return stats._trades['EntryBar'].tolist()
+
+        self.assertEqual(entry_bars(expiry=3), [3])
+        self.assertEqual(entry_bars(expiry=2), [])
+        self.assertEqual(entry_bars(expiry=pd.Timestamp('2024-01-04')), [3])
+        self.assertEqual(entry_bars(expiry=pd.Timestamp('2024-01-03')), [])
+        self.assertRaises(ValueError, entry_bars, expiry=pd.Timedelta('1D'))
+
+    def test_order_expiry_invalid(self):
+        for expiry in (0, -1, pd.Timedelta(0), pd.Timedelta('-1D'), np.timedelta64('NaT'),
+                       pd.Timestamp('2024-01-02'), np.datetime64('NaT')):
+            with self.subTest(expiry=expiry):
+                self.assertRaises(ValueError, self._entry_bars, limit=95, expiry=expiry)
+        for expiry in (True, 1.5, '1D', pd.Timestamp('2024-01-04', tz='UTC')):
+            with self.subTest(expiry=expiry):
+                self.assertRaises(TypeError, self._entry_bars, limit=95, expiry=expiry)
+
+        data = self.EXPIRY_DATA.reset_index(drop=True)
+        with self.assertWarns(UserWarning):
+            self.assertEqual(self._entry_bars(data, limit=95, expiry=2), [3])
+        with self.assertWarns(UserWarning):
+            self.assertRaises(TypeError, self._entry_bars, data, limit=95, expiry=pd.Timedelta('1D'))
+
 
 class TestOptimize(TestCase):
     def test_optimize(self):
